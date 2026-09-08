@@ -5,6 +5,10 @@ treat every edit as a breaking change until `vcap/1.0` is tagged.
 
 ## What lives here
 
+- `spec/threat-model.md` — what the format and the platform defend against,
+  what they do not, and the residual risk of each threat. Public. Every
+  mitigation it names points at a spec section or a component; every accepted
+  risk must be something the verifier UI says.
 - `spec/vcap-proof-1.0.md` — the normative document. Sections marked `TODO` are
   the six format decisions still open (see the work order in
   `Doc/06-fase1-avvio.md` section 3).
