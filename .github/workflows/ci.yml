@@ -1,0 +1,10 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # TODO: run the schema validator over vectors/*/proof.json
+      # and check every vectors/*/expected.json is well formed.
+      - run: echo "validator not implemented yet"
