@@ -78,3 +78,12 @@ person needs it. Not "works on my branch".
 
 Code, comments, README and commit messages in English. Project documentation in
 `Doc/` is in Italian.
+
+## License
+
+MIT, for everything in this repository: the specification text, the threat
+model, the schema, the vectors and the tools (`LICENSE`). A specification is
+worth what it can be implemented into, and the conformance vectors are meant to
+live inside other people's test suites. The copyright holder is "the vcap
+authors" until decision D1 names the legal entity.
+
