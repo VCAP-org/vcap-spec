@@ -302,7 +302,7 @@ when there is one), each verifiable on its own and each bound to `core_hash`.
   "registry":    { "log_id", "leaf_index", "leaf": { ... }, "inclusion_path": [ ... ],
                    "tree_head": { "tree_size", "timestamp", "root_hash", "signature" } },
   "timestamp":   { "tsr", "tsa_issuer" },
-  "anchor":      { "chain", "tx", "block", "merkle_path" },
+  "anchor":      { "chain", "tx", "block", "anchor_id", "index", "tree_size", "root", "merkle_path" },
   "integrity":   { "source", "verdict", "evaluated_at", "sig" }
 }
 ```
@@ -375,7 +375,7 @@ Field table — type, required, verified against:
 | `attestation` | core, at key creation | chain to a pinned Google root / App Attest | leaf SPKI MUST equal `sig.pub` |
 | `registry` | sync | inclusion proof against a Signed Tree Head, carried inline | leaf carries `device.key_id` and `sig.pub` |
 | `timestamp.tsr` | sync | RFC 3161 token, TSA chain, validated offline | `messageImprint = core_hash` |
-| `anchor` | sync | Merkle path to an on-chain root | leaf = `core_hash` |
+| `anchor` | sync | RFC 6962 path from `SHA-256(0x00 ‖ core_hash)` to the root the chain recorded | leaf = `core_hash` |
 | `integrity` | sync | registry key signature over `core_hash ‖ verdict` | by construction |
 
 - **`attestation`** — the key attestation certificate chain, leaf first, each
@@ -433,6 +433,19 @@ Field table — type, required, verified against:
   `time.device_clock`, or the `timestamp` token's time when present (the
   trusted bound). *Revoked at the declared capture time* → **red** for the
   key's standing, shown with the reason.
+- **`anchor`** — existence before a block, verifiable against the chain and
+  nothing of ours. `chain` names the network (`base`, `base-sepolia`);
+  `tx` and `block` locate the anchoring transaction; `anchor_id` is the
+  contract's sequential id of the batch; `root` (base64url) is the batch root
+  the contract recorded with `tree_size` leaves; `index` is this proof's
+  position; `merkle_path` is the RFC 6962 audit path, base64url, bottom first.
+  Leaves are `SHA-256(0x00 ‖ core_hash)` and nodes `SHA-256(0x01 ‖ left ‖
+  right)` — the same tree as the transparency log, so a verifier carries one
+  Merkle implementation. A verifier MUST recompute the root from `core_hash`,
+  `index`, `tree_size` and `merkle_path`, then read `(root, tree_size)` for
+  `anchor_id` from the contract (or a light client) and compare both; the
+  block's timestamp is the proven upper bound. Without network: *anchoring not
+  verified*, amber, never red.
 - **`integrity`** — `source` is `playIntegrity`, `appAttest` or `none`;
   `verdict` is `hardware`, `basic`, `unevaluated` or `failed`; `evaluated_at`
   is the registry's clock; `sig` is the registry signing key's ES256 signature

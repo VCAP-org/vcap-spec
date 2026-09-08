@@ -367,6 +367,11 @@
       "required": [
         "chain",
         "tx",
+        "block",
+        "anchor_id",
+        "index",
+        "tree_size",
+        "root",
         "merkle_path"
       ],
       "properties": {
@@ -375,11 +380,26 @@
         },
         "tx": {
           "type": "string",
-          "pattern": "^[A-Za-z0-9:_-]{1,128}$"
+          "pattern": "^0x[0-9a-f]{64}$"
         },
         "block": {
           "type": "integer",
           "minimum": 0
+        },
+        "anchor_id": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tree_size": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "root": {
+          "$ref": "#/$defs/bytes32"
         },
         "merkle_path": {
           "type": "array",

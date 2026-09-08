@@ -385,3 +385,11 @@ verification path. It now carries the leaf, the RFC 6962 inclusion path and
 the signed tree head inline, with the checks a verifier MUST run and the
 "registered after the declared capture" row in §7. Revocation remains an
 online check, said explicitly.
+
+**F18 · SHOULD → done (from building C7).** The `anchor` attachment listed
+`chain`, `tx`, `block`, `merkle_path`: a path without the leaf's index and the
+tree size cannot be verified (RFC 6962 needs both), and without the root and
+the contract's anchor id there is nothing to compare against on-chain. All
+four are now in the attachment, with the verification procedure and the
+offline label.
+
