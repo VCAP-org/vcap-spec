@@ -14,7 +14,7 @@ breaking changes are expected; after it, the format only ever grows by addition.
 ## Layout
 
 ```
-spec/      the specification document (normative)
+spec/      the specification document (normative) and the public threat model
 reviews/   review notes on the draft (crypto, implementability), numbered; the spec absorbs them, they stay as record
 schema/    JSON Schema of the proof + validator
 vectors/   conformance vectors: sealed files, broken signatures, edge cases (see vectors/README.md)
