@@ -495,14 +495,17 @@ entry records a valid App Attest binding for `device.key_id`. Web: `none`.
 | any of the above | valid, log not reachable | any | **amber** | revocation not checked |
 | any | key revoked at the declared capture time (signed status, §6.2) | — | **red** | key revoked |
 | `none` | session key, or no attestation | n/a | **amber, never green** | origin not hardware-attested |
-| any | claimed level above proven level | — | **amber at best, flagged** | inconsistent claim |
+| any | claimed level above the level the `attestation` attachment proves | — | **amber at best, flagged** | inconsistent claim |
 | any | `integrity.verdict` is `failed`, or mock location provider flagged | — | **amber at best, prominently flagged** | device integrity failed |
 | any | `sig` invalid, or attestation leaf ≠ `sig.pub` | — | **red** | tampered |
 
 - **Claimed above proven** is flagged and capped at amber, not red: the core is
   signed by the device, so the false claim is the device's, but a firmware that
   misreports its level must not turn a genuine capture into "tampered". Claimed
-  below proven: proven wins, nothing shown.
+  below proven: proven wins, nothing shown. The label needs evidence to
+  contradict the claim: with no `attestation` attachment the proven level is
+  `none` and the only label is *origin not hardware-attested*, whatever the
+  claim (vectors 01, 12, 15 claim `tee` with no chain).
 - **A self-chosen attestation challenge is allowed.** A device that never
   enrolled produces a genuine chain over a challenge it picked itself; the
   chain still proves the hardware level, and the missing registry entry lands
