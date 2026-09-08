@@ -299,7 +299,8 @@ when there is one), each verifiable on its own and each bound to `core_hash`.
   // ---- attachments: each self-authenticating, bound to core_hash (§6.2) ----
   "segments":    [ { "gop": 0, "range": [start, end], "hash", "prev", "sig" } ],
   "attestation": "base64url chain, omitted on web",
-  "registry":    { "log_id", "leaf_index", "sth_ref" },
+  "registry":    { "log_id", "leaf_index", "leaf": { ... }, "inclusion_path": [ ... ],
+                   "tree_head": { "tree_size", "timestamp", "root_hash", "signature" } },
   "timestamp":   { "tsr", "tsa_issuer" },
   "anchor":      { "chain", "tx", "block", "merkle_path" },
   "integrity":   { "source", "verdict", "evaluated_at", "sig" }
@@ -372,7 +373,7 @@ Field table — type, required, verified against:
 | `sig` | core, at capture | — it *is* the authentication | covers `JCS(core)` |
 | `segments` | core, at capture | each `sig(n)` under `sig.pub` | `capture_id` in every message |
 | `attestation` | core, at key creation | chain to a pinned Google root / App Attest | leaf SPKI MUST equal `sig.pub` |
-| `registry` | sync | inclusion proof against a Signed Tree Head | leaf carries `device.key_id` |
+| `registry` | sync | inclusion proof against a Signed Tree Head, carried inline | leaf carries `device.key_id` and `sig.pub` |
 | `timestamp.tsr` | sync | RFC 3161 token, TSA chain, validated offline | `messageImprint = core_hash` |
 | `anchor` | sync | Merkle path to an on-chain root | leaf = `core_hash` |
 | `integrity` | sync | registry key signature over `core_hash ‖ verdict` | by construction |
@@ -384,6 +385,54 @@ Field table — type, required, verified against:
   instead. **The leaf's SubjectPublicKeyInfo MUST be byte-equal to `sig.pub`**;
   otherwise *attestation does not match the signing key*, red. The chain MUST
   NOT carry device identifiers (no ID attestation: serial, IMEI, MEID).
+- **`registry`** — everything a verifier needs to check, **offline**, that the
+  signing key was in the transparency log when the tree head was signed. Not a
+  reference to be resolved: the proof carries the evidence.
+  - `log_id`: SHA-256 of the log's public key (DER SPKI), base64url. The verifier
+    ships the public keys of the logs it trusts, keyed by this.
+  - `leaf_index`: integer.
+  - `leaf`: the log leaf as recorded — `{ "type": "key", "key_id", "public_key",
+    "secure_hw", "attestation_digest", "registered_at" }`, integers and
+    base64/hex strings only; the verifier serializes it with JCS and hashes
+    `SHA-256(0x00 ‖ bytes)` (RFC 6962 leaf hash).
+  - `inclusion_path`: the RFC 6962 audit path, base64url hashes, bottom first.
+  - `tree_head`: `tree_size`, `timestamp` (ms, log clock), `root_hash`
+    (base64url), `signature` — ES256 by the log key in P1363 over the
+    fixed-length message `"vcap/1.0/sth" ‖ uint64 BE tree_size ‖ uint64 BE
+    timestamp ‖ root_hash`, `SHA-256(0x01 ‖ left ‖ right)` for nodes.
+
+  A verifier MUST check, in this order: the tree head signature under the
+  trusted key for `log_id`; the leaf hash's inclusion at `leaf_index` in a tree
+  of `tree_size` leaves with root `root_hash`; `leaf.key_id == device.key_id`
+  and `leaf.public_key` equal to `sig.pub`. Any failure → *registry evidence
+  invalid*, red for the attachment (the core is unaffected: the capture is
+  still signed by the key, only "in the log" is not proven). `leaf.secure_hw`
+  is the level the log saw proven at registration; it MUST NOT exceed the level
+  proven by `attestation` when both are present.
+
+  **Before the capture.** `tree_head.timestamp` is when the log signed a tree
+  containing the key. If it exceeds `time.device_clock`, the key was logged
+  after the declared capture time: *registered after the declared capture*,
+  shown, amber. When a `timestamp` attachment exists, `tree_head.timestamp`
+  MUST also not exceed the token's time. Revocation is not visible in this
+  attachment — it is a later leaf — and is checked online against the log
+  (§7, *revocation not checked* when offline).
+
+  **Revocation, online.** A verifier with network asks the log for the key's
+  status **at the capture time** and receives a statement signed by the log
+  key over the fixed-length message `"vcap/1.0/status" ‖ key_id (32) ‖ uint64
+  BE at ‖ uint64 BE tree_size ‖ status (1 byte: 0x00 unknown, 0x01 valid, 0x02
+  revoked)`, together with the tree head of `tree_size` and, when revoked, the
+  revocation leaves with their inclusion proofs. Nothing in a Merkle tree
+  proves a leaf does *not* exist, which is why the answer is signed.
+  Revocation is **temporal**: a revocation leaf carries `effective_from`, and a
+  capture at `T` is affected only if `effective_from ≤ T` — a lost or rotated
+  key does not rewrite the past — unless the leaf is `retroactive`, which the
+  log accepts for the reason `compromise` only: a compromised key vouches for
+  nothing it ever signed. The instant a verifier asks about is
+  `time.device_clock`, or the `timestamp` token's time when present (the
+  trusted bound). *Revoked at the declared capture time* → **red** for the
+  key's standing, shown with the reason.
 - **`integrity`** — `source` is `playIntegrity`, `appAttest` or `none`;
   `verdict` is `hardware`, `basic`, `unevaluated` or `failed`; `evaluated_at`
   is the registry's clock; `sig` is the registry signing key's ES256 signature
@@ -428,8 +477,10 @@ entry records a valid App Attest binding for `device.key_id`. Web: `none`.
 | `strongbox` | valid to Google hardware root, RKP fresh, revocation checked | yes | **green** | sealed in secure hardware |
 | `tee` | valid to Google root, revocation checked | yes | **green** | sealed in the TEE |
 | `secureEnclave` | App Attest valid, key bound to app | yes | **green** | sealed in the Secure Enclave (app-attested) |
-| any of the above | valid | no, or unknown | **amber** | key not in the transparency log |
-| any of the above | valid, revocation list not reachable | any | **amber** | revocation not checked |
+| any of the above | valid | no (`registry` absent), or its evidence invalid | **amber** | key not in the transparency log |
+| any of the above | valid | yes, but `tree_head.timestamp` after the declared capture | **amber** | registered after the declared capture |
+| any of the above | valid, log not reachable | any | **amber** | revocation not checked |
+| any | key revoked at the declared capture time (signed status, §6.2) | — | **red** | key revoked |
 | `none` | session key, or no attestation | n/a | **amber, never green** | origin not hardware-attested |
 | any | claimed level above proven level | — | **amber at best, flagged** | inconsistent claim |
 | any | `integrity.verdict` is `failed`, or mock location provider flagged | — | **amber at best, prominently flagged** | device integrity failed |
@@ -469,7 +520,7 @@ because "no trusted time" on a tampered file is noise.
 |---|---|---|
 | `timestamp` | *no trusted time* | only the device clock, shown as declared |
 | `anchor` | *not anchored* | existence before a block is not proven |
-| `registry` | *key not in transparency log* | the key may be genuine, but nobody can check revocation |
+| `registry` | *key not in transparency log* | the key may be genuine, but nobody can check its registration or revocation |
 | `attestation` (Android) | *origin not hardware-attested* | proven level `none` |
 | `integrity` | *integrity unevaluated* | no statement about the device's state |
 | `watermark` | *no watermark* | a compressed copy cannot be traced back |
