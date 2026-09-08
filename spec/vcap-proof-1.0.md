@@ -86,10 +86,12 @@ by seeking from the end, never by scanning.
   wrapped in a weaker proof that hides it.
 - **`flags` are a dispatch hint and never a source of truth.** Bit 0: a sidecar
   exists. Bit 1: segments present (video). Bit 2: pseudonymous capture. Bits
-  3–15 reserved, MUST be written as zero. Writers MUST derive the flags from the
-  JSON; everything the flags say is also in the JSON, and the JSON wins on
-  disagreement — a verifier MAY warn, and an attacker gains nothing by flipping
-  them. Unknown reserved bits are ignored, not fatal.
+  3–15 reserved, MUST be written as zero. Writers MUST derive bits 1 and 2 from
+  the JSON; everything they say is also in the JSON, and the JSON wins on
+  disagreement — a verifier MAY warn (*flags disagree*), and an attacker gains
+  nothing by flipping them. Bit 0 is not derivable from the JSON and depends on
+  what sits next to the file: verifiers MUST NOT check it. Unknown reserved bits
+  are ignored, not fatal.
 - **Sidecar.** The same JSON, byte-identical, in `<filename>.vcap` next to the
   file. Used when a pipeline cannot append to the container, and always allowed
   as a redundant copy. A sidecar has no footer. When both exist, the trailer is
@@ -231,6 +233,13 @@ sig(n)          = ECDSA-P256-SHA256( message(n) ), P1363, low s (§4.2)
   in `v`. A future layout uses a new separator, so a v1.0 verifier fails
   cleanly instead of misparsing. All five fields are fixed-length: nothing can
   shift between `capture_id` and `content_hash`.
+- **Each `segments[]` entry carries `gop`, `hash` (`content_hash(n)`), `prev`
+  (`prev_link(n)`) and `sig`.** `prev` is redundant when segment n−1 is present
+  — the verifier recomputes it and a mismatch is *chain broken* — and is what
+  makes a segment verifiable when its predecessor is absent: a clip cut from the
+  middle of an original verifies segment by segment, and is detectably a clip
+  because it does not start at 0 or does not reach `segment_count`. Nothing in
+  `prev` is trusted on its own: it enters the signed message.
 - **`media.segment_count`** (core, §6.1) is the number of segments the original
   had. A video cut at the end keeps index 0, no gaps and an unbroken chain; the
   count is what lets the verifier say *"12 of 300 segments present"*, and the
@@ -240,11 +249,13 @@ sig(n)          = ECDSA-P256-SHA256( message(n) ), P1363, low s (§4.2)
     declared when and where). If `sig` fails → **tampered**, red, stop.
   - `media.hash` matches, every segment verifies, chain unbroken, first index 0,
     `segment_count` segments present → eligible for **green** (subject to §7);
-  - `media.hash` does not match but the present segments verify with an
-    unbroken chain → **verified clip**, amber, reporting which segment indexes
+  - `media.hash` does not match, or segments are missing, but every present
+    segment verifies and the chain holds wherever two consecutive segments are
+    both present → **verified clip**, amber, reporting which segment indexes
     verified out of `segment_count`;
-  - a segment fails, or the chain breaks where the file claims contiguity →
-    **tampered**, red;
+  - a segment signature fails, or a present segment's `prev` differs from
+    `SHA-256(message(n−1))` while segment n−1 is present (the chain breaks where
+    the file claims contiguity) → **tampered**, red;
   - `segments[].range` (byte range in the received file) is informational and
     **not signed**: it helps a UI point at a frame, and a verifier MUST NOT
     conclude anything from it.
@@ -286,7 +297,7 @@ when there is one), each verifiable on its own and each bound to `core_hash`.
   "sig":      { "alg": "ES256", "value": "base64url r||s", "pub": "base64url SPKI" },
 
   // ---- attachments: each self-authenticating, bound to core_hash (§6.2) ----
-  "segments":    [ { "gop": 0, "range": [start, end], "hash", "sig" } ],
+  "segments":    [ { "gop": 0, "range": [start, end], "hash", "prev", "sig" } ],
   "attestation": "base64url chain, omitted on web",
   "registry":    { "log_id", "leaf_index", "sth_ref" },
   "timestamp":   { "tsr", "tsa_issuer" },
@@ -302,6 +313,22 @@ The core is the JSON object made of exactly these top-level keys, when present:
 A verifier builds it from the received proof by taking those keys and nothing
 else, then serializes it with JCS. Unknown top-level keys are not part of the
 core and are listed as *not evaluated* (§9).
+
+**Canonicalization procedure** (normative; vector `32-jcs-core-canonicalization`):
+
+1. Parse the proof JSON. Take the top-level members named above, in whatever
+   order they appear; ignore every other member.
+2. Serialize the resulting object with JCS (RFC 8785): object members sorted by
+   the UTF-16 code units of their names at every level, arrays in place, no
+   whitespace, strings escaped as ECMAScript `JSON.stringify` does, numbers as
+   plain decimal integers (the core has no other numbers).
+3. `core_bytes` is the UTF-8 encoding of that string; `core_hash = SHA-256(core_bytes)`.
+
+A writer MUST store the whole proof in the trailer as JCS of the entire object;
+a reader MUST NOT depend on it (vector `20-jpeg-payload-not-canonical`). A
+writer MUST produce proofs that validate against
+`schema/vcap-proof-1.0.schema.json`; the schema is the structural form of this
+section and §6.2, and CI in every implementation repository runs it.
 
 Rules that keep five implementations byte-identical:
 
@@ -319,8 +346,9 @@ Rules that keep five implementations byte-identical:
   **proven** level from the attestation attachment (§7) and uses the proven one.
 - `capture_id` MUST come from a cryptographically secure RNG. It is public (the
   watermark carries it); 128 bits are for uniqueness, not secrecy.
-- `time.device_clock` is the device's own clock, signed by the device: a
-  declaration, shown as such. Trusted time comes from the `timestamp` attachment.
+- `time.device_clock` is the device's own clock as integer milliseconds since
+  the Unix epoch, UTC, signed by the device: a declaration, shown as such.
+  Trusted time comes from the `timestamp` attachment.
 
 Field table — type, required, verified against:
 
@@ -433,7 +461,9 @@ entry records a valid App Attest binding for `device.key_id`. Web: `none`.
 unparseable → *no proof found*. Present but invalid → *tampered*.
 
 **Optional, each with its exact label when absent.** Absence is never an error,
-and the verifier states it rather than staying silent:
+and the verifier states it rather than staying silent. Labels accompany
+non-red verdicts only: a red verdict carries its reason and nothing else,
+because "no trusted time" on a tampered file is noise.
 
 | Absent | Label | What it means |
 |---|---|---|
@@ -527,5 +557,13 @@ who finds it out later stops trusting the rest:
 - [ ] `REVIEW (ML)` `watermark.layout` values and what the detector reports when
       the layout is declared but the payload does not decode
 - [ ] `REVIEW (ML)` 24-bit `mark_id` collision probability and behaviour on two proofs claiming one `mark_id`
-- [ ] All vectors of §4 exist with an expected verdict written before any code
-- [ ] JSON Schema validates every vector, and rejects each malformed case
+- [x] Vectors for the trailer, canonical bytes, core signature, version policy
+      and the segment chain at message level: 32 in `vectors/`, checked by the
+      reference verifier in `tools/` (steps 4–5)
+- [ ] `REVIEW (mobile)` container-level video vectors: real MP4/MOV from each
+      encoder, with `content_hash` recomputed from the NAL units and audio frames
+- [ ] Vectors for the proof level (§7): attestation chains, registry entries,
+      revocation — after C6 exposes the material
+- [ ] Vectors for `timestamp` and `anchor` attachments — after C7/C8
+- [x] JSON Schema validates every vector, and rejects each malformed case:
+      `schema/vcap-proof-1.0.schema.json`, run by `tools` in CI (step 6)

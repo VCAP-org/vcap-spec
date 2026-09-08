@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "expected.json of a conformance vector",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind"],
+  "properties": {
+    "kind": { "enum": ["file", "segments", "jcs"] },
+    "outcome": { "enum": ["authentic", "verified_clip", "tampered", "nested_proof", "corrupted_proof", "no_proof_found", "unsupported_format_version"] },
+    "labels": { "type": "array", "items": { "type": "string" } },
+    "not_evaluated": { "type": "array", "items": { "type": "string" } },
+    "core_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "segments": { "type": "object", "additionalProperties": false, "required": ["verified"], "properties": { "verified": { "type": "array", "items": { "type": "integer", "minimum": 0 } } } },
+    "schema_valid": { "type": "boolean", "description": "file vectors: whether proof.json conforms to vcap-proof-1.0.schema.json" },
+    "core_bytes_hex": { "type": "string", "pattern": "^([0-9a-f]{2})+$" },
+    "debug": { "type": "object" }
+  },
+  "allOf": [
+    { "if": { "type": "object", "properties": { "kind": { "const": "jcs" } } }, "then": { "type": "object", "required": ["core_bytes_hex", "core_hash"] } },
+    { "if": { "type": "object", "properties": { "kind": { "enum": ["file", "segments"] } } }, "then": { "type": "object", "required": ["outcome", "labels", "not_evaluated"] } }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "capture_id": "ABEiM0RVZneImaq7zN3u_w",
+  "pub": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEp2C_SxUua1GBx-6u3KBIJKPwOb6yEYmTqfdbgzJbVJCy1_wvmKAjjmvD-d5EdVWpGx0Jxcduppsd0SspNPHKyA",
+  "segment_count": 3,
+  "segments": [
+    {
+      "gop": 1,
+      "hash": "3q0FJMsh2sAgYapRbubMFw_LjQsWg5LzPptUVqwz9kI",
+      "prev": "lPuR8oUo-FkoxlMOR3MUQgRLVVZ9mzRm1VXfF2nxMUk",
+      "sig": "dgmaHIKugPOgbFsbSHVTOUUXhPzq5X7QzavNyrIWkHczIndGzrHPQrw2Rfje9X8T3m-3icWV-VYKQrJ0yXcXMw"
+    },
+    {
+      "gop": 2,
+      "hash": "9eBHdAvSkalXlM0lAO-pJeKwaNtM-qxGKaL_cjReqHA",
+      "prev": "3DCOQWFjD3ktTMnczAe0MpvrYjS1fMakVD1Z21mq_f8",
+      "sig": "HaMVxqte63mAT5UUxOh6c-aBJ85lved39T4kqFjr7ZkHaROrFWg49OsrbfTkXUwpLszuzCqkNmsNQVPNQa12og"
+    }
+  ]
+}
