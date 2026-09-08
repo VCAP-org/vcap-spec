@@ -8,6 +8,9 @@ treat every edit as a breaking change until `vcap/1.0` is tagged.
 - `spec/vcap-proof-1.0.md` — the normative document. Sections marked `TODO` are
   the six format decisions still open (see the work order in
   `Doc/06-fase1-avvio.md` section 3).
+- `reviews/` — the review notes of the work order's steps 2 and 3. Findings are
+  graded BLOCKING / SHOULD / NOTE; the draft is amended, the note stays as the
+  record of why.
 - `schema/` — JSON Schema plus a validator runnable from CI.
 - `vectors/` — one directory per case, each with the input, the proof and the
   expected verdict in `expected.json`.
