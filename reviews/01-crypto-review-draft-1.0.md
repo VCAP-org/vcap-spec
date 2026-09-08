@@ -375,3 +375,13 @@ or a comment in §6 — `pseudonymous` hides the operator, not the device.
 All amendments are in `spec/vcap-proof-1.0.md`, same day. Step 3
 (implementability review) is next; step 4 (canonicalization rule) now has the
 core defined and only needs the JCS vectors.
+
+## Addendum — 8 September 2026, from building the log (C6)
+
+**F17 · SHOULD → done.** The draft's `registry` attachment (`log_id`,
+`leaf_index`, `sth_ref`) was a reference, not evidence: an offline verifier
+could not check it without asking the log, which puts a server in the
+verification path. It now carries the leaf, the RFC 6962 inclusion path and
+the signed tree head inline, with the checks a verifier MUST run and the
+"registered after the declared capture" row in §7. Revocation remains an
+online check, said explicitly.

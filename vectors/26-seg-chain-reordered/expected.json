@@ -1,0 +1,11 @@
+{
+  "kind": "segments",
+  "outcome": "tampered",
+  "labels": [],
+  "not_evaluated": [],
+  "segments": {
+    "verified": [
+      0
+    ]
+  }
+}

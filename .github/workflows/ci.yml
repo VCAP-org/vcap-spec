@@ -1,10 +1,21 @@
 name: ci
 on: [push, pull_request]
 jobs:
-  validate:
+  vectors:
+    name: conformance vectors against the reference verifier
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools
     steps:
       - uses: actions/checkout@v4
-      # TODO: run the schema validator over vectors/*/proof.json
-      # and check every vectors/*/expected.json is well formed.
-      - run: echo "validator not implemented yet"
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: tools/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      # Every vector's proof.json against the schema, and every expected.json against its own.
+      - run: npm run validate

@@ -1,0 +1,12 @@
+{
+  "kind": "segments",
+  "outcome": "verified_clip",
+  "labels": [],
+  "not_evaluated": [],
+  "segments": {
+    "verified": [
+      0,
+      2
+    ]
+  }
+}

@@ -13,7 +13,12 @@ treat every edit as a breaking change until `vcap/1.0` is tagged.
   record of why.
 - `schema/` — JSON Schema plus a validator runnable from CI.
 - `vectors/` — one directory per case, each with the input, the proof and the
-  expected verdict in `expected.json`.
+  expected verdict in `expected.json`. Format and rules in `vectors/README.md`.
+- `tools/` — the reference verifier and the vector generator. The verifier is
+  written from the spec to prove the vectors consistent; it is not the
+  implementation others copy. When it disagrees with an expected verdict, the
+  review decides which one is wrong — the generator refuses to write a vector
+  the verifier fails.
 
 ## Working rules
 

@@ -17,7 +17,9 @@ breaking changes are expected; after it, the format only ever grows by addition.
 spec/      the specification document (normative)
 reviews/   review notes on the draft (crypto, implementability), numbered; the spec absorbs them, they stay as record
 schema/    JSON Schema of the proof + validator
-vectors/   conformance vectors: sealed files, broken signatures, edge cases
+vectors/   conformance vectors: sealed files, broken signatures, edge cases (see vectors/README.md)
+tools/     reference tooling (Node 22, TypeScript): JCS, trailer, canonical bytes, core signature,
+           segment chain, the vector generator and the reference verifier CI runs over vectors/
 ```
 
 ## Rules

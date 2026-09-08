@@ -1,0 +1,13 @@
+{
+  "kind": "segments",
+  "outcome": "authentic",
+  "labels": [],
+  "not_evaluated": [],
+  "segments": {
+    "verified": [
+      0,
+      1,
+      2
+    ]
+  }
+}

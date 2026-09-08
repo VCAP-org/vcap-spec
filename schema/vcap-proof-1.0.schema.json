@@ -1,0 +1,479 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vcap.dev/schema/vcap-proof-1.0.schema.json",
+  "title": "vcap proof, version 1.0",
+  "description": "Structural schema of a vcap/1.0 proof. Gates writers: a proof that fails here is not a vcap/1.0 proof. It does not decide verdicts — a schema-valid proof can still be tampered — and it does not model the verifier's tolerance of newer minors (§9): unknown top-level keys are allowed, unknown keys inside known objects are not, because a 1.0 writer has no business emitting them.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "v",
+    "capture_id",
+    "media",
+    "device",
+    "sig"
+  ],
+  "properties": {
+    "v": {
+      "type": "string",
+      "pattern": "^vcap/1\\.[0-9]+$"
+    },
+    "capture_id": {
+      "$ref": "#/$defs/bytes16"
+    },
+    "media": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mime",
+        "hash"
+      ],
+      "properties": {
+        "mime": {
+          "type": "string",
+          "pattern": "^(image|video)/[a-z0-9.+-]+$"
+        },
+        "w": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "h": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "hash": {
+          "$ref": "#/$defs/bytes32"
+        },
+        "segment_count": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "device": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "platform",
+        "secure_hw",
+        "key_id"
+      ],
+      "properties": {
+        "platform": {
+          "enum": [
+            "android",
+            "ios",
+            "web"
+          ]
+        },
+        "secure_hw": {
+          "enum": [
+            "strongbox",
+            "tee",
+            "secureEnclave",
+            "none"
+          ]
+        },
+        "key_id": {
+          "$ref": "#/$defs/bytes32"
+        }
+      }
+    },
+    "watermark": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algo",
+        "layout"
+      ],
+      "properties": {
+        "algo": {
+          "$ref": "#/$defs/identifier"
+        },
+        "layout": {
+          "enum": [
+            "photo-bch-v3",
+            "video-rep-v1"
+          ]
+        },
+        "payload_bits": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "ecc": {
+          "$ref": "#/$defs/identifier"
+        },
+        "strength": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "mark_id": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16777215
+        }
+      }
+    },
+    "time": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "device_clock": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "milliseconds since the Unix epoch, UTC"
+        }
+      }
+    },
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ],
+      "properties": {
+        "level": {
+          "enum": [
+            "declared",
+            "corroborated",
+            "authenticated"
+          ]
+        },
+        "lat_udeg": {
+          "type": "integer",
+          "minimum": -90000000,
+          "maximum": 90000000
+        },
+        "lon_udeg": {
+          "type": "integer",
+          "minimum": -180000000,
+          "maximum": 180000000
+        },
+        "acc_cm": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "evidence": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "$ref": "#/$defs/identifier"
+              }
+            }
+          }
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pseudonymous": {
+          "type": "boolean"
+        },
+        "retention_ref": {
+          "$ref": "#/$defs/opaqueRef"
+        }
+      }
+    },
+    "sig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "alg",
+        "value",
+        "pub"
+      ],
+      "properties": {
+        "alg": {
+          "const": "ES256"
+        },
+        "value": {
+          "$ref": "#/$defs/p1363"
+        },
+        "pub": {
+          "$ref": "#/$defs/spkiP256"
+        }
+      }
+    },
+    "segments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "gop",
+          "hash",
+          "prev",
+          "sig"
+        ],
+        "properties": {
+          "gop": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "range": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "hash": {
+            "$ref": "#/$defs/bytes32"
+          },
+          "prev": {
+            "$ref": "#/$defs/bytes32"
+          },
+          "sig": {
+            "$ref": "#/$defs/p1363"
+          }
+        }
+      }
+    },
+    "attestation": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10,
+      "items": {
+        "$ref": "#/$defs/base64url"
+      }
+    },
+    "registry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "log_id",
+        "leaf_index",
+        "leaf",
+        "inclusion_path",
+        "tree_head"
+      ],
+      "properties": {
+        "log_id": {
+          "$ref": "#/$defs/bytes32"
+        },
+        "leaf_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "leaf": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "key_id",
+            "public_key",
+            "secure_hw",
+            "attestation_digest",
+            "registered_at"
+          ],
+          "properties": {
+            "type": {
+              "const": "key"
+            },
+            "key_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "public_key": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9+/]{122}==$",
+              "description": "DER SPKI of the P-256 key, standard base64 as the log records it"
+            },
+            "secure_hw": {
+              "enum": [
+                "strongbox",
+                "tee",
+                "secureEnclave"
+              ]
+            },
+            "attestation_digest": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "registered_at": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "inclusion_path": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/bytes32"
+          }
+        },
+        "tree_head": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tree_size",
+            "timestamp",
+            "root_hash",
+            "signature"
+          ],
+          "properties": {
+            "tree_size": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "timestamp": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "root_hash": {
+              "$ref": "#/$defs/bytes32"
+            },
+            "signature": {
+              "$ref": "#/$defs/p1363"
+            }
+          }
+        }
+      }
+    },
+    "timestamp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tsr"
+      ],
+      "properties": {
+        "tsr": {
+          "$ref": "#/$defs/base64url"
+        },
+        "tsa_issuer": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    },
+    "anchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "chain",
+        "tx",
+        "merkle_path"
+      ],
+      "properties": {
+        "chain": {
+          "$ref": "#/$defs/identifier"
+        },
+        "tx": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9:_-]{1,128}$"
+        },
+        "block": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "merkle_path": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/bytes32"
+          }
+        }
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "verdict",
+        "evaluated_at",
+        "sig"
+      ],
+      "properties": {
+        "source": {
+          "enum": [
+            "playIntegrity",
+            "appAttest",
+            "none"
+          ]
+        },
+        "verdict": {
+          "enum": [
+            "hardware",
+            "basic",
+            "unevaluated",
+            "failed"
+          ]
+        },
+        "evaluated_at": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sig": {
+          "$ref": "#/$defs/p1363"
+        }
+      }
+    }
+  },
+  "if": {
+    "type": "object",
+    "required": [
+      "segments"
+    ]
+  },
+  "then": {
+    "type": "object",
+    "properties": {
+      "media": {
+        "type": "object",
+        "required": [
+          "segment_count"
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "base64url": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "bytes16": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{22}$",
+      "description": "16 bytes, base64url, no padding"
+    },
+    "bytes32": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$",
+      "description": "32 bytes, base64url, no padding"
+    },
+    "p1363": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{86}$",
+      "description": "ECDSA P-256 signature, r||s, 64 bytes, base64url"
+    },
+    "spkiP256": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{122}$",
+      "description": "DER SubjectPublicKeyInfo of an EC P-256 key, 91 bytes, base64url"
+    },
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9.:-]{0,63}$"
+    },
+    "opaqueRef": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,64}$"
+    }
+  }
+}
