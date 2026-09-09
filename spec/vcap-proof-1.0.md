@@ -239,7 +239,17 @@ sig(n)          = ECDSA-P256-SHA256( message(n) ), P1363, low s (§4.2)
   the container records for the sample, in the media timescale of the received
   file and converted to a common timebase across tracks — not any clock
   internal to the capture pipeline. A writer that computes segment boundaries
-  before muxing MUST use the timestamps it will write. Audio frames whose DTS
+  before muxing MUST use the timestamps it will write. **The common timebase is
+  the presentation timeline the container defines, edit lists included**: in
+  ISO-BMFF a leading empty `elst` entry (`media_time = -1`) delays a track, and
+  a track's samples start at its first edit's `media_time`. This is not a corner
+  case — `MediaMuxer` writes a 473 ms empty edit on the video track of a
+  recording whose microphone opened before its camera, which is the ordinary
+  case for a capture with audio. Aligning both tracks at zero instead pulls the
+  audio frames that precede the first IDR into segment 0 and makes every
+  segment hash of the file wrong. Two implementations of this rule, one on the
+  device and one from the text, disagreed exactly there until the sentence you
+  are reading existed (vector 36). Audio frames whose DTS
   precedes the first IDR are covered by `media.hash` and by no segment hash; a
   verifier MUST NOT report them as missing.
 - **A segment may be one frame.** Encoders place IDRs where they choose (two
@@ -285,6 +295,15 @@ sig(n)          = ECDSA-P256-SHA256( message(n) ), P1363, low s (§4.2)
   - a segment signature fails, or a present segment's `prev` differs from
     `SHA-256(message(n−1))` while segment n−1 is present (the chain breaks where
     the file claims contiguity) → **tampered**, red;
+  - **a present segment whose `content_hash`, recomputed from the container,
+    differs from the signed one → tampered**, red, reporting which segments do
+    verify. Recomputation is optional — a verifier without a demuxer verifies
+    the signature layer and nothing here changes that — but a verifier that
+    holds the file and skips it has checked that somebody signed some hashes,
+    not that the frames in front of the reader are those frames. A contradicted
+    segment is not a missing one: a clip lacks segments, this file *has* the
+    segment and its bytes are not the bytes that were signed, which is
+    substitution inside a signed range and never amber (vector 39);
   - `segments[].range` (byte range in the received file) is informational and
     **not signed**: it helps a UI point at a frame, and a verifier MUST NOT
     conclude anything from it.
@@ -612,7 +631,8 @@ checked*. A verifier that is offline says so and caps at amber; a server-side
 validator with no list fails closed. Same fact, two contexts, both written here.
 
 **Invalidating — red.** `sig` invalid over `JCS(core)`; attestation leaf key
-different from `sig.pub`; a watermark payload that **decodes** to an id other
+different from `sig.pub`; a present segment whose `content_hash` recomputed from the container
+differs from the signed one (§5); a watermark payload that **decodes** to an id other
 than the one the proof declares (`capture_id` for `photo-bch-v3`,
 `watermark.mark_id` for `video-rep-v1`) — a payload that fails to decode is
 *watermark not recovered*, above, and not this; a segment signature invalid, or the chain broken where the file claims
@@ -691,7 +711,7 @@ says.
 - [x] `TODO (LEAD)` the vcap SEI UUID — resolved: derived from `"vcap/1.0/sei"`, no registration exists for `user_data_unregistered`; payload defined (`reviews/implementability-android.md`, M4, M5)
 - [ ] `REVIEW (mobile)` manifest ordering: after sealing for photos, before for video
 - [ ] `REVIEW (mobile)` per-segment signing cost in StrongBox on a long clip
-- [ ] `REVIEW (mobile)` NAL byte definition and audio DTS rule reproducible on both encoders — the DTS clock is now named (M8); H.264 and HEVC on one Android device agree; iOS pending (S1)
+- [~] `REVIEW (mobile)` NAL byte definition and audio DTS rule reproducible on both encoders — the DTS clock is now named (M8) and the timeline with it (edit lists, §5); H.264 and HEVC on Android are reproduced byte for byte by a second implementation written from this text (`tools/src/container.ts`, vectors 36–37), which is what "reproducible" was asking; iOS pending (S1)
 - [x] `REVIEW (mobile)` hashing two interleaved tracks during encoding — resolved: 8 KB and 0.5 ms per segment on a TEE device (M8)
 - [ ] `REVIEW (mobile)` metadata stripping before sealing for pseudonymous captures
 - [x] `REVIEW (ML)` `watermark.layout` values and what the detector reports when
@@ -705,8 +725,14 @@ says.
 - [x] Vectors for the trailer, canonical bytes, core signature, version policy,
       the segment chain at message level, the §8 video rule and JPEG fill bytes: 35 in
       `vectors/`, checked by the reference verifier in `tools/` (steps 4–5)
-- [ ] `REVIEW (mobile)` container-level video vectors: real MP4/MOV from each
-      encoder, with `content_hash` recomputed from the NAL units and audio frames
+- [~] `REVIEW (mobile)` container-level video vectors: real MP4/MOV from each
+      encoder, with `content_hash` recomputed from the NAL units and audio
+      frames — Android H.264 and HEVC done (vectors 36–39, `kind: container`);
+      iOS after S1, and the MOV branch with it
+- [ ] `REVIEW (BE)` whether a verifier that cannot recompute segment hashes must
+      say so in its labels, the way it says *integrity unevaluated*. Adding a
+      label is additive under §9, but it changes the expected labels of every
+      video vector, so it is a decision and not an edit
 - [ ] Vectors for the proof level (§7): attestation chains, registry entries,
       revocation — after C6 exposes the material
 - [ ] Vectors for `timestamp` and `anchor` attachments — after C7/C8

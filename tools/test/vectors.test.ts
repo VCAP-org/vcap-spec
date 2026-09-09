@@ -27,10 +27,16 @@ describe('conformance vectors', () => {
       expect(validateExpected(expected).errors).toEqual([])
       const { kind, debug: _debug, schema_valid: schemaValid, ...want } = expected
 
-      if (kind === 'file') {
+      if (kind === 'file' || kind === 'container') {
+        // A container vector is a file vector plus the §5 recomputation: same
+        // inputs, one more question asked of them.
         const input = readdirSync(path).find((f) => f.startsWith('input.') && !f.endsWith('.vcap')) as string
         const sidecarPath = join(path, `${input}.vcap`)
-        const verdict = verifyFile({ file: readFileSync(join(path, input)), sidecar: existsSync(sidecarPath) ? readFileSync(sidecarPath) : undefined })
+        const verdict = verifyFile({
+          file: readFileSync(join(path, input)),
+          sidecar: existsSync(sidecarPath) ? readFileSync(sidecarPath) : undefined,
+          recomputeSegments: kind === 'container'
+        })
         expect(pick(verdict, want)).toEqual(want)
         const proofPath = join(path, 'proof.json')
         if (existsSync(proofPath)) expect(validateProof(JSON.parse(readFileSync(proofPath, 'utf8'))).valid).toBe(schemaValid)
