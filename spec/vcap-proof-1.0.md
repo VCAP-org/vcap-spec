@@ -1,13 +1,14 @@
 # vcap proof format, version 1.0
 
-**Status: DRAFT for review — not frozen.** Written 8 September 2026 as step 1 of
-the work order in `Doc/06-fase1-avvio.md` §3; **amended the same day after the
-cryptographic review** (step 2, `reviews/01-crypto-review-draft-1.0.md`). The
-six format decisions below are **taken, not offered as options**; what remains
-is the implementability review (step 3, mobile + ML). Each open question is
-marked `REVIEW`.
-
-Until the `v1.0` tag: breaking changes expected. After it: additive only.
+**Status: `vcap/1.0` FROZEN — 9 September 2026, tag `v1.0`.** Written 8
+September 2026 as step 1 of the work order in `Doc/06-fase1-avvio.md` §3,
+amended the same day after the cryptographic review (step 2,
+`reviews/01-crypto-review-draft-1.0.md`) and on 9 September after the
+implementability review on real hardware (step 3,
+`reviews/implementability-android.md`). The six format decisions below are
+final. From this tag the format grows by addition only (§9); §11 lists what is
+still being verified and why none of it can change the wire format. Changes
+land through `CHANGELOG.md`.
 
 ## 1. Scope
 
@@ -175,9 +176,10 @@ payload, file with valid footer and wrong CRC, double-sealed file (*nested
 proof*), signature with high `s` (must verify), signature over a core with one
 edited key (must fail), DER-encoded signature (must fail: wrong length).
 
-`REVIEW (mobile)`: confirm that on both platforms the manifest writer can be
-ordered after sealing for photos and before for video without a second full
-re-encode.
+Verified on Android (`reviews/implementability-android.md`, M11): for photos
+the manifest writer runs after sealing, since a JUMBF APP11 added afterwards is
+outside the canonical bytes; for video it runs before sealing. iOS confirmation
+is a §11 follow-up and cannot change the rule, only confirm it.
 
 ---
 
@@ -283,13 +285,13 @@ sig(n)          = ECDSA-P256-SHA256( message(n) ), P1363, low s (§4.2)
 
 Photos have no `segments`; their signature is the one in §4.2.
 
-`REVIEW (mobile)`: GOP length in practice — a 2-second GOP on a 10-minute clip is
-300 signatures. Confirm the per-signature cost in StrongBox (the slow path) and,
-if it is prohibitive, propose a segment = N GOPs grouping *with* the chain kept.
-`REVIEW (mobile)`: the NAL byte definition and the audio DTS rule must be
-reproducible on MediaCodec and VideoToolbox; one vector per encoder.
-`REVIEW (mobile)`: hashing two interleaved tracks during encoding — memory and
-latency budget.
+Measured on a TEE device (`reviews/implementability-android.md`, M7, M8): one
+segment signature costs 15–21 ms, so 300 segments over ten minutes are about
+6 s of TEE time (1 % duty); hashing two interleaved tracks costs 8 KB and
+0.5 ms per segment. StrongBox (the slow path) and VideoToolbox are §11
+follow-ups. If StrongBox ever proves prohibitive, a `segment = N GOPs` grouping
+keeps the chain and arrives as a new separator string (§9), not as a change to
+this one.
 
 ---
 
@@ -634,7 +636,14 @@ who finds it out later stops trusting the rest:
 
 ---
 
-## 11. Review checklist before the freeze
+## 11. Review status at the freeze
+
+Frozen 9 September 2026. The open items below are follow-ups: each is either
+evidence still to collect (measurements, vectors) or a value in a field §9
+declares extensible. None of them changes the core keys, the trailer, the
+segment message or the meaning of an existing enum value; if one ever needs
+to, it arrives as a new minor with a new separator or as a new major, as §9
+says.
 
 - [x] `REVIEW (BE)` crc32c availability in Kotlin, Swift, Node — resolved: CRC-32
 - [x] `REVIEW (BE)` domain separation of the segment message, no field-shift ambiguity — confirmed, 96 fixed bytes
