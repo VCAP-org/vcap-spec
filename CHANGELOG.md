@@ -55,6 +55,13 @@ section it touches, the vectors it adds and what an older verifier does with it.
 - Schema fix: `attestation_status.source` was `$ref: identifier`, whose pattern
   is lowercase-only — it rejected `googleStatusList`, the one value the spec
   names. Found by the generator, which validates every vector it writes.
+- §9 and the schema: `$defs/identifier` now accepts camelCase as well as
+  lowercase-hyphen, and §9 says a new value in an extensible field uses one of
+  the two spellings the format already uses. The narrow pattern was the cause of
+  the fix above, and it was still armed on `location.evidence[].kind` and
+  `timestamp.tsa_issuer`, whose values arrive with C15 and D2 — the same
+  incident, later, on another field. A pattern there is a gate against free
+  text, not a style rule.
 - **Still to come**: the registry, timestamp and anchor slices of the corpus.
 
 ### Clarifications for writers (§4, §5, §6, §7)

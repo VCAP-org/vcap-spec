@@ -744,7 +744,12 @@ side by side with it.
 - **After the 1.0 tag, additive only**: new optional keys, and new values only in
   fields documented as extensible (`watermark.layout`, `location.evidence[].kind`,
   `timestamp.tsa_issuer`, `integrity.source`, `attestation_status.source`).
-  Every extensible field states the fallback for an older verifier. `device.secure_hw`, `sig.alg`, the set of
+  Every extensible field states the fallback for an older verifier. A new value
+  in such a field is a short machine name in one of the two spellings the format
+  already uses — lowercase-hyphen (`bch-255-131`, `base-sepolia`) or camelCase
+  (`secureEnclave`, `playIntegrity`, `googleStatusList`) — and the schema
+  accepts both. It once accepted only the first, which made `googleStatusList`
+  schema-invalid in the same document that named it. `device.secure_hw`, `sig.alg`, the set of
   core keys and the segment message layout are **not** extensible: changing any
   of them is a new minor with a new separator (§5) or a new major.
 - **Never** reuse a key name with a different meaning, never promote an optional
