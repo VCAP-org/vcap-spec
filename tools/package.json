@@ -14,6 +14,7 @@
     "validate": "tsx src/validate.ts"
   },
   "devDependencies": {
+    "@noble/curves": "^2.4.0",
     "@peculiar/x509": "^2.1.0",
     "@types/node": "^22.10.5",
     "asn1js": "^3.0.10",

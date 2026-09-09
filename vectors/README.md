@@ -42,6 +42,14 @@ The test key in `tools/src/testkey.ts` is public by design: anyone can
 regenerate the vectors. Base media in `_media/` (a 16×16 JPEG, its HEIC, a two-frame
 H.264 MP4) are the unsealed inputs.
 
+**Regeneration is byte-stable.** `npm run generate` signs with RFC 6979
+(deterministic `k`, derived from the key and the message), so a run that changes
+nothing produces no diff — which is what makes a diff worth reading. It was not
+always so: ECDSA's random `k` rewrote every signature on every run, and two
+vector inputs were built from `randomBytes`, so their `media.hash` and
+`core_hash` moved too. Forty changed files hide the one that was meant to
+change.
+
 **The attestation chains are committed, not generated.** `vectors/_chains/`
 holds them and `tools/src/make-attestation-chains.ts` writes them on demand,
 outside `npm run generate`. The reason is the one that exempts the container

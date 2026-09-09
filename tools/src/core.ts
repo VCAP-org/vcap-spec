@@ -1,4 +1,4 @@
-import { type KeyObject, createHash, createPublicKey, createSign, createVerify } from 'node:crypto'
+import { type KeyObject, createHash, createPublicKey, createVerify } from 'node:crypto'
 import { type Json, jcs } from './jcs.js'
 
 /** §6.1: exactly these top-level keys form the signed core. */
@@ -28,12 +28,6 @@ export const isLowS = (sig: Buffer): boolean => toBig(sig.subarray(32)) <= HALF_
 
 /** Flips s to n − s: the other valid signature for the same message. */
 export const flipS = (sig: Buffer): Buffer => Buffer.concat([sig.subarray(0, 32), toBuf32(N - toBig(sig.subarray(32)))])
-
-/** ES256 over `bytes`, P1363, low s. */
-export const signEs256 = (bytes: Buffer, privateKey: KeyObject): Buffer => {
-  const sig = createSign('SHA256').update(bytes).sign({ key: privateKey, dsaEncoding: 'ieee-p1363' })
-  return isLowS(sig) ? sig : flipS(sig)
-}
 
 export const verifyEs256 = (bytes: Buffer, sig: Buffer, publicKey: KeyObject): boolean =>
   sig.length === 64 && createVerify('SHA256').update(bytes).verify({ key: publicKey, dsaEncoding: 'ieee-p1363' }, sig)

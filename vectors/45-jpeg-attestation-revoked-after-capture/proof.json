@@ -34,7 +34,7 @@
   },
   "sig": {
     "alg": "ES256",
-    "value": "shVkNVq0unfOOZUcWh7_XxwW37FWL_P_V-Mt03Go0goHhMtDfyQJljiTHE3yoChnsiGL_vsRN7DuQKlPdCdyuA",
+    "value": "qpjuFIpPNSSzyGyo1b0EFM9MdTrtruCI4myP_1RfueUcAGuOsfS78kzwJf1tUoYAz-6JzZwRuDlAYLLWrR6v9g",
     "pub": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEp2C_SxUua1GBx-6u3KBIJKPwOb6yEYmTqfdbgzJbVJCy1_wvmKAjjmvD-d5EdVWpGx0Jxcduppsd0SspNPHKyA"
   },
   "attestation": [
@@ -52,6 +52,6 @@
         "reason": "SUPERSEDED"
       }
     ],
-    "sig": "MEkH7vGpdOH6r-pXMkOTxVI_Smyh3-QLXkNQAoSw9LVZx_GebiRxjcAtMKJwsFOENz56lChXk-iXbxa62M_ldQ"
+    "sig": "55iE4xFd3pu9gcWeAGyKHigP-ff2wlc-2k9jaGJ622UbLe5ckklyOsGUjYRwVf2VEhGyyCYwamzolgnlDo5ZSg"
   }
 }

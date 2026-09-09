@@ -1,11 +1,14 @@
-import { createHash, createPrivateKey, randomBytes } from 'node:crypto'
+import { createHash, createPrivateKey } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { type Json, jcs } from './jcs.js'
-import { type Proof, coreBytes, coreHash, flipS, keyId, p1363ToDer, signEs256, spkiOf } from './core.js'
+import { type Proof, coreBytes, coreHash, flipS, keyId, p1363ToDer, spkiOf } from './core.js'
 import { mediaHash } from './canonical.js'
 import { Flag, buildTrailer } from './trailer.js'
-import { type SegmentEntry, SEPARATOR, ZERO_LINK, linkOf, segmentMessage, signChain } from './segments.js'
+import { type SegmentEntry, SEPARATOR, ZERO_LINK, linkOf, segmentMessage } from './segments.js'
+// Deterministic ES256 (RFC 6979): regenerating an unchanged vector must not
+// change its bytes. See sign.ts.
+import { signChain, signEs256 } from './sign.js'
 import { TEST_KEY_PKCS8_BASE64 } from './testkey.js'
 import { TEST_LOG_KEY_PKCS8_BASE64 } from './testlogkey.js'
 import { loadTrust } from './trust.js'
@@ -65,7 +68,11 @@ const app11 = (payload: Buffer): Buffer => {
   return Buffer.concat([Buffer.from([0xff, 0xeb]), length, payload])
 }
 const jumbf = app11(Buffer.concat([Buffer.from('JP', 'ascii'), Buffer.from([0, 1, 0, 0, 0, 1]), Buffer.from('000000186a756d620000001063327061', 'hex')]))
-const notJumbf = app11(Buffer.concat([Buffer.from('XX', 'ascii'), randomBytes(12)]))
+// Fixed bytes, not random ones: the payload's content is irrelevant to what
+// the vector tests (an APP11 that is not JUMBF), while randomness made the
+// sealed file — and therefore its media.hash and core_hash — change on every
+// regeneration.
+const notJumbf = app11(Buffer.concat([Buffer.from('XX', 'ascii'), Buffer.alloc(12, 0x5a)]))
 
 // Inserts a segment right after SOI + APP0 (the first marker segment).
 const insertAfterApp0 = (jpeg: Buffer, segment: Buffer): Buffer => {
@@ -189,7 +196,7 @@ file({ name: '11-jpeg-pixels-edited', ext: 'jpg', file: seal(editPixels(baseJpeg
 }
 
 {
-  const proof = sign(photoCore(baseJpeg, 'image/jpeg', { device: { platform: 'android', secure_hw: 'tee', key_id: keyId(randomBytes(91)) } }))
+  const proof = sign(photoCore(baseJpeg, 'image/jpeg', { device: { platform: 'android', secure_hw: 'tee', key_id: keyId(Buffer.alloc(91, 0x11)) } }))
   file({ name: '14-jpeg-key-id-mismatch', ext: 'jpg', file: seal(baseJpeg, proof), proof,
     expected: { outcome: 'tampered', labels: [], not_evaluated: [], core_hash: hashOf(proof) },
     notes: 'The signature is valid but device.key_id is not SHA-256 of sig.pub. key_id is derived, never free (§6.1): tampered.' })
@@ -325,7 +332,8 @@ seg({ name: '28-seg-chain-gap', input: segInput([chain[0], chain[2]] as SegmentE
 }
 
 {
-  const forged = chain.map((s, i) => i === 2 ? { ...s, prev: randomBytes(32).toString('base64url') } : s)
+  // A fixed wrong link: what matters is that it is not the real one.
+  const forged = chain.map((s, i) => i === 2 ? { ...s, prev: Buffer.alloc(32, 0x7f).toString('base64url') } : s)
   seg({ name: '31-seg-chain-prev-link-forged', input: segInput(forged),
     expected: { outcome: 'tampered', labels: [], not_evaluated: [], segments: { verified: [0, 1] } },
     notes: 'Segment 2 carries a prev_link that is not SHA-256(message(1)) while segment 1 is present. Contiguity is claimed and broken: tampered, even though sig(2) itself might have been valid over the forged message.' })

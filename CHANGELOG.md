@@ -62,6 +62,12 @@ section it touches, the vectors it adds and what an older verifier does with it.
   `timestamp.tsa_issuer`, whose values arrive with C15 and D2 — the same
   incident, later, on another field. A pattern there is a gate against free
   text, not a style rule.
+- Tooling: the generator signs with **RFC 6979** (deterministic `k`) and the two
+  vector inputs built from `randomBytes` now use fixed bytes, so regenerating an
+  unchanged corpus produces no diff at all. Signing moved to `tools/src/sign.ts`
+  and stays off the verification path — the reference verifier never signs, and
+  nothing it loads pulls the signing dependency. The vectors' signature values
+  change once, here, and are stable from now on; every verdict is unchanged.
 - **Still to come**: the registry, timestamp and anchor slices of the corpus.
 
 ### Clarifications for writers (§4, §5, §6, §7)
