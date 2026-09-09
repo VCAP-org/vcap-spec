@@ -576,7 +576,13 @@ entry records a valid App Attest binding for `device.key_id`. Web: `none`.
   stops trusting every green we ever issued.
 - `secure_hw` is **not** an extensible enum: adding a value changes the table, so
   it requires a minor version bump, and a v1.0 verifier meeting an unknown value
-  MUST treat it as `none`.
+  MUST treat it as `none`. Treat it, not reject it: non-extensible binds the
+  writer, and a reader that refused the file would make a capture from a newer
+  minor unverifiable while its core signature is perfectly valid, which is what
+  §9 exists to prevent. The same holds for an unrecognised `device.platform`,
+  which proves `none` for want of anything to prove it with. A JSON Schema for
+  v1.0 rejects such a document and is right to — *"not a v1.0 document"* and
+  *"still verifiable"* are different statements (vector 40).
 
 ---
 

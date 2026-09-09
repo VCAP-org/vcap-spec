@@ -30,7 +30,9 @@ H.264 MP4) are the unsealed inputs.
 
 **The `container` vectors are the exception.** They were sealed by real hardware
 and carry a real device's key in `sig.pub`, so `npm run generate` cannot make
-them — it has no camera and no device key. `tools/src/derive-container-vectors.ts`
+them — it has no camera and no device key, and it now owns only the directories
+it declares, printing the ones it left alone. It used to delete every numbered
+directory before rewriting, which for these four was not a rewrite but a loss. `tools/src/derive-container-vectors.ts`
 rebuilds all four from the two sealed files a device produced, which is what
 keeps the two edited cases (38, 39) auditable rather than asserted. An
 implementation that only ever meets this repository's test key never learns

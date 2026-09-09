@@ -192,6 +192,21 @@ file({ name: '11-jpeg-pixels-edited', ext: 'jpg', file: seal(editPixels(baseJpeg
 }
 
 {
+  // A value no v1.0 verifier knows, in a field §9 declares NOT extensible.
+  // Non-extensible means a writer may not invent one without a version bump —
+  // it does not mean a reader may refuse the file. §7 is explicit: treat it as
+  // `none`. The verdict is therefore the ordinary photo verdict, and the claim
+  // simply proves nothing, which is what an unverified claim is worth anyway.
+  const proof = sign(photoCore(baseJpeg, 'image/jpeg', {
+    device: { platform: 'android', secure_hw: 'titanM', key_id: KEY_ID }
+  }))
+  file({ name: '40-jpeg-unknown-secure-hw', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+    expected: { outcome: 'authentic', labels: PHOTO_LABELS, not_evaluated: [], core_hash: hashOf(proof) },
+    schemaValid: false,
+    notes: 'device.secure_hw is `titanM`, a value v1.0 does not define. A verifier MUST treat it as `none` and MUST NOT refuse the proof (§7, §9): the signature over the core is valid and the capture is readable. The JSON Schema describes v1.0, so it rejects the document — schema_valid is false while the verdict is authentic, and the two disagreeing is the point: the schema says "not a v1.0 document", the verifier says "still verifiable".' })
+}
+
+{
   const proof = sign(photoCore(baseJpeg, 'image/jpeg', { v: 'vcap/1.7' }))
   const withFuture: Proof = { ...proof, future_field: { anything: 1 } }
   file({ name: '15-jpeg-unknown-minor', ext: 'jpg', file: seal(baseJpeg, withFuture), proof: withFuture,
@@ -374,8 +389,22 @@ const videoCore = (media: Buffer, extra: Proof = {}): Proof => photoCore(media, 
 
 const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object.keys(expected).map((k) => [k, (v as unknown as Record<string, unknown>)[k]]))
 
-// Regenerating replaces every numbered vector; _media and README stay.
-if (existsSync(VECTORS)) for (const entry of readdirSync(VECTORS)) if (/^\d\d-/.test(entry)) rmSync(join(VECTORS, entry), { recursive: true })
+// Regenerating replaces the vectors this file declares, and only those.
+//
+// It used to delete every numbered directory, which quietly destroyed the
+// container vectors: they are sealed by real hardware and signed by a device
+// key nobody here holds, so a rewrite is not a rewrite but a loss. Owning only
+// what it can rebuild is the difference between a generator and a broom.
+const owned = new Set(vectors.map((v) => v.name))
+if (existsSync(VECTORS)) {
+  const foreign: string[] = []
+  for (const entry of readdirSync(VECTORS)) {
+    if (!/^\d\d-/.test(entry)) continue
+    if (owned.has(entry)) rmSync(join(VECTORS, entry), { recursive: true })
+    else foreign.push(entry)
+  }
+  if (foreign.length > 0) console.log(`[vcap] left untouched, not generated here: ${foreign.join(', ')}`)
+}
 
 let failures = 0
 for (const vector of vectors) {
