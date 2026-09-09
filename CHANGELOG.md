@@ -32,6 +32,13 @@ section it touches, the vectors it adds and what an older verifier does with it.
   shown.
 - §9: `attestation_status.source` joins the extensible fields; its fallback is
   to ignore the attachment (*chain revocation not checked*).
+- §6.2: **which key** signs `attestation_status` — the one that signs that
+  log's tree heads, named by `registry.log_id` when a registry attachment is
+  present and otherwise found by trying the trusted logs' keys; no log key held
+  means *chain revocation not checked*. The first sentence said "the registry
+  signing key" without saying which of several a verifier may trust, which two
+  implementations could have resolved differently. No `log_id` inside the
+  attachment on purpose: a proof must not point a verifier at a key.
 - Schema: `attestation_status` added, `additionalProperties: false` inside it.
   An older verifier reads the key as unknown and lists it *not evaluated* (§9).
 - **Not in this change**: vectors. A vector needs a chain, a token and a
