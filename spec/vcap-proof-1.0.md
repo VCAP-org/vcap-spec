@@ -217,7 +217,9 @@ sig(n)          = ECDSA-P256-SHA256( message(n) ), P1363, low s (§4.2)
 - **A vcap SEI NAL unit** is an SEI NAL (type 6 in H.264, 39 or 40 in H.265)
   carrying a `user_data_unregistered` payload (payloadType 5) whose 16-byte UUID
   is the vcap SEI UUID, `SHA-256("vcap/1.0/sei")[0:16]` =
-  `caa653d1ed1763c7af388aea76527336`. Derived, not registered:
+  `caa653d1ed1763c7af388aea76527336`, and whose `payloadSize` is therefore 36:
+  the 16 UUID bytes are inside the payload that size counts, so a parser that
+  reads it as 20 over-reads the SEI. Derived, not registered:
   `user_data_unregistered` UUIDs are unregistered by definition (H.264 §D.2.6
   asks only that they be unlikely to collide), and anyone can recompute this
   one from a single ASCII string; a future layout takes a new string, as the
@@ -227,6 +229,15 @@ sig(n)          = ECDSA-P256-SHA256( message(n) ), P1363, low s (§4.2)
   demuxed or re-muxed elementary stream still says which capture and which
   segment a GOP belongs to. A verifier MAY use it to locate segments and MUST
   NOT treat it as evidence: `content_hash`, the chain and the signatures are.
+  Where no vcap SEI names a GOP, a verifier **MUST NOT infer that GOP's index
+  from its position in the file**, and recomputes nothing for it: position is
+  the index only in a file nobody cut, which is the one assumption a clip
+  breaks. Refusing to guess costs a verifier nothing it can use — a file whose
+  SEIs were stripped no longer matches `media.hash` either, so its ceiling is
+  amber whatever the segments say — while guessing wrong checks one GOP's bytes
+  against another GOP's signature and calls an authentic clip forged. Two
+  implementations of §5 disagreed here, one guessing and one refusing, before
+  this sentence existed.
   Only vcap SEI NAL units are excluded from `content_hash`: a signature cannot
   cover the bytes that contain it. Every other SEI — registered or not — is
   content and is covered. Excluding by NAL type, as an earlier draft did, would

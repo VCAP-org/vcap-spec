@@ -4,7 +4,7 @@ import { type Proof, coreBytes, coreHash, keyId, publicKeyFromSpki, verifyEs256 
 import { canonicalBytes, mediaHash } from './canonical.js'
 import { Flag, parseTrailer } from './trailer.js'
 import { type SegmentEntry, verifyChain } from './segments.js'
-import { containerSegments } from './container.js'
+import { type Segment, containerSegments } from './container.js'
 
 /**
  * Reference verifier for the signature layer of the format: trailer, canonical
@@ -186,13 +186,20 @@ export const verifyFile = ({ file, sidecar, recomputeSegments }: FileInput): Ver
     // a clip — a clip is missing segments, this is a present segment whose
     // content was replaced inside a range a signature covers.
     if (recomputeSegments) {
-      let recomputed: { index: number, contentHash: Buffer }[]
+      let recomputed: Segment[]
       try {
         recomputed = containerSegments(media)
       } catch (e) {
         return tampered(`the container could not be read: ${(e as Error).message}`)
       }
-      const byIndex = new Map(recomputed.map((s) => [s.index, s.contentHash.toString('base64url')]))
+      // Only GOPs a vcap SEI identified take part: an unidentified GOP is
+      // evidence of nothing, and matching it by position is how a clip gets
+      // called forged (§5).
+      const byIndex = new Map(
+        recomputed
+          .filter((segment): segment is Segment & { index: number } => segment.index !== null)
+          .map((segment) => [segment.index, segment.contentHash.toString('base64url')])
+      )
       for (const entry of entries) {
         const actual = byIndex.get(entry.gop)
         // A segment the file no longer contains is the clip case, not this one:

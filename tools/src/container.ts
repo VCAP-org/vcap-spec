@@ -22,8 +22,18 @@ import { createHash } from 'node:crypto'
 const SEI_UUID = Buffer.from('caa653d1ed1763c7af388aea76527336', 'hex')
 
 export interface Segment {
-  /** The index the vcap SEI claims for this GOP, or its position when absent. */
-  index: number
+  /**
+   * The index the vcap SEI claims for this GOP, or null when no SEI names it.
+   *
+   * Null and not the GOP's position in the file. Position is the index only in
+   * a file nobody cut, and that is precisely the assumption a clip breaks: drop
+   * the first GOP and the file's first GOP is segment 1, so a verifier that
+   * counted from zero would check its bytes against segment 0's signature and
+   * call an authentic clip forged. §5 lets the SEI locate a segment and gives a
+   * verifier nothing else to locate it with, so where the SEI is absent the
+   * honest answer is that this GOP is unidentified.
+   */
+  index: number | null
   contentHash: Buffer
   /** Byte range of the GOP's video samples, for humans reading a vector. */
   range: { start: number, end: number }
@@ -339,10 +349,14 @@ const instantOf = (track: Track, dts: bigint): Instant => {
  *
  * The GOP boundaries come from the sync sample table, and each GOP's index from
  * its vcap SEI where one is present. §5 allows exactly that — the SEI locates,
- * it does not prove — and the distinction is what makes a clip readable: with
- * the first GOP gone, position in the file is no longer the index, and a
- * verifier that assumed it would validate segment 1's bytes against segment
- * 0's signature.
+ * it does not prove — and a GOP no SEI names comes back with `index: null`
+ * rather than with its position: with the first GOP gone, position in the file
+ * is no longer the index, and a verifier that assumed it would validate segment
+ * 1's bytes against segment 0's signature and call an authentic clip forged.
+ *
+ * Refusing to guess costs a verifier nothing it can use. A file whose SEIs were
+ * stripped no longer matches `media.hash` either, so its ceiling is already
+ * amber; skipping the comparison cannot turn that into green.
  */
 export const containerSegments = (file: Buffer): Segment[] => {
   const tracks = tracksOf(file)
@@ -354,7 +368,7 @@ export const containerSegments = (file: Buffer): Segment[] => {
     ? video.syncSamples
     : video.samples.map((_, i) => i + 1)
 
-  return syncs.map((firstSample, gop) => {
+  return syncs.map((firstSample, gop): Segment => {
     const from = firstSample - 1
     const next = syncs[gop + 1]
     const to = next !== undefined ? next - 1 : video.samples.length
@@ -401,7 +415,7 @@ export const containerSegments = (file: Buffer): Segment[] => {
     }
 
     return {
-      index: located ? located.index : gop,
+      index: located ? located.index : null,
       contentHash: hash.digest(),
       range: { start, end },
       located: located !== null,
