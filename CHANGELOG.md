@@ -17,6 +17,16 @@ Clarifications for writers, found while implementing the Android core against
   contiguous from 0.
 - §6 sketch: `attestation` is an array of base64url DER certificates, as §6.2
   and the schema already said.
+- §7: what a verifier says about a watermark that was declared but does not
+  come back — *origin traced*, *watermark not recovered*, *watermark not
+  evaluated*, all non-red — and the red case narrowed to a payload that
+  **decodes** to an id other than the declared one (`capture_id` for
+  `photo-bch-v3`, `watermark.mark_id` for `video-rep-v1`). Before, the rule read
+  as if any watermark that did not match were red, which made an undecodable
+  payload on a re-compressed clip indistinguishable from a forgery.
+- §7: a 24-bit `mark_id` is a lookup hint, not an identifier. Collisions are
+  expected, two proofs may carry one mark, and origin search from a mark alone
+  answers with a candidate set. Layout internals stay out of scope (§1).
 
 ## v1.0 — 9 September 2026
 
