@@ -8,8 +8,9 @@ bridge, a web capture SDK and four verifiers must agree byte for byte.
 
 ## Status
 
-Phase 1, in progress. `vcap/1.0` is **not frozen yet**. Until the freeze tag,
-breaking changes are expected; after it, the format only ever grows by addition.
+Phase 1. **`vcap/1.0` is frozen** — tag `v1.0`, 9 September 2026. From here the
+format only ever grows by addition (spec §9); every change lands through
+`CHANGELOG.md` with its vectors and the fallback for an older verifier.
 
 ## Layout
 
