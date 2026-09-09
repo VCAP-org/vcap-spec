@@ -432,6 +432,7 @@ Field table — type, required, verified against:
 | `sig` | core, at capture | — it *is* the authentication | covers `JCS(core)` |
 | `segments` | core, at capture | each `sig(n)` under `sig.pub` | `capture_id` in every message |
 | `attestation` | core, at key creation | chain to a pinned Google root / App Attest | leaf SPKI MUST equal `sig.pub` |
+| `attestation_status` | sync, while the chain is current | registry key signature over the entries it saw | signature covers `core_hash` |
 | `registry` | sync | inclusion proof against a Signed Tree Head, carried inline | leaf carries `device.key_id` and `sig.pub` |
 | `timestamp.tsr` | sync | RFC 3161 token, TSA chain, validated offline | `messageImprint = core_hash` |
 | `anchor` | sync | RFC 6962 path from `SHA-256(0x00 ‖ core_hash)` to the root the chain recorded | leaf = `core_hash` |
@@ -444,6 +445,39 @@ Field table — type, required, verified against:
   instead. **The leaf's SubjectPublicKeyInfo MUST be byte-equal to `sig.pub`**;
   otherwise *attestation does not match the signing key*, red. The chain MUST
   NOT carry device identifiers (no ID attestation: serial, IMEI, MEID).
+- **`attestation_status`** *(optional, added after v1.0)* — the revocation
+  status of the certificates in the `attestation` chain, as it stood **while
+  the chain was still current**, relayed and countersigned by the registry.
+  Without it a verifier reading a proof years later cannot answer the question
+  the instant rule (§7) poses: whether the chain was revoked *at* the capture,
+  because the status of an expired certificate is no longer published anywhere.
+  - `source`: extensible; `googleStatusList` is Android's attestation status
+    list. An unknown value → the attachment is ignored and the verdict is the
+    one without it (*chain revocation not checked*).
+  - `fetched_at`: ms, registry clock, when the status was read.
+  - `entries`: one per certificate looked up — `{ "serial": lowercase hex of
+    the certificate serial number, "status": "valid" | "revoked" | "unknown",
+    "reason": optional string }`.
+  - `sig`: the registry signing key's ES256 signature, P1363, over
+    `core_hash ‖ JCS(entries) ‖ uint64 BE fetched_at`.
+
+  Google's status list is served over TLS and carries no signature of its own,
+  so the only thing a proof can carry is the registry's countersignature of
+  what the registry saw — the same construction as `integrity`, and with the
+  same limit: **evidence, never a verdict**. A verifier that trusted a
+  "we checked, it was fine" statement from us would be trusting us, which is
+  the property this format exists not to require.
+
+  Revocation of a chain certificate is **temporal**, exactly as in the device
+  key's case above. Let `T` be the proven instant of §7. A `revoked` entry with
+  `fetched_at ≤ T` means the chain was already revoked when the capture was
+  claimed: proven level `none`, *attestation key revoked*, red for the level. A
+  `revoked` entry with `fetched_at > T` means it was revoked afterwards: the
+  level at `T` stands, shown with *attestation key revoked after the capture* —
+  a batch key withdrawn in 2028 does not un-attest a capture from 2026, for the
+  same reason a rotated device key does not rewrite the past. `unknown` and a
+  missing entry are *chain revocation not checked*, amber.
+
 - **`registry`** — everything a verifier needs to check, **offline**, that the
   signing key was in the transparency log when the tree head was signed. Not a
   reference to be resolved: the proof carries the evidence.
@@ -553,6 +587,10 @@ entry records a valid App Attest binding for `device.key_id`. Web: `none`.
 | any of the above | valid | yes, but `tree_head.timestamp` after the declared capture | **amber** | registered after the declared capture |
 | any of the above | valid, log not reachable | any | **amber** | revocation not checked |
 | any | key revoked at the declared capture time (signed status, §6.2) | — | **red** | key revoked |
+| any | a chain certificate `revoked` at or before the proven instant (`attestation_status`, §6.2) | — | **red** | attestation key revoked |
+| any of the above | a chain certificate revoked *after* the proven instant | any | unchanged | attestation key revoked after the capture |
+| any of the above | valid at the proven instant of capture, expired since | any | unchanged by the expiry | (nothing: expiry alone says nothing) |
+| any of the above | expired, and the capture time is only `time.device_clock` | any | **amber** | attestation chain expired, capture time not proven |
 | `none` | session key, or no attestation | n/a | **amber, never green** | origin not hardware-attested |
 | any | claimed level above the level the `attestation` attachment proves | — | **amber at best, flagged** | inconsistent claim |
 | any | `integrity.verdict` is `failed`, or mock location provider flagged | — | **amber at best, prominently flagged** | device integrity failed |
@@ -570,6 +608,23 @@ entry records a valid App Attest binding for `device.key_id`. Web: `none`.
   chain still proves the hardware level, and the missing registry entry lands
   the capture in the *key not in the transparency log* row. Offline capture is
   never an error and never green.
+- **The instant of validation.** Every certificate path in a proof — the
+  `attestation` chain, the TSA chain of a `timestamp` token — MUST be validated
+  at the **proven instant of the capture**, not at the moment the verifier
+  runs. That instant is, in this order: the `genTime` of a valid `timestamp`
+  token; the block time of a verified `anchor`; `time.device_clock`, which is a
+  device claim and caps the verdict at amber whatever else holds. A chain that
+  was valid at that instant and has expired since is **not** an error. The
+  reason is measured, not theoretical: in the real chain of the moto g75 5G the
+  RKP-issued intermediate is valid from 6 to 18 September 2026 — twelve days —
+  so a verifier that validated at its own clock would report *origin not
+  hardware-attested* for every capture from that device from 19 September on,
+  and a year-old proof would be indistinguishable from one that never carried a
+  chain. Expired with no trusted instant → amber, with
+  *attestation chain expired, capture time not proven*; never red, because an
+  expired chain says the verifier is late, not that the capture is forged. §6.2
+  already states this rule for the device key's revocation — this is the same
+  rule, for the same reason, applied to the chain.
 - **A verifier MUST name the level.** Collapsing three different roots of trust
   into one green light is the failure mode this table exists to prevent: an
   insurer's expert who later learns that "green" included a browser session key
@@ -677,8 +732,8 @@ side by side with it.
 - **Unknown major**: *unsupported format version*, with the version shown.
 - **After the 1.0 tag, additive only**: new optional keys, and new values only in
   fields documented as extensible (`watermark.layout`, `location.evidence[].kind`,
-  `timestamp.tsa_issuer`, `integrity.source`). Every extensible field states
-  the fallback for an older verifier. `device.secure_hw`, `sig.alg`, the set of
+  `timestamp.tsa_issuer`, `integrity.source`, `attestation_status.source`).
+  Every extensible field states the fallback for an older verifier. `device.secure_hw`, `sig.alg`, the set of
   core keys and the segment message layout are **not** extensible: changing any
   of them is a new minor with a new separator (§5) or a new major.
 - **Never** reuse a key name with a different meaning, never promote an optional

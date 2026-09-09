@@ -6,8 +6,42 @@ section it touches, the vectors it adds and what an older verifier does with it.
 
 ## Unreleased
 
-Clarifications for writers, found while implementing the Android core against
-`v1.0`. No byte changes: every `v1.0` file verifies the same.
+### The instant a proof is validated at (§6.2, §7, §9)
+
+- §7: every certificate path in a proof — the `attestation` chain, a
+  `timestamp` token's TSA chain — is validated at the **proven instant of the
+  capture** (token `genTime`, else a verified `anchor`'s block time, else
+  `time.device_clock`, which caps the verdict at amber), not at the verifier's
+  clock. A chain valid then and expired since is not an error; expired with no
+  trusted instant is amber with *attestation chain expired, capture time not
+  proven*, never red. Not a new principle: §6.2 already said it for the device
+  key's revocation. The measurement that forces it into writing: in the moto
+  g75 5G's real chain the RKP intermediate is valid 6–18 September 2026, so
+  under verifier-clock validation every capture from that device reads as *not
+  hardware-attested* from 19 September on.
+- §6.2: new **optional** attachment `attestation_status` — `source` (extensible,
+  `googleStatusList`), `fetched_at`, `entries` of `{serial, status, reason?}`,
+  and the registry's ES256 signature over `core_hash ‖ JCS(entries) ‖ uint64 BE
+  fetched_at`. It exists because the status of an expired certificate is no
+  longer published anywhere, so the question the instant rule poses — was the
+  chain revoked *at* the capture — is unanswerable later without frozen
+  evidence. Google's list carries no signature of its own, hence the registry
+  countersignature: evidence, never a verdict signed by us. Revocation is
+  temporal, as for the device key: `fetched_at ≤ T` and `revoked` → proven
+  `none`, red for the level; `revoked` after `T` → the level at `T` stands,
+  shown.
+- §9: `attestation_status.source` joins the extensible fields; its fallback is
+  to ignore the attachment (*chain revocation not checked*).
+- Schema: `attestation_status` added, `additionalProperties: false` inside it.
+  An older verifier reads the key as unknown and lists it *not evaluated* (§9).
+- **Not in this change**: vectors. A vector needs a chain, a token and a
+  revocation snapshot to be worth anything, which is the proof-level corpus
+  (`attestation`, `registry`, `timestamp`, `anchor`) still to be built.
+
+### Clarifications for writers (§4, §5, §6, §7)
+
+Found while implementing the Android core against `v1.0`. No byte changes:
+every `v1.0` file verifies the same.
 
 - §4.1: the JPEG walk keeps fill bytes and length-less markers (`TEM`, `RSTn`);
   vector 35 `jpeg-fill-bytes` (a `0xFF` fill byte before a marker, sealed →
