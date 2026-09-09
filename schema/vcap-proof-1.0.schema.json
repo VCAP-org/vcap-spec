@@ -455,7 +455,9 @@
       ],
       "properties": {
         "source": {
-          "$ref": "#/$defs/identifier"
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9.:_-]{0,63}$",
+          "description": "Where the status came from. Extensible (§9); camelCase like integrity.source, whose values are playIntegrity and appAttest — the identifier pattern is lowercase-only and would reject googleStatusList."
         },
         "fetched_at": {
           "type": "integer",

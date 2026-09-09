@@ -14,7 +14,10 @@
     "validate": "tsx src/validate.ts"
   },
   "devDependencies": {
+    "@peculiar/x509": "^2.1.0",
     "@types/node": "^22.10.5",
+    "asn1js": "^3.0.10",
+    "reflect-metadata": "^0.2.2",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
     "vitest": "^2.1.8"

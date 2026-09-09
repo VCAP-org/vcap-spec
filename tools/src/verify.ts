@@ -5,6 +5,9 @@ import { canonicalBytes, mediaHash } from './canonical.js'
 import { Flag, parseTrailer } from './trailer.js'
 import { type SegmentEntry, verifyChain } from './segments.js'
 import { type Segment, containerSegments } from './container.js'
+import { RANK, validateChain } from './attestation.js'
+import { type TrustBundle } from './trust.js'
+import { jcs } from './jcs.js'
 
 /**
  * Reference verifier for the signature layer of the format: trailer, canonical
@@ -29,6 +32,13 @@ export interface Verdict {
   not_evaluated: string[]
   core_hash?: string
   segments?: { verified: number[] }
+  // §7: claimed by the device, proven by the evidence, and the ceiling the two
+  // allow. Present whenever a core was read.
+  level?: { claimed: string, proven: string, ceiling: 'green' | 'amber' | 'red' }
+  // §7: the instant every certificate path was validated at, and what proved
+  // it. A verifier must be able to say this, because the same file reads
+  // differently when the capture time is a device's claim.
+  validated_at?: { instant: string, source: 'timestamp' | 'anchor' | 'device_clock' | 'verifier_clock' }
   reason?: string
 }
 
@@ -43,7 +53,7 @@ const ABSENT_LABELS: [string, string][] = [
 
 const KNOWN_KEYS = new Set([
   'v', 'capture_id', 'media', 'device', 'watermark', 'time', 'location', 'policy',
-  'sig', 'segments', 'attestation', 'registry', 'timestamp', 'anchor', 'integrity'
+  'sig', 'segments', 'attestation', 'attestation_status', 'registry', 'timestamp', 'anchor', 'integrity'
 ])
 
 /**
@@ -119,9 +129,18 @@ export interface FileInput {
    * frames in front of the reader are those frames.
    */
   recomputeSegments?: boolean
+  /**
+   * The anchors a verifier trusts: attestation roots and log keys, loaded from
+   * the corpus's `_trust/` bundle or from wherever a real verifier keeps them.
+   * Without them a chain is *not evaluated*, never *rejected* — the difference
+   * between "this verifier cannot say" and "the proof is bad".
+   */
+  trust?: TrustBundle
+  /** The verifier's own clock. Injectable so a vector's verdict is a constant. */
+  clock?: Date
 }
 
-export const verifyFile = ({ file, sidecar, recomputeSegments }: FileInput): Verdict => {
+export const verifyFile = ({ file, sidecar, recomputeSegments, trust, clock = new Date() }: FileInput): Verdict => {
   // 1. Trailer, sidecar, nesting (§3).
   const trailer = parseTrailer(file)
   if (trailer.kind === 'corrupted') return fail('corrupted_proof', 'footer valid, CRC mismatch')
@@ -241,7 +260,90 @@ export const verifyFile = ({ file, sidecar, recomputeSegments }: FileInput): Ver
     return tampered('media.hash does not match the canonical bytes')
   }
 
-  return { outcome: 'authentic', labels: labels.sort(), not_evaluated: notEvaluated, core_hash: hash, ...(segments ? { segments } : {}) }
+  return {
+    outcome: 'authentic', labels: labels.sort(), not_evaluated: notEvaluated, core_hash: hash,
+    ...(segments ? { segments } : {}),
+    ...level(proof, spki, Buffer.from(hash, 'hex'), labels, trust, clock)
+  }
+}
+
+/**
+ * §7, the proof level. Three questions in order: at what instant is this proof
+ * validated, what does the evidence prove at that instant, and what ceiling do
+ * the two allow. The labels array is appended to in place, because a level is
+ * not a separate verdict — it is part of this one.
+ */
+const level = (
+  proof: Proof, spki: Buffer, coreHash: Buffer, labels: string[], trust: TrustBundle | undefined, clock: Date
+): Pick<Verdict, 'level' | 'validated_at'> => {
+  // The instant (§7). This layer evaluates neither `timestamp` nor `anchor`
+  // yet, so the two trusted sources are not reachable here and the instant is
+  // the device's claim — which is exactly why the claim caps the verdict.
+  const deviceClock = isObject(proof.time) && typeof proof.time.device_clock === 'number' ? proof.time.device_clock : null
+  const instant = deviceClock !== null ? new Date(deviceClock) : clock
+  const source = deviceClock !== null ? 'device_clock' as const : 'verifier_clock' as const
+
+  const claimed = claimedLevel(proof.device as { platform: string, secure_hw: string })
+  let proven = 'none'
+  const chain = Array.isArray(proof.attestation) && (proof.device as Proof).platform === 'android'
+    ? validateChain(proof.attestation as string[], spki, trust?.attestationRoots ?? [], instant, clock)
+    : null
+  if (chain) {
+    if ((trust?.attestationRoots.length ?? 0) === 0) labels.push('attestation not evaluated')
+    else {
+      proven = chain.proven
+      // §7: a chain valid at the proven instant and expired since is not an
+      // error — the verifier is late, not the capture forged. It is worth
+      // saying only when nothing independent places the capture inside the
+      // chain's validity, which is the case for a device clock.
+      if (chain.expiredSince) labels.push('attestation chain expired, capture time not proven')
+    }
+  }
+
+  // §6.2: the chain's revocation status, frozen while the chain was current.
+  const frozen = isObject(proof.attestation_status) ? frozenRevocation(proof.attestation_status, coreHash, trust) : null
+  if (chain && proven !== 'none') {
+    if (frozen === null || frozen.checked === false) labels.push('chain revocation not checked')
+    else if (frozen.revokedAt !== null && frozen.revokedAt <= instant.getTime()) { proven = 'none'; labels.push('attestation key revoked') }
+    else if (frozen.revokedAt !== null) labels.push('attestation key revoked after the capture')
+  }
+
+  if (chain && proven !== 'none' && (RANK[claimed] ?? 0) > (RANK[proven] ?? 0)) labels.push('inconsistent claim')
+
+  // Green needs a proven level *and* the key in the log; this layer does not
+  // evaluate `registry`, so the corpus's attested vectors top out at amber and
+  // say why. Red is for a chain that was already revoked at the capture.
+  const ceiling: NonNullable<Verdict['level']>['ceiling'] = labels.includes('attestation key revoked') ? 'red' : 'amber'
+  labels.sort()
+  return { level: { claimed, proven, ceiling }, validated_at: { instant: instant.toISOString(), source } }
+}
+
+/**
+ * The `attestation_status` countersignature (§6.2). `checked: false` means the
+ * evidence could not be used — no trusted log key, an unknown source, a
+ * signature that does not verify — which is *not checked*, never *revoked*.
+ */
+const frozenRevocation = (
+  attachment: { [key: string]: Json }, coreHash: Buffer, trust: TrustBundle | undefined
+): { checked: boolean, revokedAt: number | null } => {
+  const entries = attachment.entries
+  const fetchedAt = attachment.fetched_at
+  if (attachment.source !== 'googleStatusList' || !Array.isArray(entries) || typeof fetchedAt !== 'number') return { checked: false, revokedAt: null }
+  const at = Buffer.alloc(8)
+  at.writeBigUInt64BE(BigInt(fetchedAt))
+  const message = Buffer.concat([coreHash, jcs(entries), at])
+  let signature: Buffer
+  try { signature = Buffer.from(attachment.sig as string, 'base64url') } catch { return { checked: false, revokedAt: null } }
+  // §6.2: the key is the one that signs that log's tree heads. With no
+  // registry attachment naming it, every trusted log key is tried and the
+  // signature identifies the one that made it.
+  const signed = (trust?.logs ?? []).some((log) => {
+    const key = publicKeyFromSpki(Buffer.from(log.spki, 'base64'))
+    return key !== null && verifyEs256(message, signature, key)
+  })
+  if (!signed) return { checked: false, revokedAt: null }
+  const revoked = (entries as { status?: string }[]).some((e) => e.status !== 'valid')
+  return { checked: true, revokedAt: revoked ? fetchedAt : null }
 }
 
 /** Message-layer vectors: a chain given as content hashes, no container. */
