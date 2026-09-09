@@ -24,8 +24,8 @@ make an implementation pass.** Either the implementation is wrong or the spec
 is; fix that.
 
 The test key in `tools/src/testkey.ts` is public by design: anyone can
-regenerate the vectors. Base media in `_media/` (a 16×16 JPEG, its HEIC) are
-the unsealed inputs.
+regenerate the vectors. Base media in `_media/` (a 16×16 JPEG, its HEIC, a two-frame
+H.264 MP4) are the unsealed inputs.
 
 ## Running them
 

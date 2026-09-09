@@ -1,0 +1,62 @@
+{
+  "v": "vcap/1.0",
+  "capture_id": "ABEiM0RVZneImaq7zN3u_w",
+  "media": {
+    "mime": "video/mp4",
+    "w": 16,
+    "h": 16,
+    "duration_ms": 67,
+    "hash": "dHZ_-B2SW0MWk4ff54vKuSnETm7pcRHonTGPWIzGB-g",
+    "segment_count": 3
+  },
+  "device": {
+    "platform": "android",
+    "secure_hw": "tee",
+    "key_id": "4aF24UJH_AHu_CuygIW3PB-AMEWVoQy3iaeBh4yDSBM"
+  },
+  "watermark": {
+    "algo": "videoseal",
+    "layout": "video-rep-v1",
+    "payload_bits": 128,
+    "ecc": "bch-255-131",
+    "strength": 8
+  },
+  "time": {
+    "device_clock": 1757332800000
+  },
+  "location": {
+    "level": "declared",
+    "lat_udeg": 45464664,
+    "lon_udeg": 9188540,
+    "acc_cm": 1250,
+    "evidence": []
+  },
+  "policy": {
+    "pseudonymous": false
+  },
+  "segments": [
+    {
+      "gop": 0,
+      "hash": "kr6s8q6y81Fz3F_6xL4M-VVslfHElaTY-iVP8ZNSMk8",
+      "prev": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "sig": "E2IjORELfkwVMLy6PP_05W7Rxe4k1qS9LiQazHMecV8R4WfMxnc2L7oKjXEvaJoZh-8UJ-UgeVLaMAEYRlk6HA"
+    },
+    {
+      "gop": 1,
+      "hash": "3q0FJMsh2sAgYapRbubMFw_LjQsWg5LzPptUVqwz9kI",
+      "prev": "lPuR8oUo-FkoxlMOR3MUQgRLVVZ9mzRm1VXfF2nxMUk",
+      "sig": "rH0vEsRbG852gfeO9hWXvcIiytxnTSA1PBW3SPMMpO4dBlNkZKNHzZsiBgTFukbikV14HY0-sqmh6LeWBkkuEw"
+    },
+    {
+      "gop": 2,
+      "hash": "9eBHdAvSkalXlM0lAO-pJeKwaNtM-qxGKaL_cjReqHA",
+      "prev": "3DCOQWFjD3ktTMnczAe0MpvrYjS1fMakVD1Z21mq_f8",
+      "sig": "TwWvs_QkcjtJ0v3zZ88AtUV8eKB7-QqspLh7gSGikmEFfKDSRBwNrK1tFW7VQTmF3AemSGkbGbPixlbWi_7Tjg"
+    }
+  ],
+  "sig": {
+    "alg": "ES256",
+    "value": "lW8IdN7FlalIS0IfAIqjmmvHdZR0cd86NuxBn-hyVNs1vdcsLTK-fCXibi1eZeD9rP8yNb_WPrk89OjsmaeowA",
+    "pub": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEp2C_SxUua1GBx-6u3KBIJKPwOb6yEYmTqfdbgzJbVJCy1_wvmKAjjmvD-d5EdVWpGx0Jxcduppsd0SspNPHKyA"
+  }
+}

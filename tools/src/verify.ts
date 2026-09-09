@@ -75,6 +75,9 @@ const shapeProblem = (proof: Proof): string | null => {
     if (!Array.isArray(proof.segments)) return 'segments not an array'
     if (!Number.isInteger(proof.media.segment_count)) return 'media.segment_count missing'
   }
+  // §8: media.mime alone decides that a proof is a video proof, and a video
+  // proof needs its segments — the container and duration_ms decide nothing.
+  if ((proof.media.mime as string).startsWith('video/') && !('segments' in proof && Number.isInteger(proof.media.segment_count))) return 'video proof without segments'
   if (hasNonInteger(coreObject(proof))) return 'floating-point number in the core'
   return null
 }

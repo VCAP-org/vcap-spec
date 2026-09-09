@@ -310,6 +310,30 @@ seg({ name: '28-seg-chain-gap', input: segInput([chain[0], chain[2]] as SegmentE
     notes: 'Segment 2 carries a prev_link that is not SHA-256(message(1)) while segment 1 is present. Contiguity is claimed and broken: tampered, even though sig(2) itself might have been valid over the forged message.' })
 }
 
+// ---- video proofs at file level (§8: media.mime decides) ---------------------
+
+const baseMp4 = readFileSync(join(MEDIA, 'base.mp4'))
+const videoCore = (media: Buffer, extra: Proof = {}): Proof => photoCore(media, 'video/mp4', {
+  media: { mime: 'video/mp4', w: 16, h: 16, duration_ms: 67, hash: mediaHash(media), segment_count: 3 },
+  watermark: { algo: 'videoseal', layout: 'video-rep-v1', payload_bits: 128, ecc: 'bch-255-131', strength: 8 },
+  ...extra
+})
+
+{
+  const proof = sign(videoCore(baseMp4, { segments: chain as unknown as Json }))
+  file({ name: '33-mp4-video-sealed', ext: 'mp4', file: seal(baseMp4, proof), proof,
+    expected: { outcome: 'authentic', labels: PHOTO_LABELS, not_evaluated: [], core_hash: hashOf(proof), segments: { verified: [0, 1, 2] } },
+    notes: 'An ISO-BMFF video with media.mime video/mp4, segment_count 3 and the complete chain of vector 25 in the trailer (flag SEGMENTS set). Canonical bytes are the file minus the trailer (§4.1); the chain is verified at message level — content hashes are given, the container is not demuxed by this layer.' })
+}
+
+{
+  const proof = sign(videoCore(baseMp4))
+  file({ name: '34-mp4-video-without-segments', ext: 'mp4', file: seal(baseMp4, proof), proof,
+    expected: { outcome: 'no_proof_found', labels: [], not_evaluated: [] },
+    schemaValid: false,
+    notes: 'Same video, valid signature, segment_count present, no segments. §8: media.mime starting with video/ makes this a video proof, and segments is required for one — missing required field, no proof found. A verifier that branches on the presence of segments alone would say authentic here.' })
+}
+
 // ---- JCS -----------------------------------------------------------------
 
 {

@@ -9,6 +9,13 @@
     "origin not hardware-attested"
   ],
   "not_evaluated": [],
-  "core_hash": "875333e63a7984b9c5250709c830e9bee7f7c8c2d85751d60c42eaf0d052f8ad",
+  "core_hash": "a0a5680dae390c48471bc2d2a5987acb8104ee0ca1ecdb8df7454bc9d556066c",
+  "segments": {
+    "verified": [
+      0,
+      1,
+      2
+    ]
+  },
   "schema_valid": true
 }
