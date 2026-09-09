@@ -46,8 +46,25 @@ const KNOWN_KEYS = new Set([
   'sig', 'segments', 'attestation', 'registry', 'timestamp', 'anchor', 'integrity'
 ])
 
+/**
+ * The v1.0 values of `device.platform` and `device.secure_hw`. A value outside
+ * these sets is **not** a reason to refuse the proof: §7 says a v1.0 verifier
+ * meeting an unknown `secure_hw` treats it as `none`, and §9 says to verify
+ * every field you know and never fail. Rejecting instead would make a capture
+ * from a newer minor unreadable by this verifier — the exact outcome §9 exists
+ * to prevent — and would do it while the signature over the core is perfectly
+ * valid.
+ *
+ * Treating the claim as `none` costs the capture nothing it was entitled to:
+ * the claim is what a verifier must not believe anyway, and the level that
+ * counts comes from the `attestation` attachment (§7).
+ */
 const PLATFORMS = new Set(['android', 'ios', 'web'])
 const SECURE_HW = new Set(['strongbox', 'tee', 'secureEnclave', 'none'])
+
+/** The claimed level, with anything this version does not know read as `none`. */
+export const claimedLevel = (device: { platform: string, secure_hw: string }): string =>
+  PLATFORMS.has(device.platform) && SECURE_HW.has(device.secure_hw) ? device.secure_hw : 'none'
 
 const fail = (outcome: Outcome, reason: string, labels: string[] = []): Verdict =>
   ({ outcome, labels: labels.sort(), not_evaluated: [], reason })
@@ -70,7 +87,7 @@ const b64urlLen = (s: unknown, bytes: number): s is string =>
 const shapeProblem = (proof: Proof): string | null => {
   if (!b64urlLen(proof.capture_id, 16)) return 'capture_id missing or not 16 bytes'
   if (!isObject(proof.media) || typeof proof.media.hash !== 'string' || typeof proof.media.mime !== 'string') return 'media.hash or media.mime missing'
-  if (!isObject(proof.device) || !PLATFORMS.has(proof.device.platform as string) || !SECURE_HW.has(proof.device.secure_hw as string) || typeof proof.device.key_id !== 'string') return 'device incomplete'
+  if (!isObject(proof.device) || typeof proof.device.platform !== 'string' || typeof proof.device.secure_hw !== 'string' || typeof proof.device.key_id !== 'string') return 'device incomplete'
   if (!isObject(proof.sig) || typeof proof.sig.value !== 'string' || typeof proof.sig.pub !== 'string' || typeof proof.sig.alg !== 'string') return 'sig incomplete'
   if ('segments' in proof) {
     if (!Array.isArray(proof.segments)) return 'segments not an array'
