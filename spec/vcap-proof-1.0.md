@@ -572,17 +572,50 @@ because "no trusted time" on a tampered file is noise.
 | `registry` | *key not in transparency log* | the key may be genuine, but nobody can check its registration or revocation |
 | `attestation` (Android) | *origin not hardware-attested* | proven level `none` |
 | `integrity` | *integrity unevaluated* | no statement about the device's state |
-| `watermark` | *no watermark* | a compressed copy cannot be traced back |
+| `watermark` | *no watermark* | the detector did not run, or no mark was looked for |
 | `location` | nothing shown | absence is not a claim about place |
 | `policy.retention_ref` | nothing shown | no vault involved |
+
+**A declared watermark that does not come back.** `watermark` is the writer
+saying a mark was embedded; it is not a promise that a reader will find it, and
+a reader that does not find one never guesses. Three outcomes, all non-red:
+
+| Outcome | Label |
+|---|---|
+| the payload decodes and matches the proof | *watermark matched* |
+| the layout is known, the payload does not decode | *watermark not recovered* |
+| the layout is not one this verifier implements | *watermark not evaluated* |
+
+*Watermark matched* is a label, not a verdict: the verdict still comes from
+`sig`, and the rule at the end of this section is what applies when a mark
+matches and no valid signature is there — *origin traced*, never authentic.
+
+*Watermark not recovered* is the normal outcome of heavy re-compression, and a
+verifier shows whatever confidence figure the layout defines next to it (for a
+repetition layout, the agreement between copies). A layout may define no
+partial answer at all — a block code either corrects or does not — and then
+there is nothing to show but the label. Neither outcome weakens a signature:
+§8 already says an absent field is a weaker verdict, not an error, and a
+watermark is not part of what `sig` covers.
+
+**A mark id is not an identifier.** For `video-rep-v1` the payload is
+`watermark.mark_id`, a 24-bit value the proof binds to the 128-bit
+`capture_id`; it is short because a re-encoded clip cannot carry more, not
+because it is unique. Collisions are expected — 24 bits collide with even
+odds a few thousand captures in — so two proofs carrying one `mark_id` are
+both valid, and origin search from a mark alone answers with a candidate set,
+which the caller narrows with a proof, a time window or a tenant. A verifier
+that treats a mark id as a key to one capture is wrong, not unlucky.
 
 **Degraded, with its label.** Revocation list unreachable → *revocation not
 checked*. A verifier that is offline says so and caps at amber; a server-side
 validator with no list fails closed. Same fact, two contexts, both written here.
 
 **Invalidating — red.** `sig` invalid over `JCS(core)`; attestation leaf key
-different from `sig.pub`; `capture_id` in the watermark different from the
-proof; a segment signature invalid, or the chain broken where the file claims
+different from `sig.pub`; a watermark payload that **decodes** to an id other
+than the one the proof declares (`capture_id` for `photo-bch-v3`,
+`watermark.mark_id` for `video-rep-v1`) — a payload that fails to decode is
+*watermark not recovered*, above, and not this; a segment signature invalid, or the chain broken where the file claims
 contiguity; footer structurally valid with a CRC mismatch (*corrupted proof*,
 distinct from *no proof found*).
 
@@ -661,9 +694,14 @@ says.
 - [ ] `REVIEW (mobile)` NAL byte definition and audio DTS rule reproducible on both encoders — the DTS clock is now named (M8); H.264 and HEVC on one Android device agree; iOS pending (S1)
 - [x] `REVIEW (mobile)` hashing two interleaved tracks during encoding — resolved: 8 KB and 0.5 ms per segment on a TEE device (M8)
 - [ ] `REVIEW (mobile)` metadata stripping before sealing for pseudonymous captures
-- [ ] `REVIEW (ML)` `watermark.layout` values and what the detector reports when
-      the layout is declared but the payload does not decode
-- [ ] `REVIEW (ML)` 24-bit `mark_id` collision probability and behaviour on two proofs claiming one `mark_id`
+- [x] `REVIEW (ML)` `watermark.layout` values and what the detector reports when
+      the layout is declared but the payload does not decode — resolved in §7:
+      *origin traced* / *watermark not recovered* / *watermark not evaluated*,
+      all non-red, and a decoded mismatch is the only red case
+- [x] `REVIEW (ML)` 24-bit `mark_id` collision probability and behaviour on two
+      proofs claiming one `mark_id` — resolved in §7: collisions are expected a
+      few thousand captures in, both proofs stay valid, and origin search from a
+      mark answers with a candidate set
 - [x] Vectors for the trailer, canonical bytes, core signature, version policy,
       the segment chain at message level, the §8 video rule and JPEG fill bytes: 35 in
       `vectors/`, checked by the reference verifier in `tools/` (steps 4–5)
