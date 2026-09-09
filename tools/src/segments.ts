@@ -1,5 +1,5 @@
 import { type KeyObject, createHash } from 'node:crypto'
-import { signEs256, verifyEs256 } from './core.js'
+import { verifyEs256 } from './core.js'
 
 /** §5 segment messages and chain. */
 export const SEPARATOR = Buffer.from('vcap/1.0/seg', 'ascii')
@@ -24,18 +24,6 @@ export interface SegmentEntry {
   prev: string
   // sig(n), base64url P1363
   sig: string
-}
-
-/** Signs a full chain from content hashes: the writer's side. */
-export const signChain = (captureId: Buffer, contentHashes: Buffer[], privateKey: KeyObject): SegmentEntry[] => {
-  const entries: SegmentEntry[] = []
-  let prev: Buffer = ZERO_LINK
-  contentHashes.forEach((hash, index) => {
-    const message = segmentMessage(captureId, index, hash, prev)
-    entries.push({ gop: index, hash: hash.toString('base64url'), prev: prev.toString('base64url'), sig: signEs256(message, privateKey).toString('base64url') })
-    prev = linkOf(message)
-  })
-  return entries
 }
 
 export type ChainStatus = 'complete' | 'clip' | 'tampered'

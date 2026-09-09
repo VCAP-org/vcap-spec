@@ -34,7 +34,7 @@
   },
   "sig": {
     "alg": "ES256",
-    "value": "uY_9s7RiVhtQfnzB7MAJzp10XGGNXjFJWzzKjbOX7Vp-q0-79szuil__-F6gJA4pkWaCcKpRrbIR2VVxr_w82g",
+    "value": "qpjuFIpPNSSzyGyo1b0EFM9MdTrtruCI4myP_1RfueUcAGuOsfS78kzwJf1tUoYAz-6JzZwRuDlAYLLWrR6v9g",
     "pub": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEp2C_SxUua1GBx-6u3KBIJKPwOb6yEYmTqfdbgzJbVJCy1_wvmKAjjmvD-d5EdVWpGx0Jxcduppsd0SspNPHKyA"
   },
   "attestation": [

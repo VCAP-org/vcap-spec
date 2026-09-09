@@ -34,7 +34,7 @@
   },
   "sig": {
     "alg": "ES256",
-    "value": "hjBcIq3usZHuTMtoBOmhKtcx7zdQTnC8klNQ_13SKXU_BvX63U-8t2fs1PwYdpAqjBhKBgSX8a-F9qXwJnFjEA",
+    "value": "qpjuFIpPNSSzyGyo1b0EFM9MdTrtruCI4myP_1RfueUcAGuOsfS78kzwJf1tUoYAz-6JzZwRuDlAYLLWrR6v9g",
     "pub": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEp2C_SxUua1GBx-6u3KBIJKPwOb6yEYmTqfdbgzJbVJCy1_wvmKAjjmvD-d5EdVWpGx0Jxcduppsd0SspNPHKyA"
   },
   "attestation": [
@@ -52,6 +52,6 @@
         "reason": "KEY_COMPROMISE"
       }
     ],
-    "sig": "PKYjxpy2flUmS9-ML4MpTky5hOliPSZGVheuOCarFLoLLI1G0-okSydnYBGX9ZVMvfMONMGYsEjL392hRw9yCA"
+    "sig": "y_xFhcZEQlOM3Dm1uMk_mW3L7MEoNj8ZlVCUY2nDhu11ZDeEj_0o8ie4AHdgHsbGvUDIp2pSic7JrL4qyFSBAA"
   }
 }
