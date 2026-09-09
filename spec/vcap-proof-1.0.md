@@ -461,6 +461,17 @@ Field table — type, required, verified against:
   - `sig`: the registry signing key's ES256 signature, P1363, over
     `core_hash ‖ JCS(entries) ‖ uint64 BE fetched_at`.
 
+  **Which key.** The signing key is the one that signs that log's tree heads,
+  so a verifier needs no key it does not already hold for `registry`. The
+  attachment carries no `log_id` of its own: when a `registry` attachment is
+  present its `log_id` names the key; otherwise a verifier tries the keys of
+  the logs it trusts and the signature identifies the one that made it. A
+  verifier holding no log key reports *chain revocation not checked* — the same
+  outcome as an absent attachment, because a countersignature it cannot check
+  is evidence it does not have. Adding a `log_id` to the attachment would be a
+  new optional key and is deliberately not done: it would let a proof point a
+  verifier at a key, and the verifier's own trust list must decide that.
+
   Google's status list is served over TLS and carries no signature of its own,
   so the only thing a proof can carry is the registry's countersignature of
   what the registry saw — the same construction as `integrity`, and with the
