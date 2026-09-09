@@ -10,7 +10,7 @@
   "device": {
     "platform": "android",
     "secure_hw": "tee",
-    "key_id": "SvjA1nEmUlgpD_tC7IcXQZ6Ol1CyDBPikl2tsuxFnno"
+    "key_id": "9Gp6E5AEuD77cXk-vMeIWb16SRSTgzXjTZvMrFZqX_M"
   },
   "watermark": {
     "algo": "videoseal",
@@ -34,7 +34,7 @@
   },
   "sig": {
     "alg": "ES256",
-    "value": "uqm3Pz8usWE784hgA16NE8T530KjkjDZ0KZw1nBZ9fxoVjIaIBmW2bG0SyOGBsxa2XDzkTsbdbYD6utG0-l_Tg",
+    "value": "VmiqtTr9Wldo1JVvDPQFzw9lqOJfylVhx3knL-8adtpoDW0EMUg867vFrNocxyLTO21_TYS4oW4NrP6Nb9hkqA",
     "pub": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEp2C_SxUua1GBx-6u3KBIJKPwOb6yEYmTqfdbgzJbVJCy1_wvmKAjjmvD-d5EdVWpGx0Jxcduppsd0SspNPHKyA"
   }
 }

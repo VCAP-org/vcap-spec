@@ -210,15 +210,36 @@ sig(n)          = ECDSA-P256-SHA256( message(n) ), P1363, low s (§4.2)
 
 - **A vcap SEI NAL unit** is an SEI NAL (type 6 in H.264, 39 or 40 in H.265)
   carrying a `user_data_unregistered` payload (payloadType 5) whose 16-byte UUID
-  is the vcap UUID: `TODO — register and write the 16 bytes here`. Only those
-  are excluded: a signature cannot cover the bytes that contain it. Every other
-  SEI — registered or not — is content and is covered. Excluding by NAL type,
-  as an earlier draft did, would have left unsigned bytes inside "verified"
-  segments.
+  is the vcap SEI UUID, `SHA-256("vcap/1.0/sei")[0:16]` =
+  `caa653d1ed1763c7af388aea76527336`. Derived, not registered:
+  `user_data_unregistered` UUIDs are unregistered by definition (H.264 §D.2.6
+  asks only that they be unlikely to collide), and anyone can recompute this
+  one from a single ASCII string; a future layout takes a new string, as the
+  segment separator does. The payload after the UUID is
+  `capture_id (16 B) || uint32 BE n`, 20 bytes. A writer SHOULD emit one vcap
+  SEI per segment, as a prefix SEI immediately before the segment's IDR, so a
+  demuxed or re-muxed elementary stream still says which capture and which
+  segment a GOP belongs to. A verifier MAY use it to locate segments and MUST
+  NOT treat it as evidence: `content_hash`, the chain and the signatures are.
+  Only vcap SEI NAL units are excluded from `content_hash`: a signature cannot
+  cover the bytes that contain it. Every other SEI — registered or not — is
+  content and is covered. Excluding by NAL type, as an earlier draft did, would
+  have left unsigned bytes inside "verified" segments.
 - **Audio is content.** Segment hashes cover the audio frames of the segment's
   time range, so a clip cannot keep verified frames over a replaced soundtrack.
   Audio frames do not align to IDRs: the rule above (by DTS, half-open interval,
   first sample at or after the IDR) is what two encoders must agree on.
+- **The DTS is the container's.** The decode timestamp of the rule is the one
+  the container records for the sample, in the media timescale of the received
+  file and converted to a common timebase across tracks — not any clock
+  internal to the capture pipeline. A writer that computes segment boundaries
+  before muxing MUST use the timestamps it will write. Audio frames whose DTS
+  precedes the first IDR are covered by `media.hash` and by no segment hash; a
+  verifier MUST NOT report them as missing.
+- **A segment may be one frame.** Encoders place IDRs where they choose (two
+  IDRs 63 ms apart at the start of a capture were observed on real hardware); a
+  one-frame segment is a segment like any other, and a very short segment is
+  not evidence of anything.
 - **The chain is the point.** `prev_link` makes order and completeness provable:
   a reordered segment breaks the chain, and a clip whose first segment is not
   index 0 is detectably a clip, not an original. Without chaining, per-GOP
@@ -524,8 +545,12 @@ entry records a valid App Attest binding for `device.key_id`. Web: `none`.
 ## 8. Decision 5 — Optional versus invalidating
 
 **Required.** `v`, `capture_id`, `media`, `device.secure_hw`, `device.key_id`,
-`sig`, and for video `media.segment_count` and `segments`. Missing or
-unparseable → *no proof found*. Present but invalid → *tampered*.
+`sig`, and for a video proof `media.segment_count` and `segments`. A proof is
+a **video proof** when `media.mime` starts with `video/`; nothing else decides
+it — not the container, not `duration_ms` — so a video proof without
+`segments` is *no proof found*, and a still image carrying `segments` is
+verified as §5 says. Missing or unparseable → *no proof found*. Present but
+invalid → *tampered*.
 
 **Optional, each with its exact label when absent.** Absence is never an error,
 and the verifier states it rather than staying silent. Labels accompany
@@ -615,18 +640,18 @@ who finds it out later stops trusting the rest:
 - [x] `REVIEW (BE)` domain separation of the segment message, no field-shift ambiguity — confirmed, 96 fixed bytes
 - [x] `REVIEW (BE)` signature encoding — resolved: P1363, low `s` emitted, both accepted; vector with high `s` and vector with DER
 - [x] `REVIEW (BE)` what is signed — resolved: core/attachment split (`reviews/01-crypto-review-draft-1.0.md`)
-- [ ] `TODO (LEAD)` register the vcap SEI UUID and write its 16 bytes in §5
+- [x] `TODO (LEAD)` the vcap SEI UUID — resolved: derived from `"vcap/1.0/sei"`, no registration exists for `user_data_unregistered`; payload defined (`reviews/implementability-android.md`, M4, M5)
 - [ ] `REVIEW (mobile)` manifest ordering: after sealing for photos, before for video
 - [ ] `REVIEW (mobile)` per-segment signing cost in StrongBox on a long clip
-- [ ] `REVIEW (mobile)` NAL byte definition and audio DTS rule reproducible on both encoders
-- [ ] `REVIEW (mobile)` hashing two interleaved tracks during encoding: memory and latency
+- [ ] `REVIEW (mobile)` NAL byte definition and audio DTS rule reproducible on both encoders — the DTS clock is now named (M8); H.264 and HEVC on one Android device agree; iOS pending (S1)
+- [x] `REVIEW (mobile)` hashing two interleaved tracks during encoding — resolved: 8 KB and 0.5 ms per segment on a TEE device (M8)
 - [ ] `REVIEW (mobile)` metadata stripping before sealing for pseudonymous captures
 - [ ] `REVIEW (ML)` `watermark.layout` values and what the detector reports when
       the layout is declared but the payload does not decode
 - [ ] `REVIEW (ML)` 24-bit `mark_id` collision probability and behaviour on two proofs claiming one `mark_id`
-- [x] Vectors for the trailer, canonical bytes, core signature, version policy
-      and the segment chain at message level: 32 in `vectors/`, checked by the
-      reference verifier in `tools/` (steps 4–5)
+- [x] Vectors for the trailer, canonical bytes, core signature, version policy,
+      the segment chain at message level and the §8 video rule: 34 in
+      `vectors/`, checked by the reference verifier in `tools/` (steps 4–5)
 - [ ] `REVIEW (mobile)` container-level video vectors: real MP4/MOV from each
       encoder, with `content_hash` recomputed from the NAL units and audio frames
 - [ ] Vectors for the proof level (§7): attestation chains, registry entries,

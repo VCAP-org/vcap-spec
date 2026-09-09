@@ -445,23 +445,6 @@
       }
     }
   },
-  "if": {
-    "type": "object",
-    "required": [
-      "segments"
-    ]
-  },
-  "then": {
-    "type": "object",
-    "properties": {
-      "media": {
-        "type": "object",
-        "required": [
-          "segment_count"
-        ]
-      }
-    }
-  },
   "$defs": {
     "base64url": {
       "type": "string",
@@ -495,5 +478,62 @@
       "type": "string",
       "pattern": "^[A-Za-z0-9_-]{1,64}$"
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "required": [
+          "segments"
+        ]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "media": {
+            "type": "object",
+            "required": [
+              "segment_count"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "media": {
+            "type": "object",
+            "properties": {
+              "mime": {
+                "type": "string",
+                "pattern": "^video/"
+              }
+            },
+            "required": [
+              "mime"
+            ]
+          }
+        },
+        "required": [
+          "media"
+        ]
+      },
+      "then": {
+        "type": "object",
+        "required": [
+          "segments"
+        ],
+        "properties": {
+          "media": {
+            "type": "object",
+            "required": [
+              "segment_count"
+            ]
+          }
+        }
+      }
+    }
+  ]
 }
