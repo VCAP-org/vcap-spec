@@ -5,7 +5,7 @@
     "mime": "image/jpeg",
     "w": 16,
     "h": 16,
-    "hash": "8hbYeuQCPP_jaBzJ-4K48jUHGQIGOGnKFuJPKLc5MCg"
+    "hash": "jCEMQA3pmGGQabL2UZMrxXG0CesVrFkW11ys3JB5Gdc"
   },
   "device": {
     "platform": "web",
@@ -34,7 +34,7 @@
   },
   "sig": {
     "alg": "ES256",
-    "value": "Fw2FTBtv5BfmFnhAVi_EW35Rk3kfEwIPBku2gjdg0nVwnAOtNWaTc726Nd7qRDPjEFp1EgLhYnObbv2-5KdXdQ",
+    "value": "sLStWYvpAGfqK8M8xahLjhGYQudlMS5mjjpu2Me9zw5n8fBfUtViy7yISZAch3ol_bOGfX5SplMBnUEauBVTiQ",
     "pub": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEp2C_SxUua1GBx-6u3KBIJKPwOb6yEYmTqfdbgzJbVJCy1_wvmKAjjmvD-d5EdVWpGx0Jxcduppsd0SspNPHKyA"
   }
 }

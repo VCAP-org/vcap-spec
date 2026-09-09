@@ -5,7 +5,7 @@
     "mime": "image/jpeg",
     "w": 16,
     "h": 16,
-    "hash": "OAbzVz4A9m1LqjF---miCdM2Bap6wRuTWbiuW41LzRA"
+    "hash": "v0jxNDswm3Mo2Fqe5--6pmlFA4vuA1_RV0uVeNH5bT4"
   },
   "device": {
     "platform": "android",
@@ -34,7 +34,7 @@
   },
   "sig": {
     "alg": "ES256",
-    "value": "3UQi3EH4hVVktKNqWhNjY4k3BFHpT1iGoxIoEREeh7UT-e9VOxOxKpkithCXIzCxfJe1u4UTlqFWM64zrpwDhQ",
+    "value": "efN6FO8xCt9W_BEiQKo6BZqbrskKDPGCjB7U99caE6oZYK1rjYuqfjmIF5Mk6GS0DterPTI8q4fsfpRCebkZKg",
     "pub": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEp2C_SxUua1GBx-6u3KBIJKPwOb6yEYmTqfdbgzJbVJCy1_wvmKAjjmvD-d5EdVWpGx0Jxcduppsd0SspNPHKyA"
   }
 }
