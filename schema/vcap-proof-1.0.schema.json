@@ -455,9 +455,8 @@
       ],
       "properties": {
         "source": {
-          "type": "string",
-          "pattern": "^[A-Za-z0-9][A-Za-z0-9.:_-]{0,63}$",
-          "description": "Where the status came from. Extensible (§9); camelCase like integrity.source, whose values are playIntegrity and appAttest — the identifier pattern is lowercase-only and would reject googleStatusList."
+          "$ref": "#/$defs/identifier",
+          "description": "Where the status came from. Extensible (§9); googleStatusList is Android's attestation status list."
         },
         "fetched_at": {
           "type": "integer",
@@ -524,7 +523,8 @@
     },
     "identifier": {
       "type": "string",
-      "pattern": "^[a-z0-9][a-z0-9.:-]{0,63}$"
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9.:_-]{0,63}$",
+      "description": "A short machine name. Both spellings the format already uses are accepted: lowercase-hyphen (bch-255-131, base-sepolia) and camelCase (secureEnclave, playIntegrity, googleStatusList). The pattern is a gate against free text, not a style rule — a lowercase-only one rejected googleStatusList, a value the spec itself names, and the same trap was still armed on the extensible fields."
     },
     "opaqueRef": {
       "type": "string",
