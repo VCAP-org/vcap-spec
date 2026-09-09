@@ -6,7 +6,8 @@
     "key not in transparency log",
     "no trusted time",
     "not anchored",
-    "origin not hardware-attested"
+    "origin not hardware-attested",
+    "watermark not evaluated"
   ],
   "not_evaluated": [],
   "core_hash": "dc59127e528a04d6e285de3abe748559e49c7f1ef66b238092a6b13afeeb5119",

@@ -92,7 +92,9 @@ interface SegVector { kind: 'segments', name: string, input: { capture_id: strin
 interface JcsVector { kind: 'jcs', name: string, input: Json, expected: { core_bytes_hex: string, core_hash: string }, notes: string }
 type Vector = FileVector | SegVector | JcsVector
 
-const PHOTO_LABELS = ['integrity unevaluated', 'key not in transparency log', 'no trusted time', 'not anchored', 'origin not hardware-attested']
+// Every sealed vector declares `watermark`, and no verifier here has a
+// detector: *watermark not evaluated* belongs on all of them (§7).
+const PHOTO_LABELS = ['integrity unevaluated', 'key not in transparency log', 'no trusted time', 'not anchored', 'origin not hardware-attested', 'watermark not evaluated']
 
 const jpegProof = sign(photoCore(baseJpeg, 'image/jpeg'))
 const jpegSealed = seal(baseJpeg, jpegProof)

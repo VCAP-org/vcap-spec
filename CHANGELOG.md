@@ -24,6 +24,11 @@ Clarifications for writers, found while implementing the Android core against
   `photo-bch-v3`, `watermark.mark_id` for `video-rep-v1`). Before, the rule read
   as if any watermark that did not match were red, which made an undecodable
   payload on a re-compressed clip indistinguishable from a forgery.
+- §7 implemented: the reference verifier in `tools/` now emits *watermark not
+  evaluated* on every proof that declares `watermark`, because it ships no
+  detector, and the 13 vectors with a non-red verdict carry that label in
+  `expected.json`. A rule no implementation emitted and no vector covered was
+  not a rule.
 - §7: a 24-bit `mark_id` is a lookup hint, not an identifier. Collisions are
   expected, two proofs may carry one mark, and origin search from a mark alone
   answers with a candidate set. Layout internals stay out of scope (§1).

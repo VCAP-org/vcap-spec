@@ -154,6 +154,11 @@ export const verifyFile = ({ file, sidecar }: FileInput): Verdict => {
   const mediaObj = proof.media as { hash: string, segment_count?: number }
   const mediaMatches = mediaHash(media) === mediaObj.hash
   for (const [key, label] of ABSENT_LABELS) if (!(key in proof)) labels.push(label)
+  // A declared watermark is the writer saying a mark was embedded, not a
+  // promise a reader finds it. This verifier ships no detector, so the only
+  // honest §7 outcome is *watermark not evaluated* — never silence, which a
+  // reader would take for a match.
+  if ('watermark' in proof) labels.push('watermark not evaluated')
   if (flags !== null) {
     // Bits 1 and 2 are derivable from the JSON and checked; bit 0 (a sidecar
     // exists) depends on the filesystem at verification time and is a hint only.
