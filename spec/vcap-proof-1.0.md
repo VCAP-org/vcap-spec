@@ -741,8 +741,8 @@ says.
       mark answers with a candidate set
 - [x] Vectors for the trailer, canonical bytes, core signature, version policy,
       the segment chain at message level, the §8 video rule, JPEG fill bytes and
-      the container-level video cases (36–39): 39 in `vectors/`, checked by the
-      reference verifier in `tools/` (steps 4–5)
+      the container-level video cases (36–39) and the unknown `secure_hw` (40):
+      40 in `vectors/`, checked by the reference verifier in `tools/` (steps 4–5)
 - [~] `REVIEW (mobile)` container-level video vectors: real MP4/MOV from each
       encoder, with `content_hash` recomputed from the NAL units and audio
       frames — Android H.264 and HEVC done (vectors 36–39, `kind: container`);
