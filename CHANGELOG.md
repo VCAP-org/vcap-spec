@@ -6,7 +6,17 @@ section it touches, the vectors it adds and what an older verifier does with it.
 
 ## Unreleased
 
-Nothing yet.
+Clarifications for writers, found while implementing the Android core against
+`v1.0`. No byte changes: every `v1.0` file verifies the same.
+
+- §4.1: the JPEG walk keeps fill bytes and length-less markers (`TEM`, `RSTn`);
+  vector 35 `jpeg-fill-bytes` (a `0xFF` fill byte before a marker, sealed →
+  authentic). A reference walker that refused fill bytes is fixed.
+- §4.2: what a writer does with a high-`s` signature — replace `s` by `n−s`.
+- §5: `media.segment_count` of an original equals the entries written, `gop`
+  contiguous from 0.
+- §6 sketch: `attestation` is an array of base64url DER certificates, as §6.2
+  and the schema already said.
 
 ## v1.0 — 9 September 2026
 

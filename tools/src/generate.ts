@@ -334,6 +334,18 @@ const videoCore = (media: Buffer, extra: Proof = {}): Proof => photoCore(media, 
     notes: 'Same video, valid signature, segment_count present, no segments. §8: media.mime starting with video/ makes this a video proof, and segments is required for one — missing required field, no proof found. A verifier that branches on the presence of segments alone would say authentic here.' })
 }
 
+// ---- JPEG fill bytes (§4.1: kept, not judged) ---------------------------------
+
+{
+  // One 0xFF fill byte before the marker that follows APP0. Legal JPEG; a walker
+  // that reads it as a marker misparses the file.
+  const withFill = insertAfterApp0(baseJpeg, Buffer.from([0xff]))
+  const proof = sign(photoCore(withFill, 'image/jpeg'))
+  file({ name: '35-jpeg-fill-bytes', ext: 'jpg', file: seal(withFill, proof), proof,
+    expected: { outcome: 'authentic', labels: PHOTO_LABELS, not_evaluated: [], core_hash: hashOf(proof) },
+    notes: 'A 0xFF fill byte precedes a marker in the header. §4.1 keeps fill bytes and length-less markers where they are: the canonical bytes are the file minus the trailer, and media.hash matches. A walker that treats the fill byte as a marker misparses the file and fails this vector.' })
+}
+
 // ---- JCS -----------------------------------------------------------------
 
 {

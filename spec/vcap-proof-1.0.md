@@ -124,7 +124,9 @@ Given the received file `F`:
      the bytes after the 2-byte segment length — begins with `0x4A 0x50`
      (`"JP"`, the JUMBF common identifier C2PA uses), and only those. Keep every
      other APP11 and every other segment. Concatenate the remaining bytes in
-     original order → `C`.
+     original order → `C`. The walk stops at `SOS`; fill bytes (`0xFF` padding
+     before a marker) and markers without a length field (`TEM`, `RSTn`) are
+     kept where they are, like every other byte that is not a JUMBF APP11.
    - **ISO-BMFF** (MP4, MOV, HEIC): `C = F'` unchanged. Nothing is removed.
 3. **Hash.** `H = SHA-256(C)`, 32 raw bytes. `media.hash` is `H` in base64url,
    no padding.
@@ -156,7 +158,9 @@ sig.value  = ECDSA-P256-SHA256(core_bytes)   // ES256 semantics
 - `sig.alg` is `"ES256"` and is not extensible in v1.
 - `sig.value` is the signature in **IEEE P1363 form**: `r ‖ s`, 64 bytes,
   base64url. Not DER. Writers MUST normalize `s` to the low half of the group
-  order (`s ≤ n/2`); verifiers MUST accept both halves. One encoding, one form.
+  order (`s ≤ n/2`): a signer that returns a high `s` is replaced by `(r, n−s)`,
+  which verifies over the same message. Verifiers MUST accept both halves. One
+  encoding, one form.
 - `sig.pub` is the signing public key as DER SubjectPublicKeyInfo, base64url.
   **Required**, so a verifier works offline without the attestation chain.
 - Whether an implementation streams `core_bytes` into the signer or pre-hashes
@@ -264,7 +268,9 @@ sig(n)          = ECDSA-P256-SHA256( message(n) ), P1363, low s (§4.2)
   because it does not start at 0 or does not reach `segment_count`. Nothing in
   `prev` is trusted on its own: it enters the signed message.
 - **`media.segment_count`** (core, §6.1) is the number of segments the original
-  had. A video cut at the end keeps index 0, no gaps and an unbroken chain; the
+  had: a writer sealing an original MUST set it to the number of `segments[]`
+  entries it writes, with `gop` contiguous from 0. A video cut at the end keeps
+  index 0, no gaps and an unbroken chain; the
   count is what lets the verifier say *"12 of 300 segments present"*, and the
   full-file `media.hash` (§4.1) is what says it is not the original.
 - **Verifier behaviour** on video:
@@ -321,7 +327,7 @@ when there is one), each verifiable on its own and each bound to `core_hash`.
 
   // ---- attachments: each self-authenticating, bound to core_hash (§6.2) ----
   "segments":    [ { "gop": 0, "range": [start, end], "hash", "prev", "sig" } ],
-  "attestation": "base64url chain, omitted on web",
+  "attestation": [ "base64url DER leaf", "...", "base64url DER root" ],   // omitted on web
   "registry":    { "log_id", "leaf_index", "leaf": { ... }, "inclusion_path": [ ... ],
                    "tree_head": { "tree_size", "timestamp", "root_hash", "signature" } },
   "timestamp":   { "tsr", "tsa_issuer" },
@@ -659,7 +665,7 @@ says.
       the layout is declared but the payload does not decode
 - [ ] `REVIEW (ML)` 24-bit `mark_id` collision probability and behaviour on two proofs claiming one `mark_id`
 - [x] Vectors for the trailer, canonical bytes, core signature, version policy,
-      the segment chain at message level and the §8 video rule: 34 in
+      the segment chain at message level, the §8 video rule and JPEG fill bytes: 35 in
       `vectors/`, checked by the reference verifier in `tools/` (steps 4–5)
 - [ ] `REVIEW (mobile)` container-level video vectors: real MP4/MOV from each
       encoder, with `content_hash` recomputed from the NAL units and audio frames
