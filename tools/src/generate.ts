@@ -7,6 +7,8 @@ import { mediaHash } from './canonical.js'
 import { Flag, buildTrailer } from './trailer.js'
 import { type SegmentEntry, SEPARATOR, ZERO_LINK, linkOf, segmentMessage, signChain } from './segments.js'
 import { TEST_KEY_PKCS8_BASE64 } from './testkey.js'
+import { TEST_LOG_KEY_PKCS8_BASE64 } from './testlogkey.js'
+import { loadTrust } from './trust.js'
 import { type Verdict, verifyFile, verifySegments } from './verify.js'
 import { validateProof } from './schema.js'
 
@@ -19,6 +21,8 @@ import { validateProof } from './schema.js'
 const ROOT = join(import.meta.dirname, '..', '..')
 const VECTORS = join(ROOT, 'vectors')
 const MEDIA = join(VECTORS, '_media')
+// The anchors a verifier is assumed to hold while checking this corpus.
+const trust = loadTrust(join(VECTORS, '_trust'))
 
 const privateKey = createPrivateKey({ key: Buffer.from(TEST_KEY_PKCS8_BASE64, 'base64'), format: 'der', type: 'pkcs8' })
 const spki = spkiOf(privateKey)
@@ -87,7 +91,7 @@ const bmffBox = (type: string, payload: Buffer): Buffer => {
 
 // ---- vectors --------------------------------------------------------------
 
-interface FileVector { kind: 'file', name: string, ext: string, file: Buffer, sidecar?: Buffer, proof?: Proof, expected: Partial<Verdict> & { outcome: Verdict['outcome'] }, schemaValid?: boolean, notes: string }
+interface FileVector { kind: 'file', name: string, ext: string, file: Buffer, sidecar?: Buffer, proof?: Proof, expected: Partial<Verdict> & { outcome: Verdict['outcome'] }, schemaValid?: boolean, notes: string, verifierClock?: number }
 interface SegVector { kind: 'segments', name: string, input: { capture_id: string, pub: string, segment_count: number, segments: SegmentEntry[] }, expected: Partial<Verdict> & { outcome: Verdict['outcome'] }, notes: string, debug?: Json }
 interface JcsVector { kind: 'jcs', name: string, input: Json, expected: { core_bytes_hex: string, core_hash: string }, notes: string }
 type Vector = FileVector | SegVector | JcsVector
@@ -389,6 +393,116 @@ const videoCore = (media: Buffer, extra: Proof = {}): Proof => photoCore(media, 
 
 const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object.keys(expected).map((k) => [k, (v as unknown as Record<string, unknown>)[k]]))
 
+// ---- §7 proof level: what a chain proves, when, and what revokes it -------
+//
+// The chains come from `vectors/_chains/` and the anchors from
+// `vectors/_trust/`, both committed: see `make-attestation-chains.ts` for why
+// they are not minted here. The root is a test root standing in for a pinned
+// Google root, so these vectors prove the logic of §7 and not that an
+// implementation can walk a real Google chain — the real chains live in the
+// two verifier repositories.
+{
+  const CAPTURE = 1757332800000
+  const day = 86_400_000
+  const chainOf = (name: string): string[] => (JSON.parse(readFileSync(join(VECTORS, '_chains', `${name}.json`), 'utf8')) as { chain: string[] }).chain
+  // Attested photos keep every absence label except the attestation one.
+  const ATTESTED_LABELS = PHOTO_LABELS.filter((l) => l !== 'origin not hardware-attested')
+  const logKey = createPrivateKey({ key: Buffer.from(TEST_LOG_KEY_PKCS8_BASE64, 'base64'), format: 'der', type: 'pkcs8' })
+
+  // §6.2: `core_hash ‖ JCS(entries) ‖ uint64 BE fetched_at`, signed by the key
+  // that signs the log's tree heads.
+  const statusAttachment = (proof: Proof, fetchedAt: number, entries: Json): Proof => {
+    const at = Buffer.alloc(8)
+    at.writeBigUInt64BE(BigInt(fetchedAt))
+    const message = Buffer.concat([coreHash(proof), jcs(entries), at])
+    return { source: 'googleStatusList', fetched_at: fetchedAt, entries, sig: signEs256(message, logKey).toString('base64url') }
+  }
+
+  const attested = (o: { chain: string[], secureHw?: string, status?: Proof }): Proof => {
+    const core = photoCore(baseJpeg, 'image/jpeg', o.secureHw ? { device: { platform: 'android', secure_hw: o.secureHw, key_id: KEY_ID } } : {})
+    return { ...sign(core), attestation: o.chain, ...(o.status ? { attestation_status: o.status } : {}) }
+  }
+
+  {
+    const proof = attested({ chain: chainOf('tee') })
+    file({ name: '41-jpeg-attested-tee', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: {
+        outcome: 'authentic',
+        labels: [...ATTESTED_LABELS, 'chain revocation not checked'],
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
+        validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+      },
+      notes: 'A chain to the pinned test root, TEE at both levels, verified boot on a locked device: the proven level is `tee`, and it is proven by the chain rather than claimed by `device.secure_hw`. Amber, not green: the key is not in the transparency log (§7), and the chain\'s revocation is not established without an `attestation_status` attachment. The instant every certificate is validated at is `time.device_clock`, which is the device\'s own word — hence the ceiling.' })
+  }
+
+  {
+    const proof = attested({ chain: chainOf('strongbox'), secureHw: 'strongbox' })
+    file({ name: '42-jpeg-attested-strongbox', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: {
+        outcome: 'authentic',
+        labels: [...ATTESTED_LABELS, 'chain revocation not checked'],
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'strongbox', proven: 'strongbox', ceiling: 'amber' },
+        validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+      },
+      notes: 'StrongBox at both levels. The proven level is the weaker of `attestationSecurityLevel` and `keyMintSecurityLevel` (§7), which here agree; a StrongBox attestation of a TEE key would prove `tee`.' })
+  }
+
+  {
+    const proof = attested({ chain: chainOf('expiring') })
+    file({ name: '43-jpeg-attestation-expired-since', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + 365 * day,
+      expected: {
+        outcome: 'authentic',
+        labels: [...ATTESTED_LABELS, 'attestation chain expired, capture time not proven', 'chain revocation not checked'],
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
+        validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+      },
+      notes: 'The intermediate lives twelve days, the life of a real RKP intermediate, and the verifier reads the proof a year later. §7: the path is validated at the proven instant of the capture, so the level **stands** — an expired chain says the verifier is late, not that the capture is forged. What is missing is an independent instant: with only `time.device_clock` nothing but the device places the capture inside the chain\'s validity, so the label says so and the ceiling stays amber. `verifier_clock` is pinned in `expected.json` because otherwise this vector would answer differently as the calendar moves.' })
+  }
+
+  {
+    const base = attested({ chain: chainOf('tee') })
+    const status = statusAttachment(base, CAPTURE - 3600000, [{ serial: '02', status: 'revoked', reason: 'KEY_COMPROMISE' }])
+    const proof = { ...base, attestation_status: status }
+    file({ name: '44-jpeg-attestation-revoked-before-capture', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: {
+        outcome: 'authentic',
+        labels: [...ATTESTED_LABELS, 'attestation key revoked'],
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'none', ceiling: 'red' },
+        validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+      },
+      notes: 'The frozen snapshot (§6.2) says the intermediate was already revoked an hour before the declared capture. The chain therefore proves nothing at that instant: `proven` drops to `none` and the level is **red**. The outcome stays `authentic` — the file is intact and the core signature is valid — which is the distinction §7 exists to keep: what the bytes are, and what the origin is worth, are two answers.' })
+  }
+
+  {
+    const base = attested({ chain: chainOf('tee') })
+    const status = statusAttachment(base, CAPTURE + 30 * day, [{ serial: '02', status: 'revoked', reason: 'SUPERSEDED' }])
+    const proof = { ...base, attestation_status: status }
+    file({ name: '45-jpeg-attestation-revoked-after-capture', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + 60 * day,
+      expected: {
+        outcome: 'authentic',
+        labels: [...ATTESTED_LABELS, 'attestation key revoked after the capture'],
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
+        validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+      },
+      notes: 'The same snapshot, taken thirty days later: the certificate was revoked **after** the capture. Revocation is temporal (§6.2), so the level at the proven instant stands and the revocation is shown rather than applied — a batch key withdrawn later does not un-attest what it attested. The pair 44/45 is the whole rule: the same entries, two verdicts, decided by the instant.' })
+  }
+}
+
 // Regenerating replaces the vectors this file declares, and only those.
 //
 // It used to delete every numbered directory, which quietly destroyed the
@@ -406,6 +520,7 @@ if (existsSync(VECTORS)) {
   if (foreign.length > 0) console.log(`[vcap] left untouched, not generated here: ${foreign.join(', ')}`)
 }
 
+
 let failures = 0
 for (const vector of vectors) {
   const dir = join(VECTORS, vector.name)
@@ -417,8 +532,16 @@ for (const vector of vectors) {
     if (vector.sidecar) writeFileSync(join(dir, `input.${vector.ext}.vcap`), vector.sidecar)
     if (vector.proof) writeFileSync(join(dir, 'proof.json'), JSON.stringify(vector.proof, null, 2) + '\n')
     const schemaValid = vector.schemaValid ?? true
-    writeFileSync(join(dir, 'expected.json'), JSON.stringify({ kind: 'file', ...vector.expected, ...(vector.proof ? { schema_valid: schemaValid } : {}) }, null, 2) + '\n')
-    actual = pick(verifyFile({ file: vector.file, sidecar: vector.sidecar }), vector.expected)
+    writeFileSync(join(dir, 'expected.json'), JSON.stringify({
+      kind: 'file',
+      // An input, not an expectation: a §7 verdict depends on when the verifier
+      // runs (a chain expires), so a vector that did not pin the clock would
+      // change its own answer with the calendar.
+      ...(vector.verifierClock ? { verifier_clock: vector.verifierClock } : {}),
+      ...vector.expected,
+      ...(vector.proof ? { schema_valid: schemaValid } : {})
+    }, null, 2) + '\n')
+    actual = pick(verifyFile({ file: vector.file, sidecar: vector.sidecar, trust, clock: vector.verifierClock ? new Date(vector.verifierClock) : undefined }), vector.expected)
     // The schema must agree with the review too: a proof the review calls
     // conforming that the schema refuses is a bug in one of the two.
     if (vector.proof) {

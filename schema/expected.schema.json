@@ -3,20 +3,164 @@
   "title": "expected.json of a conformance vector",
   "type": "object",
   "additionalProperties": false,
-  "required": ["kind"],
+  "required": [
+    "kind"
+  ],
   "properties": {
-    "kind": { "enum": ["file", "container", "segments", "jcs"] },
-    "outcome": { "enum": ["authentic", "verified_clip", "tampered", "nested_proof", "corrupted_proof", "no_proof_found", "unsupported_format_version"] },
-    "labels": { "type": "array", "items": { "type": "string" } },
-    "not_evaluated": { "type": "array", "items": { "type": "string" } },
-    "core_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-    "segments": { "type": "object", "additionalProperties": false, "required": ["verified"], "properties": { "verified": { "type": "array", "items": { "type": "integer", "minimum": 0 } } } },
-    "schema_valid": { "type": "boolean", "description": "file and container vectors: whether proof.json conforms to vcap-proof-1.0.schema.json" },
-    "core_bytes_hex": { "type": "string", "pattern": "^([0-9a-f]{2})+$" },
-    "debug": { "type": "object" }
+    "kind": {
+      "enum": [
+        "file",
+        "container",
+        "segments",
+        "jcs"
+      ]
+    },
+    "outcome": {
+      "enum": [
+        "authentic",
+        "verified_clip",
+        "tampered",
+        "nested_proof",
+        "corrupted_proof",
+        "no_proof_found",
+        "unsupported_format_version"
+      ]
+    },
+    "labels": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "not_evaluated": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "core_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "segments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verified"
+      ],
+      "properties": {
+        "verified": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "schema_valid": {
+      "type": "boolean",
+      "description": "file and container vectors: whether proof.json conforms to vcap-proof-1.0.schema.json"
+    },
+    "core_bytes_hex": {
+      "type": "string",
+      "pattern": "^([0-9a-f]{2})+$"
+    },
+    "debug": {
+      "type": "object"
+    },
+    "level": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claimed",
+        "proven",
+        "ceiling"
+      ],
+      "description": "§7: the level claimed by the device, the level the evidence proves, and the ceiling the two allow.",
+      "properties": {
+        "claimed": {
+          "type": "string"
+        },
+        "proven": {
+          "type": "string"
+        },
+        "ceiling": {
+          "enum": [
+            "green",
+            "amber",
+            "red"
+          ]
+        }
+      }
+    },
+    "validated_at": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "instant",
+        "source"
+      ],
+      "description": "§7: the instant every certificate path was validated at, and what proved it.",
+      "properties": {
+        "instant": {
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "timestamp",
+            "anchor",
+            "device_clock",
+            "verifier_clock"
+          ]
+        }
+      }
+    },
+    "verifier_clock": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "An input, not an expectation: the verifier's own clock, ms. A §7 verdict depends on it — a chain expires — so a vector that left it to the calendar would change its own answer over time."
+    }
   },
   "allOf": [
-    { "if": { "type": "object", "properties": { "kind": { "const": "jcs" } } }, "then": { "type": "object", "required": ["core_bytes_hex", "core_hash"] } },
-    { "if": { "type": "object", "properties": { "kind": { "enum": ["file", "container", "segments"] } } }, "then": { "type": "object", "required": ["outcome", "labels", "not_evaluated"] } }
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "const": "jcs"
+          }
+        }
+      },
+      "then": {
+        "type": "object",
+        "required": [
+          "core_bytes_hex",
+          "core_hash"
+        ]
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "enum": [
+              "file",
+              "container",
+              "segments"
+            ]
+          }
+        }
+      },
+      "then": {
+        "type": "object",
+        "required": [
+          "outcome",
+          "labels",
+          "not_evaluated"
+        ]
+      }
+    }
   ]
 }

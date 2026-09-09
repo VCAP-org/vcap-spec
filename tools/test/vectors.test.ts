@@ -5,12 +5,16 @@ import { createHash } from 'node:crypto'
 import { verifyFile, verifySegments } from '../src/verify.js'
 import { coreBytes } from '../src/core.js'
 import { validateExpected, validateProof } from '../src/schema.js'
+import { loadTrust } from '../src/trust.js'
 
 // Every committed vector, checked against the reference verifier. A new
 // implementation runs the same loop with its own verifier: same inputs, same
 // expected.json, no other oracle.
 const VECTORS = join(import.meta.dirname, '..', '..', 'vectors')
 const dirs = readdirSync(VECTORS).filter((d) => /^\d\d-/.test(d)).sort()
+// The anchors a verifier is assumed to hold: a verdict is only ever green
+// against a named set of them, so the corpus ships them next to the vectors.
+const trust = loadTrust(join(VECTORS, '_trust'))
 
 const pick = (actual: object, expected: Record<string, unknown>): object =>
   Object.fromEntries(Object.keys(expected).filter((k) => k !== 'kind' && k !== 'debug').map((k) => [k, (actual as Record<string, unknown>)[k]]))
@@ -25,7 +29,9 @@ describe('conformance vectors', () => {
       const path = join(VECTORS, dir)
       const expected = JSON.parse(readFileSync(join(path, 'expected.json'), 'utf8'))
       expect(validateExpected(expected).errors).toEqual([])
-      const { kind, debug: _debug, schema_valid: schemaValid, ...want } = expected
+      // `verifier_clock` is an input the vector declares, not a field a
+      // verifier produces: it is destructured out with the other inputs.
+      const { kind, debug: _debug, schema_valid: schemaValid, verifier_clock: verifierClock, ...want } = expected
 
       if (kind === 'file' || kind === 'container') {
         // A container vector is a file vector plus the §5 recomputation: same
@@ -35,7 +41,10 @@ describe('conformance vectors', () => {
         const verdict = verifyFile({
           file: readFileSync(join(path, input)),
           sidecar: existsSync(sidecarPath) ? readFileSync(sidecarPath) : undefined,
-          recomputeSegments: kind === 'container'
+          recomputeSegments: kind === 'container',
+          // The anchors the corpus ships, and the clock the vector pins.
+          trust,
+          clock: verifierClock ? new Date(verifierClock) : undefined
         })
         expect(pick(verdict, want)).toEqual(want)
         const proofPath = join(path, 'proof.json')

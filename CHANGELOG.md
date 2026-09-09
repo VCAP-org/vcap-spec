@@ -41,9 +41,21 @@ section it touches, the vectors it adds and what an older verifier does with it.
   attachment on purpose: a proof must not point a verifier at a key.
 - Schema: `attestation_status` added, `additionalProperties: false` inside it.
   An older verifier reads the key as unknown and lists it *not evaluated* (§9).
-- **Not in this change**: vectors. A vector needs a chain, a token and a
-  revocation snapshot to be worth anything, which is the proof-level corpus
-  (`attestation`, `registry`, `timestamp`, `anchor`) still to be built.
+- Vectors **41–45**, the attestation slice of the proof-level corpus: a chain
+  proving `tee` and one proving `strongbox`, a chain valid at the capture and
+  expired by the time the verifier reads it, and the same frozen snapshot
+  revoking a certificate before and after the capture — two verdicts from the
+  same entries, decided by the instant. With them, `_trust/` (the anchors a
+  verifier is assumed to hold, with a test attestation root standing in for a
+  pinned Google root) and `_chains/` (the chains, committed because minting a
+  certificate again changes its bytes).
+- `expected.json` grows `level` and `validated_at`, and `verifier_clock` as an
+  *input*: a §7 verdict depends on when the verifier runs, so a vector that
+  left the clock to the calendar would change its own answer over time.
+- Schema fix: `attestation_status.source` was `$ref: identifier`, whose pattern
+  is lowercase-only — it rejected `googleStatusList`, the one value the spec
+  names. Found by the generator, which validates every vector it writes.
+- **Still to come**: the registry, timestamp and anchor slices of the corpus.
 
 ### Clarifications for writers (§4, §5, §6, §7)
 

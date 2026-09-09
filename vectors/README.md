@@ -10,13 +10,27 @@ its input:
 | `segments` | `segments.json` — `capture_id`, `pub`, `segment_count`, `segments[]` | the §5 chain at message level: content hashes given, no container |
 | `jcs` | `core.json` | canonicalization: expected `core_bytes_hex` and `core_hash` |
 
+Two directories are not vectors: `_media/` holds the unsealed inputs, and
+`_trust/` holds the anchors a verifier is assumed to hold while checking this
+corpus (its README says what the substituted attestation root does and does not
+prove). `_chains/` holds the committed attestation chains — see below.
+
 `expected.json` for `file` and `segments` vectors carries the fields a verifier
 must reproduce: `outcome` (`authentic`, `verified_clip`, `tampered`,
 `nested_proof`, `corrupted_proof`, `no_proof_found`, `unsupported_format_version`),
 `labels` (the §8 labels, sorted), `not_evaluated` (unknown top-level keys,
 sorted), `core_hash` (hex, when a core was read) and `segments.verified` (the
-indexes that verified). `debug`, where present, is for humans: intermediate
-bytes to compare before touching signatures.
+indexes that verified). `level` (§7: `claimed`, `proven`, `ceiling`) and `validated_at` (the instant
+every certificate path was validated at, and what proved it) appear on the
+vectors that carry attestation evidence. `debug`, where present, is for humans:
+intermediate bytes to compare before touching signatures.
+
+`verifier_clock`, where present, is an **input and not an expectation**: the
+verifier's own clock in ms. A §7 verdict depends on it, because certificates
+expire — an attested capture read a year later is a different question from the
+same capture read the next day (vectors 41 and 43 differ in nothing else). A
+vector that left the clock to the calendar would change its own answer over
+time, which is the one thing a conformance vector must not do.
 
 Expected verdicts are decided in review from the spec and written down first;
 `tools/src/generate.ts` then produces the inputs and aborts if the reference
@@ -27,6 +41,14 @@ is; fix that.
 The test key in `tools/src/testkey.ts` is public by design: anyone can
 regenerate the vectors. Base media in `_media/` (a 16×16 JPEG, its HEIC, a two-frame
 H.264 MP4) are the unsealed inputs.
+
+**The attestation chains are committed, not generated.** `vectors/_chains/`
+holds them and `tools/src/make-attestation-chains.ts` writes them on demand,
+outside `npm run generate`. The reason is the one that exempts the container
+vectors below: a certificate carries an ECDSA signature, so minting the chains
+again produces different bytes and every attested vector would be rewritten on
+every run for nothing. Run the script only to change what a chain *says*, and
+expect the vectors that use it to change with it.
 
 **The `container` vectors are the exception.** They were sealed by real hardware
 and carry a real device's key in `sig.pub`, so `npm run generate` cannot make

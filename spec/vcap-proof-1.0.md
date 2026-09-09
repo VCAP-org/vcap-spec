@@ -806,9 +806,19 @@ says.
       few thousand captures in, both proofs stay valid, and origin search from a
       mark answers with a candidate set
 - [x] Vectors for the trailer, canonical bytes, core signature, version policy,
-      the segment chain at message level, the §8 video rule, JPEG fill bytes and
-      the container-level video cases (36–39): 39 in `vectors/`, checked by the
-      reference verifier in `tools/` (steps 4–5)
+      the segment chain at message level, the §8 video rule, JPEG fill bytes,
+      the container-level video cases (36–39) and the §7 proof level (41–45:
+      `tee`, `strongbox`, a chain expired since the capture, and a frozen
+      revocation snapshot on either side of the instant): **45** in `vectors/`,
+      checked by the reference verifier in `tools/` (steps 4–5). The §7 vectors
+      trust the anchors in `vectors/_trust/`, whose attestation root is a test
+      root: they prove the level logic, not that an implementation can walk a
+      real Google chain — for which the real device chains in the two verifier
+      repositories exist
+- [ ] `REVIEW (BE)` the remaining proof-level vectors: registry inclusion with
+      a signed tree head, an RFC 3161 token, an anchor with a recomputed root.
+      The reference verifier evaluates none of the three yet, which is why the
+      attested vectors top out at amber
 - [~] `REVIEW (mobile)` container-level video vectors: real MP4/MOV from each
       encoder, with `content_hash` recomputed from the NAL units and audio
       frames — Android H.264 and HEVC done (vectors 36–39, `kind: container`);

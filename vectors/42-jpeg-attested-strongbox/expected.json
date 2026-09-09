@@ -1,0 +1,25 @@
+{
+  "kind": "file",
+  "verifier_clock": 1757419200000,
+  "outcome": "authentic",
+  "labels": [
+    "chain revocation not checked",
+    "integrity unevaluated",
+    "key not in transparency log",
+    "no trusted time",
+    "not anchored",
+    "watermark not evaluated"
+  ],
+  "not_evaluated": [],
+  "core_hash": "6d610bf815035711b07551061d8d73b44594d4d92a5613de2a50da713ba94e28",
+  "level": {
+    "claimed": "strongbox",
+    "proven": "strongbox",
+    "ceiling": "amber"
+  },
+  "validated_at": {
+    "instant": "2025-09-08T12:00:00.000Z",
+    "source": "device_clock"
+  },
+  "schema_valid": true
+}
