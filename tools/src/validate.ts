@@ -32,7 +32,7 @@ if (files.length > 0) {
       continue
     }
     const proofPath = join(VECTORS, dir, 'proof.json')
-    if (expected.kind !== 'file' || !existsSync(proofPath)) continue
+    if ((expected.kind !== 'file' && expected.kind !== 'container') || !existsSync(proofPath)) continue
     const result = validateProof(read(proofPath))
     const want = expected.schema_valid ?? true
     if (result.valid !== want) {

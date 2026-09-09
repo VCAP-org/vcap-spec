@@ -4,13 +4,14 @@ import { type Proof, coreBytes, coreHash, keyId, publicKeyFromSpki, verifyEs256 
 import { canonicalBytes, mediaHash } from './canonical.js'
 import { Flag, parseTrailer } from './trailer.js'
 import { type SegmentEntry, verifyChain } from './segments.js'
+import { containerSegments } from './container.js'
 
 /**
  * Reference verifier for the signature layer of the format: trailer, canonical
  * bytes, core signature, segment chain, version policy, labels for absent
- * attachments. It does NOT evaluate the proof level (§7: attestation, registry,
- * revocation) nor recompute segment content hashes from a container — those
- * are separate layers with their own vectors.
+ * attachments, and — when asked — the §5 content hashes recomputed from an
+ * ISO-BMFF container. It does NOT evaluate the proof level (§7: attestation,
+ * registry, revocation): that is a separate layer with its own vectors.
  *
  * Its job in this repository is to prove that the committed vectors are
  * consistent with the spec. It is written from the spec; when it disagrees with
@@ -91,9 +92,19 @@ const coreObject = (proof: Proof): Json => {
 export interface FileInput {
   file: Buffer
   sidecar?: Buffer
+  /**
+   * Recompute every present segment's `content_hash` from the container (§5)
+   * instead of taking the proof's word for it.
+   *
+   * Optional because a verifier without a demuxer is still a verifier — the
+   * signature layer stands on its own — but a verifier that has the file and
+   * skips this checks only that *somebody signed some hashes*, not that the
+   * frames in front of the reader are those frames.
+   */
+  recomputeSegments?: boolean
 }
 
-export const verifyFile = ({ file, sidecar }: FileInput): Verdict => {
+export const verifyFile = ({ file, sidecar, recomputeSegments }: FileInput): Verdict => {
   // 1. Trailer, sidecar, nesting (§3).
   const trailer = parseTrailer(file)
   if (trailer.kind === 'corrupted') return fail('corrupted_proof', 'footer valid, CRC mismatch')
@@ -167,9 +178,37 @@ export const verifyFile = ({ file, sidecar }: FileInput): Verdict => {
   }
 
   let segments: Verdict['segments']
+  const contradicted = new Set<number>()
   if ('segments' in proof) {
-    const chain = verifyChain(Buffer.from(proof.capture_id as string, 'base64url'), mediaObj.segment_count as number, proof.segments as unknown as SegmentEntry[], publicKey)
-    segments = { verified: chain.verified }
+    const entries = proof.segments as unknown as SegmentEntry[]
+
+    // §5: the bytes must be the bytes that were signed. A mismatch here is not
+    // a clip — a clip is missing segments, this is a present segment whose
+    // content was replaced inside a range a signature covers.
+    if (recomputeSegments) {
+      let recomputed: { index: number, contentHash: Buffer }[]
+      try {
+        recomputed = containerSegments(media)
+      } catch (e) {
+        return tampered(`the container could not be read: ${(e as Error).message}`)
+      }
+      const byIndex = new Map(recomputed.map((s) => [s.index, s.contentHash.toString('base64url')]))
+      for (const entry of entries) {
+        const actual = byIndex.get(entry.gop)
+        // A segment the file no longer contains is the clip case, not this one:
+        // it is absent, not contradicted.
+        if (actual !== undefined && actual !== entry.hash) contradicted.add(entry.gop)
+      }
+    }
+
+    const chain = verifyChain(Buffer.from(proof.capture_id as string, 'base64url'), mediaObj.segment_count as number, entries, publicKey)
+    // A contradicted segment is not a verified one, whatever its signature
+    // says: the signature covers a hash the file no longer produces.
+    segments = { verified: chain.verified.filter((index) => !contradicted.has(index)) }
+    if (contradicted.size > 0) {
+      const which = [...contradicted].sort((a, b) => a - b).join(', ')
+      return { ...tampered(`segment ${which}: content recomputed from the container does not match the signed content_hash`), segments }
+    }
     if (chain.status === 'tampered') return { ...tampered(chain.reason ?? 'segment chain'), segments }
     if (!mediaMatches || chain.status === 'clip') {
       return { outcome: 'verified_clip', labels: labels.sort(), not_evaluated: notEvaluated, core_hash: hash, segments, reason: mediaMatches ? 'segments missing' : 'media.hash does not match the received file' }

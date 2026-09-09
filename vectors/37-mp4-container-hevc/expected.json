@@ -1,0 +1,22 @@
+{
+  "kind": "container",
+  "outcome": "authentic",
+  "labels": [
+    "integrity unevaluated",
+    "key not in transparency log",
+    "no trusted time",
+    "no watermark",
+    "not anchored",
+    "origin not hardware-attested"
+  ],
+  "not_evaluated": [],
+  "core_hash": "e0e5483611e760a5ce8ed1a13ecb5d4f52c0e254481eb58b9acf9f37d063d9e9",
+  "segments": {
+    "verified": [
+      0,
+      1,
+      2
+    ]
+  },
+  "schema_valid": true
+}
