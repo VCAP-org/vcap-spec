@@ -6,7 +6,8 @@
     "key not in transparency log",
     "no trusted time",
     "not anchored",
-    "origin not hardware-attested"
+    "origin not hardware-attested",
+    "watermark not evaluated"
   ],
   "not_evaluated": [
     "future_field"
