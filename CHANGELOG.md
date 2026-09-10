@@ -25,6 +25,29 @@ with it.
   from the model, which is an artifact fetched by digest and stays out.
 - No change to the proof format, the schema or any vector verdict.
 
+### The timestamp slice, and the last of §7 (vectors 59-63, §6.2, §8)
+
+- The reference verifier now validates `timestamp.tsr`: CMS SignedData over
+  TSTInfo, the imprint against `core_hash`, the `messageDigest` attribute, the
+  signature over the attributes re-encoded as a `SET OF`, the signer's chain to
+  a pinned TSA root at `genTime`, and the `timeStamping` extended key usage.
+  §6.2 now lists those five checks normatively, each with the attack it stops.
+- Five vectors: a valid token, a genuine token over **another proof's** core
+  hash, one from a TSA nobody pinned, one whose signer has no `timeStamping`
+  usage, and **vector 63** — vector 43's expired chain with a token added.
+- **Vector 63 is why a timestamp is worth carrying.** Vector 43 shows
+  *attestation chain expired, capture time not proven*; with a token the label
+  is gone, because §7's table asks for that caveat only while the capture time
+  is `time.device_clock` alone. The reference verifier showed it
+  unconditionally — its own comment said otherwise — and `vcap-verifier` was
+  already right, which is the first time the corpus has settled a disagreement
+  in the shipping implementation's favour.
+- The tokens and the test TSA root are **committed** (`vectors/_timestamps/`,
+  `_trust/tsa-roots.pem`), minted by `tools/src/make-timestamp-tokens.ts`, for
+  the reason the attestation chains are: a CMS signature is ECDSA. The
+  generator refuses a token whose imprint is not the core hash it just built.
+- §8's table gains *trusted time not evaluated*. No change to the wire format.
+
 ### The anchor slice, and an instant nobody asserts (vectors 55-58, §6.2, §8)
 
 - The reference verifier now evaluates `anchor`: the batch root recomputed

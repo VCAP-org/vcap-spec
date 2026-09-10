@@ -860,6 +860,122 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
   }
 }
 
+
+// ---- timestamp: an instant a device does not assert about itself -----------
+//
+// §6.2's `timestamp.tsr` is an RFC 3161 TimeStampToken whose `messageImprint`
+// **is** `core_hash`. Over the media alone a stamp would let a writer restate
+// the time, place and device afterwards and keep it; over the core it covers
+// the pixels and the claims, at the same cost.
+//
+// The tokens are committed in `vectors/_timestamps/`, minted by
+// `make-timestamp-tokens.ts`, for the reason the attestation chains are: a CMS
+// signature is ECDSA, so minting again would rewrite every timestamp vector on
+// every run for nothing. The generator refuses a token whose imprint is not
+// the core hash it just built, so a changed core fails loudly instead of
+// producing a vector whose timestamp is about a different proof.
+{
+  const CAPTURE = 1757332800000
+  const day = 86_400_000
+  const chainOf = (name: string): string[] => (JSON.parse(readFileSync(join(VECTORS, '_chains', `${name}.json`), 'utf8')) as { chain: string[] }).chain
+
+  const tokenNamed = (name: string, coreHashHex: string): { tsr: string, genTime: string } => {
+    const file = JSON.parse(readFileSync(join(VECTORS, '_timestamps', `${name}.json`), 'utf8')) as { core_hash: string, gen_time: string, tsr: string }
+    if (file.core_hash !== coreHashHex) {
+      throw new Error(
+        `_timestamps/${name}.json is a token over ${file.core_hash}, and this vector's core hash is ${coreHashHex}. ` +
+        'Re-mint: npx tsx src/make-timestamp-tokens.ts ' + coreHashHex)
+    }
+    return { tsr: file.tsr, genTime: file.gen_time }
+  }
+
+  const stamped = (name: string, extra: Proof = {}): { proof: Proof, genTime: string } => {
+    const base = { ...sign(photoCore(baseJpeg, 'image/jpeg')), ...extra }
+    const token = tokenNamed(name, hashOf(base))
+    return { proof: { ...base, timestamp: { tsr: token.tsr } }, genTime: token.genTime }
+  }
+
+  const TS_LABELS = PHOTO_LABELS.filter((l) => l !== 'no trusted time')
+
+  {
+    const { proof, genTime } = stamped('valid')
+    file({ name: '59-jpeg-timestamped', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: {
+        outcome: 'authentic',
+        labels: TS_LABELS,
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'none', ceiling: 'amber' },
+        validated_at: { instant: genTime, source: 'timestamp' }
+      },
+      notes: 'An RFC 3161 TimeStampToken over `core_hash`, from a TSA whose root the corpus pins in `_trust/tsa-roots.pem`. `validated_at.source` is `timestamp`, one minute after the declared capture, and *no trusted time* is gone.\n\nThis is the only instant in a **file** that a device does not assert about itself, and unlike the anchor of vector 57 it needs no network to check: the evidence travels with the proof. A TimeStampToken is CMS SignedData carrying a TSTInfo, so a verifier checks the imprint, the `messageDigest` signed attribute, the signature over the attributes **re-encoded as a `SET OF`** (RFC 5652 §5.4, the one-byte difference every CMS implementation gets wrong once), the signer\'s chain to a pinned root at `genTime`, and the signer\'s `timeStamping` extended key usage.\n\nThe ceiling is amber for an unrelated reason: this photo carries no attestation, so the proven level is `none` and §7 never lets that be green whatever the instant.' })
+  }
+
+  {
+    const { proof } = stamped('other-imprint')
+    file({ name: '60-jpeg-timestamp-other-imprint', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: {
+        outcome: 'authentic',
+        labels: [...TS_LABELS, 'no trusted time', 'timestamp evidence invalid'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'none', ceiling: 'amber' },
+        validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+      },
+      notes: 'A genuine token from the trusted TSA, over **somebody else\'s** core hash. Every signature in it verifies; it simply timestamps a different proof.\n\nThis is the case that makes the imprint check the first one worth doing, and the one a naive implementation misses by validating the CMS and reading `genTime` without asking what was stamped. A verifier that did would date this capture by a stamp taken over an unrelated file. The instant falls back to `device_clock` and both labels of §8 are shown.' })
+  }
+
+  {
+    const { proof } = stamped('untrusted-root')
+    file({ name: '61-jpeg-timestamp-untrusted-tsa', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: {
+        outcome: 'authentic',
+        labels: [...TS_LABELS, 'no trusted time', 'timestamp evidence invalid'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'none', ceiling: 'amber' },
+        validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+      },
+      notes: 'The right imprint, a well-formed token, and a TSA whose root nobody pinned. Anyone can run a TSA and stamp anything with any time, so the root is the whole of the trust: without it the token is a signed assertion by a stranger.\n\nUnlike a transparency log outside the trust set — vector 52, which is *log not trusted* alone — this is a failure of the evidence and carries both labels. The difference is what a reader can do about it: a log this verifier does not follow may still be a log somebody trusts, while a timestamp is only ever worth the TSA behind it.' })
+  }
+
+  {
+    const { proof } = stamped('no-eku')
+    file({ name: '62-jpeg-timestamp-no-eku', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: {
+        outcome: 'authentic',
+        labels: [...TS_LABELS, 'no trusted time', 'timestamp evidence invalid'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'none', ceiling: 'amber' },
+        validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+      },
+      notes: 'A signer certificate issued by the **trusted** root, with the right imprint and a valid signature, and no `timeStamping` extended key usage.\n\nThe check that catches it is the one easiest to leave out, because everything else about the token is impeccable. A TSA root signs more than its own stamping key — TLS certificates, other services — and without the EKU any of those could stamp. RFC 3161 requires the extension and requires it critical; this is the vector that says a verifier must read it.' })
+  }
+
+  {
+    // The same core as vector 43, because an attachment is outside the core:
+    // the expired chain and the token can be added to one proof and the core
+    // hash does not move, which is the §6.2 property this vector leans on.
+    const { proof, genTime } = stamped('valid', { attestation: chainOf('expiring') })
+    file({ name: '63-jpeg-expired-chain-timestamped', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + 365 * day,
+      expected: {
+        outcome: 'authentic',
+        labels: TS_LABELS.filter((l) => l !== 'origin not hardware-attested').concat('chain revocation not checked').sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
+        validated_at: { instant: genTime, source: 'timestamp' }
+      },
+      notes: 'Why a timestamp is worth carrying, in one vector. This is vector 43\'s situation — a chain whose intermediate lives twelve days, read a year later — with a token added.\n\nVector 43 says *attestation chain expired, capture time not proven*: the path is validated at the proven instant and the level stands, but nothing except the device places the capture inside the chain\'s validity. Here the token does, so **the label is gone**. §7\'s table says that caveat only when the capture time is `time.device_clock` alone, and the reference verifier used to show it unconditionally — its own comment said otherwise, which is how this vector found the gap.\n\nStill amber, and for a reason worth naming: an `attestation_status` attachment is absent, so the chain\'s revocation is unestablished. Vector 54 is the one where every question has an answer.' })
+  }
+}
+
 // what it can rebuild is the difference between a generator and a broom.
 const owned = new Set(vectors.map((v) => v.name))
 if (existsSync(VECTORS)) {

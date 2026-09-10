@@ -626,7 +626,37 @@ Field table — type, required, verified against:
   `messageImprint` **is `core_hash`** (hash algorithm `sha256`, hashed message =
   the 32 bytes of `core_hash`). A timestamp over `media.hash` would prove the
   pixels existed before T; over `core_hash` it proves the pixels *and the
-  claims* did — same cost.
+  claims* did — same cost. It is the only instant in a file that the device
+  does not assert about itself, and the only one a verifier needs no network
+  to check: the evidence travels with the proof.
+
+  A TimeStampToken is CMS SignedData (RFC 5652) carrying a TSTInfo, and a
+  verifier MUST check all of:
+
+  1. `messageImprint` names `sha256` and its hashed message equals `core_hash`.
+     A token that fails only this is a genuine token **over another proof**,
+     and a verifier that read `genTime` without asking what was stamped would
+     date this capture by a stamp taken over an unrelated file.
+  2. the `messageDigest` signed attribute equals `SHA-256(TSTInfo)`, and the
+     signed `contentType` is `id-ct-TSTInfo`.
+  3. the signature verifies over the signed attributes **re-encoded as a
+     `SET OF`** (RFC 5652 §5.4) rather than over the `[0] IMPLICIT` they appear
+     as. One byte, and every CMS implementation gets it wrong once.
+  4. the signer certificate chains to a **TSA root the verifier pins** and was
+     valid at `genTime`. Anyone can run a TSA and stamp anything with any time,
+     so the root is the whole of the trust.
+  5. the signer carries the `timeStamping` extended key usage
+     (`1.3.6.1.5.5.7.3.8`). Without this check any certificate under the root
+     could stamp, and a TSA root signs more than its own stamping key.
+
+  Any failure → both labels of §8. No pinned TSA root at all is *trusted time
+  not evaluated*: evidence this verifier cannot read, not evidence that failed.
+
+  A valid token makes `genTime` the instant the proof is validated at (§7),
+  outranking a verified anchor and `time.device_clock` — and it removes
+  *attestation chain expired, capture time not proven*, because that caveat
+  exists only while nothing but the device places the capture inside the
+  chain's validity.
 
 No field carries personal data: the mapping key → organization → operator lives
 in the registry, behind access control. `device.key_id` is a **pseudonym** for
@@ -740,6 +770,7 @@ because "no trusted time" on a tampered file is noise.
 | `registry` | *key not in transparency log* | the key may be genuine, but nobody can check its registration or revocation |
 | `registry` present, `log_id` unknown to this verifier | *log not trusted* | not evidence that failed: evidence this verifier cannot read |
 | the log's signed status, when offline | *revocation not checked* | the key was in the log; whether it still is cannot be established without asking |
+| `timestamp` present, no TSA root pinned | *trusted time not evaluated* | evidence this verifier cannot read |
 | `anchor` present, chain not consulted | *anchoring not verified* | the path reaches the claimed root; nobody checked the chain recorded it |
 
 **An attachment that is present and does not hold up carries two labels: the

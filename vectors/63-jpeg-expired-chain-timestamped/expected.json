@@ -1,0 +1,24 @@
+{
+  "kind": "file",
+  "verifier_clock": 1788868800000,
+  "outcome": "authentic",
+  "labels": [
+    "chain revocation not checked",
+    "integrity unevaluated",
+    "key not in transparency log",
+    "not anchored",
+    "watermark not evaluated"
+  ],
+  "not_evaluated": [],
+  "core_hash": "dc59127e528a04d6e285de3abe748559e49c7f1ef66b238092a6b13afeeb5119",
+  "level": {
+    "claimed": "tee",
+    "proven": "tee",
+    "ceiling": "amber"
+  },
+  "validated_at": {
+    "instant": "2025-09-08T12:01:00.000Z",
+    "source": "timestamp"
+  },
+  "schema_valid": true
+}
