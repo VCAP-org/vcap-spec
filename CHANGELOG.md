@@ -25,6 +25,30 @@ with it.
   from the model, which is an artifact fetched by digest and stays out.
 - No change to the proof format, the schema or any vector verdict.
 
+### The anchor slice, and an instant nobody asserts (vectors 55-58, §6.2, §8)
+
+- The reference verifier now evaluates `anchor`: the batch root recomputed
+  from `core_hash`, `index`, `tree_size` and `merkle_path`, with leaves
+  `SHA-256(0x00 ‖ core_hash)` — the same tree as the transparency log, so one
+  Merkle implementation serves both. Four vectors: the path alone, a forged
+  path, the chain read agreeing, and the chain recording another root.
+- **Vector 57 is the first vector whose proven instant is not the device's
+  word.** `chain_read` is a corpus input, like `key_status`: with it the
+  block's timestamp becomes `validated_at`, `source: "anchor"`. It is an upper
+  bound — the capture existed *before* that block — and §6.2 now says so, along
+  with the fact that an anchor the chain contradicts yields no instant at all.
+  Dating a capture by a transaction that does not contain it is worse than
+  having no anchor.
+- §6.2 also now requires **both** `root` and `tree_size` to match the chain
+  read: a batch of a different size can share a root when one is a prefix of
+  the other.
+- **§8 states one label rule for every attachment**, replacing the
+  registry-specific wording added with vectors 49-54: a present attachment that
+  does not hold up carries the absent label *and* its own *… evidence invalid*.
+  An attachment a verifier cannot *read* — a log outside the trust set, a chain
+  it has no client for — is absent evidence instead, and carries one label.
+- `expected.schema.json` gains `chain_read`. No change to the wire format.
+
 ### The registry slice, and the first green (vectors 49-54, §6.2, §8)
 
 - The reference verifier now evaluates `registry`: RFC 6962 leaf and node

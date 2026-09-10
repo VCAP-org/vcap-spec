@@ -547,22 +547,16 @@ Field table — type, required, verified against:
   reporting "not included" there would blame the path for a bad signature.
 
   Any failure → **both** *registry evidence invalid* and *key not in
-  transparency log*, amber (the core is unaffected: the capture is still signed
-  by the key, only "in the log" is not proven). Both, because they answer
-  different questions: the second is what a reader is shown — nobody can
-  confirm this key was registered — and the first is what an operator can act
-  on, since somebody presented evidence that does not hold up. A verifier that
-  emitted only the first would leave a UI written against §8's table saying
-  nothing at all about registration in exactly the case that deserves the most
-  attention.
+  transparency log*, amber, per §8's rule for a present attachment that does
+  not hold up. The core is unaffected: the capture is still signed by the key,
+  only "in the log" is not proven.
 
   A `log_id` the verifier holds no key for is **not** a failure of the
   evidence: it is *log not trusted*, amber, and nothing else. Nobody the
   verifier trusts runs that log, which is the same amount of knowledge as an
-  absent attachment — §8's rule that absent evidence is a weaker verdict and
-  never an error. The same bytes are green for a verifier that pins the log and
-  amber for one that does not, and both are right: a verdict is only ever green
-  against a named set of anchors.
+  absent attachment. The same bytes are green for a verifier that pins the log
+  and amber for one that does not, and both are right: a verdict is only ever
+  green against a named set of anchors.
 
   `leaf.secure_hw` is the level the log saw proven at registration; it MUST NOT
   exceed the level proven by `attestation` when both are present, and a leaf
@@ -604,7 +598,19 @@ Field table — type, required, verified against:
   `index`, `tree_size` and `merkle_path`, then read `(root, tree_size)` for
   `anchor_id` from the contract (or a light client) and compare both; the
   block's timestamp is the proven upper bound. Without network: *anchoring not
-  verified*, amber, never red.
+  verified*, amber, never red — a verifier that could not ask has learned
+  nothing bad. A path that does not recompute to `root`, or a chain that
+  recorded a different `(root, tree_size)`, is a failure of the evidence and
+  carries both labels of §8. **Both** values are compared, not the root alone:
+  a batch of a different size can share a root with this one when one is a
+  prefix of the other.
+
+  When the chain is read and agrees, the block's timestamp becomes the instant
+  the proof is validated at (§7), outranking `time.device_clock` — and it is an
+  **upper bound**: the capture existed before that block, which nobody can
+  move, and nothing says how long before. An anchor whose root the chain
+  contradicts gives no instant at all: dating a capture by a transaction that
+  does not contain it would be worse than having no anchor.
 - **`integrity`** — `source` is `playIntegrity`, `appAttest` or `none`;
   `verdict` is `hardware`, `basic`, `unevaluated` or `failed`; `evaluated_at`
   is the registry's clock; `sig` is the registry signing key's ES256 signature
@@ -732,9 +738,26 @@ because "no trusted time" on a tampered file is noise.
 | `timestamp` | *no trusted time* | only the device clock, shown as declared |
 | `anchor` | *not anchored* | existence before a block is not proven |
 | `registry` | *key not in transparency log* | the key may be genuine, but nobody can check its registration or revocation |
-| `registry` present, evidence broken | *registry evidence invalid*, **with** the label above | somebody presented a proof of registration that does not hold up |
 | `registry` present, `log_id` unknown to this verifier | *log not trusted* | not evidence that failed: evidence this verifier cannot read |
 | the log's signed status, when offline | *revocation not checked* | the key was in the log; whether it still is cannot be established without asking |
+| `anchor` present, chain not consulted | *anchoring not verified* | the path reaches the claimed root; nobody checked the chain recorded it |
+
+**An attachment that is present and does not hold up carries two labels: the
+absent label above, and its own *… evidence invalid*.** So a broken `registry`
+is *key not in transparency log* **and** *registry evidence invalid*; a broken
+`anchor` is *not anchored* **and** *anchor evidence invalid*. One rule for every
+attachment, and the reason is what a reader sees: the absent label is the
+statement a user is shown — nobody can confirm this key was registered, nothing
+anchors this capture — and a verifier that emitted only the *invalid* label
+would leave an interface written against this table saying **nothing at all**
+about registration or anchoring in exactly the case that deserves the most
+attention. The *invalid* label is the part an operator can act on: somebody
+presented evidence that does not hold up.
+
+An attachment a verifier cannot *read* is not that case. A `log_id` outside the
+trust set, a chain it has no client for: that is absent evidence, a weaker
+verdict and never an error, and it carries the absent label or its own
+*not verified* label alone.
 | `attestation` (Android) | *origin not hardware-attested* | proven level `none` |
 | `integrity` | *integrity unevaluated* | no statement about the device's state |
 | `watermark` | *no watermark* | the detector did not run, or no mark was looked for |

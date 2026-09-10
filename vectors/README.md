@@ -32,6 +32,11 @@ revocation leaf — nothing in a Merkle tree proves a leaf does not exist — so
 file on its own can reach green. A corpus that pretended otherwise would be
 testing a verdict no verifier can reach.
 
+`chain_read`, where present, is an **input** too: what a caller read from the
+anchoring contract for that `anchor_id`. Absent means the chain was not
+consulted, which is *anchoring not verified* — the offline half of an anchor
+proves the path, never that the chain recorded it.
+
 `verifier_clock`, where present, is an **input and not an expectation**: the
 verifier's own clock in ms. A §7 verdict depends on it, because certificates
 expire — an attested capture read a year later is a different question from the
@@ -96,6 +101,6 @@ as `expected.json`, and the same `core_bytes_hex` for `jcs` vectors.
 
 ## Not here yet, and why
 
-- **`timestamp` and `anchor` attachments**: after C7/C8.
+- **`timestamp` attachments**: after C8. The `anchor` slice is here (55-58).
 - **Watermark-only match, cropped photo beyond the correction budget**:
   detector vectors, ML review.

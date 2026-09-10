@@ -8,6 +8,7 @@ import { type Segment, containerSegments } from './container.js'
 import { RANK, validateChain } from './attestation.js'
 import { type TrustBundle } from './trust.js'
 import { type KeyStatusStatement, type RegistryAttachment, verifyKeyStatus, verifyRegistry } from './registry.js'
+import { type AnchorAttachment, type ChainRead, verifyAnchor } from './anchor.js'
 import { jcs } from './jcs.js'
 
 /**
@@ -45,7 +46,6 @@ export interface Verdict {
 
 const ABSENT_LABELS: [string, string][] = [
   ['timestamp', 'no trusted time'],
-  ['anchor', 'not anchored'],
 
   ['attestation', 'origin not hardware-attested'],
   ['integrity', 'integrity unevaluated'],
@@ -151,9 +151,15 @@ export interface FileInput {
    * *revocation not checked*.
    */
   keyStatus?: KeyStatusStatement
+  /**
+   * §6.2's chain read for the `anchor` attachment, as the caller performed it.
+   * An input for the same reason: this layer contacts nothing, and a contract
+   * is somewhere else. Absent is *anchoring not verified*.
+   */
+  chainRead?: ChainRead
 }
 
-export const verifyFile = ({ file, sidecar, recomputeSegments, trust, clock = new Date(), keyStatus }: FileInput): Verdict => {
+export const verifyFile = ({ file, sidecar, recomputeSegments, trust, clock = new Date(), keyStatus, chainRead }: FileInput): Verdict => {
   // 1. Trailer, sidecar, nesting (§3).
   const trailer = parseTrailer(file)
   if (trailer.kind === 'corrupted') return fail('corrupted_proof', 'footer valid, CRC mismatch')
@@ -218,6 +224,10 @@ export const verifyFile = ({ file, sidecar, recomputeSegments, trust, clock = ne
   // returns before the level is computed and still has to say whether the key
   // was in the log — the label is about the key, not about the verdict.
   const registry = registryOutcome(proof, spki, trust, labels, deviceClockOf(proof))
+  // §6.2 `anchor`. Its offline half — does the path reach the anchored root —
+  // is checkable here; the chain read is an input, and its `block_time` is the
+  // only instant in this layer that the device does not assert.
+  const anchor = anchorOutcome(proof, Buffer.from(hash, 'hex'), chainRead, labels)
   // A declared watermark is the writer saying a mark was embedded, not a
   // promise a reader finds it. This verifier ships no detector, so the only
   // honest §7 outcome is *watermark not evaluated* — never silence, which a
@@ -287,7 +297,7 @@ export const verifyFile = ({ file, sidecar, recomputeSegments, trust, clock = ne
   return {
     outcome: 'authentic', labels: labels.sort(), not_evaluated: notEvaluated, core_hash: hash,
     ...(segments ? { segments } : {}),
-    ...level(proof, spki, Buffer.from(hash, 'hex'), labels, trust, clock, registry, keyStatus)
+    ...level(proof, spki, Buffer.from(hash, 'hex'), labels, trust, clock, registry, keyStatus, anchor)
   }
 }
 
@@ -299,14 +309,19 @@ export const verifyFile = ({ file, sidecar, recomputeSegments, trust, clock = ne
  */
 const level = (
   proof: Proof, spki: Buffer, coreHash: Buffer, labels: string[], trust: TrustBundle | undefined, clock: Date,
-  registry: RegistryVerdict, keyStatus: KeyStatusStatement | undefined
+  registry: RegistryVerdict, keyStatus: KeyStatusStatement | undefined, anchor: AnchorVerdict
 ): Pick<Verdict, 'level' | 'validated_at'> => {
   // The instant (§7). This layer evaluates neither `timestamp` nor `anchor`
   // yet, so the two trusted sources are not reachable here and the instant is
   // the device's claim — which is exactly why the claim caps the verdict.
+  // §7's order of trust for the instant: a timestamp token first (not
+  // evaluated by this layer yet), then a verified anchor's block, then the
+  // device's own clock. The anchor is the first source here that nobody can
+  // move, which is why it outranks `device_clock` rather than corroborating it.
   const deviceClock = deviceClockOf(proof)
-  const instant = deviceClock !== null ? new Date(deviceClock) : clock
-  const source = deviceClock !== null ? 'device_clock' as const : 'verifier_clock' as const
+  const anchored = anchor.ok && anchor.blockTime !== null ? anchor.blockTime : null
+  const instant = anchored !== null ? new Date(anchored) : deviceClock !== null ? new Date(deviceClock) : clock
+  const source = anchored !== null ? 'anchor' as const : deviceClock !== null ? 'device_clock' as const : 'verifier_clock' as const
 
   // §6.2 online revocation. The statement is an *input* — this layer contacts
   // nothing — and its absence is the reason an offline verifier cannot reach
@@ -384,6 +399,35 @@ const level = (
  * proof throws away the only part a reader can act on.
  */
 type RegistryVerdict = { ok: false } | { ok: true, secureHw: string, beforeCapture: boolean }
+
+type AnchorVerdict = { ok: false } | { ok: true, blockTime: number | null }
+
+/**
+ * §6.2 `anchor`, reduced to what §7 needs: does the path reach the anchored
+ * root, did the chain agree, and what instant does the block give.
+ *
+ * The label rule is the one §8 states once for every attachment: a present
+ * attachment whose evidence does not hold up carries **the absent label and
+ * its own invalid label**. *not anchored* is what a reader is shown; *anchor
+ * evidence invalid* is what an operator can act on.
+ */
+const anchorOutcome = (
+  proof: Proof, coreHash: Buffer, read: ChainRead | undefined, labels: string[]
+): AnchorVerdict => {
+  if (!isObject(proof.anchor)) {
+    labels.push('not anchored')
+    return { ok: false }
+  }
+  const outcome = verifyAnchor(proof.anchor as unknown as AnchorAttachment, coreHash, read)
+  if (!outcome.ok) {
+    labels.push('not anchored', 'anchor evidence invalid')
+    return { ok: false }
+  }
+  // The offline half held. Without a chain read the root is still only the
+  // proof's word about itself, so nothing is anchored yet.
+  if (!outcome.onChain) labels.push('anchoring not verified')
+  return { ok: true, blockTime: outcome.blockTime }
+}
 
 /** `time.device_clock`, or null when the proof declares none. */
 const deviceClockOf = (proof: Proof): number | null =>
