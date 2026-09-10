@@ -27,9 +27,15 @@ This document defines the artefact a capture pipeline produces and a verifier
 consumes: its binding to the media file, the byte sequences signatures cover,
 the JSON structure, and the verdict semantics of every field.
 
-It does not define transport, registry APIs, or watermark internals. It does
-define what a verifier may and may not conclude, because that is the part four
-independent implementations must agree on.
+It does not define transport, registry APIs, or the watermark model. The
+**payload layouts** it names in `watermark.layout` are defined in
+`watermark-layouts-1.0.md`, next to this file: a verifier that cannot read the
+payload cannot say *watermark matched*, and a field name is not enough to write
+a second decoder from. The model behind them — weights, exported graphs,
+digests — stays outside a wire contract and is fetched by digest.
+
+It does define what a verifier may and may not conclude, because that is the
+part four independent implementations must agree on.
 
 ## 2. Terminology
 

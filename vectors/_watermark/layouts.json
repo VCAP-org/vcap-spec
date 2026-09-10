@@ -1,0 +1,49 @@
+{
+  "message_bits": 256,
+  "photo-bch-v3": {
+    "ecc": "bch-255-131",
+    "cases": [
+      {
+        "capture_id": "00112233445566778899aabbccddeeff",
+        "message": "00112233445566778899aabbccddeeff35eb17e21afa125442562c7eb93c1340"
+      },
+      {
+        "capture_id": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "message": "0f1e2d3c4b5a69788796a5b4c3d2e1f0f3e58cf4f360887f92889aa511b91b20"
+      },
+      {
+        "capture_id": "ffffffffffffffffffffffffffffffff",
+        "message": "ffffffffffffffffffffffffffffffff1791ff329c1dc2e95330422d1c9adca0"
+      },
+      {
+        "capture_id": "00000000000000000000000000000001",
+        "message": "000000000000000000000000000000011bcb6cce6906958aa17f2231050eb390"
+      }
+    ]
+  },
+  "video-rep-v1": {
+    "ecc": "rep-8-crc8",
+    "cases": [
+      {
+        "mark_id": 1,
+        "crc8": 7,
+        "message": "0000010700000107000001070000010700000107000001070000010700000107"
+      },
+      {
+        "mark_id": 5902900,
+        "crc8": 82,
+        "message": "5a1234525a1234525a1234525a1234525a1234525a1234525a1234525a123452"
+      },
+      {
+        "mark_id": 16777215,
+        "crc8": 15,
+        "message": "ffffff0fffffff0fffffff0fffffff0fffffff0fffffff0fffffff0fffffff0f"
+      },
+      {
+        "mark_id": 255,
+        "crc8": 243,
+        "message": "0000fff30000fff30000fff30000fff30000fff30000fff30000fff30000fff3"
+      }
+    ]
+  }
+}
