@@ -9,6 +9,7 @@ import { RANK, validateChain } from './attestation.js'
 import { type TrustBundle } from './trust.js'
 import { type KeyStatusStatement, type RegistryAttachment, verifyKeyStatus, verifyRegistry } from './registry.js'
 import { type AnchorAttachment, type ChainRead, verifyAnchor } from './anchor.js'
+import { verifyTimestampToken } from './rfc3161.js'
 import { jcs } from './jcs.js'
 
 /**
@@ -45,7 +46,6 @@ export interface Verdict {
 }
 
 const ABSENT_LABELS: [string, string][] = [
-  ['timestamp', 'no trusted time'],
 
   ['attestation', 'origin not hardware-attested'],
   ['integrity', 'integrity unevaluated'],
@@ -228,6 +228,9 @@ export const verifyFile = ({ file, sidecar, recomputeSegments, trust, clock = ne
   // is checkable here; the chain read is an input, and its `block_time` is the
   // only instant in this layer that the device does not assert.
   const anchor = anchorOutcome(proof, Buffer.from(hash, 'hex'), chainRead, labels)
+  // §6.2 `timestamp`: the only instant in a file that a device does not
+  // assert about itself, and the one a verifier needs no network for.
+  const timestamp = timestampOutcome(proof, Buffer.from(hash, 'hex'), trust, labels)
   // A declared watermark is the writer saying a mark was embedded, not a
   // promise a reader finds it. This verifier ships no detector, so the only
   // honest §7 outcome is *watermark not evaluated* — never silence, which a
@@ -297,7 +300,7 @@ export const verifyFile = ({ file, sidecar, recomputeSegments, trust, clock = ne
   return {
     outcome: 'authentic', labels: labels.sort(), not_evaluated: notEvaluated, core_hash: hash,
     ...(segments ? { segments } : {}),
-    ...level(proof, spki, Buffer.from(hash, 'hex'), labels, trust, clock, registry, keyStatus, anchor)
+    ...level(proof, spki, Buffer.from(hash, 'hex'), labels, trust, clock, registry, keyStatus, anchor, timestamp)
   }
 }
 
@@ -309,7 +312,8 @@ export const verifyFile = ({ file, sidecar, recomputeSegments, trust, clock = ne
  */
 const level = (
   proof: Proof, spki: Buffer, coreHash: Buffer, labels: string[], trust: TrustBundle | undefined, clock: Date,
-  registry: RegistryVerdict, keyStatus: KeyStatusStatement | undefined, anchor: AnchorVerdict
+  registry: RegistryVerdict, keyStatus: KeyStatusStatement | undefined, anchor: AnchorVerdict,
+  timestamp: TimestampVerdict
 ): Pick<Verdict, 'level' | 'validated_at'> => {
   // The instant (§7). This layer evaluates neither `timestamp` nor `anchor`
   // yet, so the two trusted sources are not reachable here and the instant is
@@ -320,8 +324,13 @@ const level = (
   // move, which is why it outranks `device_clock` rather than corroborating it.
   const deviceClock = deviceClockOf(proof)
   const anchored = anchor.ok && anchor.blockTime !== null ? anchor.blockTime : null
-  const instant = anchored !== null ? new Date(anchored) : deviceClock !== null ? new Date(deviceClock) : clock
-  const source = anchored !== null ? 'anchor' as const : deviceClock !== null ? 'device_clock' as const : 'verifier_clock' as const
+  const stamped = timestamp.ok ? timestamp.genTime.getTime() : null
+  const instant = stamped !== null
+    ? new Date(stamped)
+    : anchored !== null ? new Date(anchored) : deviceClock !== null ? new Date(deviceClock) : clock
+  const source = stamped !== null
+    ? 'timestamp' as const
+    : anchored !== null ? 'anchor' as const : deviceClock !== null ? 'device_clock' as const : 'verifier_clock' as const
 
   // §6.2 online revocation. The statement is an *input* — this layer contacts
   // nothing — and its absence is the reason an offline verifier cannot reach
@@ -348,7 +357,14 @@ const level = (
       // error — the verifier is late, not the capture forged. It is worth
       // saying only when nothing independent places the capture inside the
       // chain's validity, which is the case for a device clock.
-      if (chain.expiredSince) labels.push('attestation chain expired, capture time not proven')
+      // §7's table says the label only when the capture time is *only*
+      // `time.device_clock`. A timestamp token or a verified anchor places the
+      // capture inside the chain's validity independently, which is the whole
+      // reason to carry one, so the caveat goes away rather than being shown
+      // next to the evidence that answers it.
+      if (chain.expiredSince && source === 'device_clock') {
+        labels.push('attestation chain expired, capture time not proven')
+      }
     }
   }
 
@@ -401,6 +417,42 @@ const level = (
 type RegistryVerdict = { ok: false } | { ok: true, secureHw: string, beforeCapture: boolean }
 
 type AnchorVerdict = { ok: false } | { ok: true, blockTime: number | null }
+
+type TimestampVerdict = { ok: false } | { ok: true, genTime: Date }
+
+/**
+ * §6.2 `timestamp`, and the §8 label rule again: absent is *no trusted time*,
+ * a token that does not hold up adds *timestamp evidence invalid*, and no
+ * pinned TSA root is *trusted time not evaluated* — evidence this verifier
+ * cannot read rather than evidence that failed.
+ */
+const timestampOutcome = (
+  proof: Proof, coreHash: Buffer, trust: TrustBundle | undefined, labels: string[]
+): TimestampVerdict => {
+  const attachment = isObject(proof.timestamp) ? proof.timestamp : null
+  const tsr = attachment !== null && typeof attachment.tsr === 'string' ? attachment.tsr : null
+  if (tsr === null) {
+    labels.push('no trusted time')
+    return { ok: false }
+  }
+  if ((trust?.tsaRoots.length ?? 0) === 0) {
+    labels.push('trusted time not evaluated')
+    return { ok: false }
+  }
+  let token: Buffer
+  try {
+    token = Buffer.from(tsr, 'base64url')
+  } catch {
+    labels.push('no trusted time', 'timestamp evidence invalid')
+    return { ok: false }
+  }
+  const outcome = verifyTimestampToken(token, coreHash, trust?.tsaRoots ?? [])
+  if (!outcome.ok) {
+    labels.push('no trusted time', 'timestamp evidence invalid')
+    return { ok: false }
+  }
+  return { ok: true, genTime: outcome.genTime }
+}
 
 /**
  * §6.2 `anchor`, reduced to what §7 needs: does the path reach the anchored

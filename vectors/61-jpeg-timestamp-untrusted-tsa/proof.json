@@ -1,0 +1,43 @@
+{
+  "v": "vcap/1.0",
+  "capture_id": "ABEiM0RVZneImaq7zN3u_w",
+  "media": {
+    "mime": "image/jpeg",
+    "w": 16,
+    "h": 16,
+    "hash": "OAbzVz4A9m1LqjF---miCdM2Bap6wRuTWbiuW41LzRA"
+  },
+  "device": {
+    "platform": "android",
+    "secure_hw": "tee",
+    "key_id": "4aF24UJH_AHu_CuygIW3PB-AMEWVoQy3iaeBh4yDSBM"
+  },
+  "watermark": {
+    "algo": "videoseal",
+    "layout": "photo-bch-v3",
+    "payload_bits": 128,
+    "ecc": "bch-255-131",
+    "strength": 8
+  },
+  "time": {
+    "device_clock": 1757332800000
+  },
+  "location": {
+    "level": "declared",
+    "lat_udeg": 45464664,
+    "lon_udeg": 9188540,
+    "acc_cm": 1250,
+    "evidence": []
+  },
+  "policy": {
+    "pseudonymous": false
+  },
+  "sig": {
+    "alg": "ES256",
+    "value": "qpjuFIpPNSSzyGyo1b0EFM9MdTrtruCI4myP_1RfueUcAGuOsfS78kzwJf1tUoYAz-6JzZwRuDlAYLLWrR6v9g",
+    "pub": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEp2C_SxUua1GBx-6u3KBIJKPwOb6yEYmTqfdbgzJbVJCy1_wvmKAjjmvD-d5EdVWpGx0Jxcduppsd0SspNPHKyA"
+  },
+  "timestamp": {
+    "tsr": "MIIDVgYJKoZIhvcNAQcCoIIDRzCCA0MCAQMxDzANBglghkgBZQMEAgEFADBxBgsqhkiG9w0BCRABBKBiBGAwXgIBAQYKKwYBBAGGjR8BATAxMA0GCWCGSAFlAwQCAQUABCDcWRJ-UooE1uKF3jq-dIVZ5Jx_HvZrI4CSprE6_utRGQIJALCnglYjbTLjGA8yMDI1MDkwODEyMDEwMFqgggGuMIIBqjCCATCgAwIBAgIJAPZKof8C-DRZMAoGCCqGSM49BAMDMD0xJzAlBgNVBAMTHkFub3RoZXIgVFNBIFJvb3QgTm9ib2R5IFBpbm5lZDESMBAGA1UEChMJdmNhcCB0ZXN0MB4XDTI1MDkwNzEyMDAwMFoXDTI2MDkwODEyMDAwMFowLjEYMBYGA1UEAxMPVGVzdCBUU0EgU2lnbmVyMRIwEAYDVQQKEwl2Y2FwIHRlc3QwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAASYu4FCrtpf3AGgkObXxp6bKBfVfzztf4wT9wXzu9KF-PY_b14UEF06nKNbQH7dUmAfVlI6UJMmutlFxD3UFfjToygwJjAMBgNVHRMBAf8EAjAAMBYGA1UdJQEB_wQMMAoGCCsGAQUFBwMIMAoGCCqGSM49BAMDA2gAMGUCMQCNUI764p8tSUQBhJjNsLNjRs-tVFkfaZCFWVUSTGMomkXORPmQ4As2WvBCCRwZ4q4CMCVQ0tgV0IOPYMsVRp7xiNTIdZQTOmEt0iQ9Cgmy7B7rtRh7LV96c5JOAqm2CexArjGCAQYwggECAgEBMEowPTEnMCUGA1UEAxMeQW5vdGhlciBUU0EgUm9vdCBOb2JvZHkgUGlubmVkMRIwEAYDVQQKEwl2Y2FwIHRlc3QCCQD2SqH_Avg0WTANBglghkgBZQMEAgEFAKBNMBoGCSqGSIb3DQEJAzENBgsqhkiG9w0BCRABBDAvBgkqhkiG9w0BCQQxIgQgdQLsixrwxFHUq0WHLRIMKD2Quy-90EcnawbZ3idY8ngwCgYIKoZIzj0EAwIERzBFAiBJQmWi909KOlkXWfaRzsm41MPIEGYqqbHrfaJLdBhipgIhAIzwEcGSJTzlwkUFZKathOGKU6JolSNiEUGZNyl8-A87"
+  }
+}

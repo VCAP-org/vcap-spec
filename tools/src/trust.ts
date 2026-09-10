@@ -18,9 +18,11 @@ export interface TrustedLog { log_id: string, spki: string }
 export interface TrustBundle {
   attestationRoots: X509Certificate[]
   logs: TrustedLog[]
+  /** The TSA roots a verifier pins; none means *trusted time not evaluated*. */
+  tsaRoots: X509Certificate[]
 }
 
-export const EMPTY_TRUST: TrustBundle = { attestationRoots: [], logs: [] }
+export const EMPTY_TRUST: TrustBundle = { attestationRoots: [], logs: [], tsaRoots: [] }
 
 const pemCertificates = (pem: string): X509Certificate[] =>
   (pem.match(/-----BEGIN CERTIFICATE-----[^-]+-----END CERTIFICATE-----/g) ?? []).map((block) => new X509Certificate(block))
@@ -29,8 +31,10 @@ const pemCertificates = (pem: string): X509Certificate[] =>
 export const loadTrust = (directory: string): TrustBundle => {
   const rootsFile = join(directory, 'attestation-roots.pem')
   const logsFile = join(directory, 'logs.json')
+  const tsaFile = join(directory, 'tsa-roots.pem')
   return {
     attestationRoots: existsSync(rootsFile) ? pemCertificates(readFileSync(rootsFile, 'utf8')) : [],
-    logs: existsSync(logsFile) ? (JSON.parse(readFileSync(logsFile, 'utf8')) as { logs: TrustedLog[] }).logs : []
+    logs: existsSync(logsFile) ? (JSON.parse(readFileSync(logsFile, 'utf8')) as { logs: TrustedLog[] }).logs : [],
+    tsaRoots: existsSync(tsaFile) ? pemCertificates(readFileSync(tsaFile, 'utf8')) : []
   }
 }

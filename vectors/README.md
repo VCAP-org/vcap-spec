@@ -10,6 +10,11 @@ its input:
 | `segments` | `segments.json` — `capture_id`, `pub`, `segment_count`, `segments[]` | the §5 chain at message level: content hashes given, no container |
 | `jcs` | `core.json` | canonicalization: expected `core_bytes_hex` and `core_hash` |
 
+`_timestamps/` holds the committed RFC 3161 tokens the timestamp vectors carry,
+minted by `tools/src/make-timestamp-tokens.ts` — committed for the reason the
+attestation chains are, and the generator refuses a token whose imprint is not
+the core hash it just built.
+
 Two directories are not vectors: `_media/` holds the unsealed inputs, and
 `_trust/` holds the anchors a verifier is assumed to hold while checking this
 corpus (its README says what the substituted attestation root does and does not
@@ -101,6 +106,5 @@ as `expected.json`, and the same `core_bytes_hex` for `jcs` vectors.
 
 ## Not here yet, and why
 
-- **`timestamp` attachments**: after C8. The `anchor` slice is here (55-58).
 - **Watermark-only match, cropped photo beyond the correction budget**:
   detector vectors, ML review.
