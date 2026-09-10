@@ -44,6 +44,42 @@
         "crc8": 243,
         "message": "0000fff30000fff30000fff30000fff30000fff30000fff30000fff30000fff3"
       }
-    ]
+    ],
+    "derivation": {
+      "rule": "mark_id = uint24 BE of SHA-256(capture_id)[0:3], and 1 when that is 0",
+      "cases": [
+        {
+          "capture_id": "00112233445566778899aabbccddeeff",
+          "sha256": "a8faed6abbf35c12a4b26e40f6feb19d736d90045c83b9f9a31f638d323e6811",
+          "mark_id": 11074285,
+          "crc8": 2
+        },
+        {
+          "capture_id": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+          "sha256": "4179529caf32c8cca4a1772697d3c8b15837a02eefe85cd8f9483480e663f2f1",
+          "mark_id": 4290898,
+          "crc8": 75
+        },
+        {
+          "capture_id": "ffffffffffffffffffffffffffffffff",
+          "sha256": "5ac6a5945f16500911219129984ba8b387a06f24fe383ce4e81a73294065461b",
+          "mark_id": 5949093,
+          "crc8": 66
+        },
+        {
+          "capture_id": "00000000000000000000000000000000",
+          "sha256": "374708fff7719dd5979ec875d56cd2286f6d3cf7ec317a3b25632aab28ec37bb",
+          "mark_id": 3622664,
+          "crc8": 255
+        },
+        {
+          "capture_id": "00000000000000000000000001281846",
+          "sha256": "00000080ef840bd4e5aa4c9409fc53ea5602ae4dbdddf6e516fb481fe91f32ea",
+          "mark_id": 1,
+          "crc8": 7,
+          "notes": "The reserved value: SHA-256 of this capture id begins 00 00 00, so the derivation would produce 0 and returns 1 instead. Found by search, because at 2^-24 no natural corpus reaches this branch and a branch no vector reaches is a branch two implementations can disagree on for years."
+        }
+      ]
+    }
   }
 }

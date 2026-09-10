@@ -70,6 +70,34 @@ bursts.
 A clip is decoded **once, on the logits averaged over frames**, not frame by
 frame and then voted.
 
+### Deriving a `mark_id`
+
+A writer SHOULD derive it from the capture id:
+
+```
+mark_id = uint24 BE of SHA-256(capture_id)[0:3]        (1 when that is 0)
+```
+
+`0` is reserved as "no id" — it is the value a decoder reports when nothing
+decoded — so it is the one output the derivation may not produce.
+
+This is a SHOULD and not a MUST because nothing in verification depends on it:
+`mark_id` sits in the signed core, so a verifier reads it and never recomputes
+it. What the rule buys is what the alternatives cost. A **counter** needs state
+a capture library does not have, and its value leaks how many captures a device
+has taken — a number a photographer never agreed to publish, embedded in the
+pixels of every frame. A **random** id needs an entropy source at capture time
+and gives up reproducibility for nothing, since collisions are already expected
+at 24 bits (above). Derivation from the capture id is stateless, discloses only
+what the proof already carries, and lets a second implementation check itself
+against a vector instead of against its own output.
+
+`vectors/_watermark/layouts.json` pins the rule under
+`video-rep-v1.derivation`, including a capture id found by search whose digest
+begins `00 00 00` — the reserved-value branch, which no natural corpus reaches
+at 2^-24, and a branch no vector reaches is a branch two implementations can
+disagree on for years.
+
 The decoder returns an **agreement** figure — the fraction of copies that
 matched the majority — and that figure stays meaningful when the CRC fails.
 A verifier shows it instead of a verdict.
