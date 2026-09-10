@@ -10,6 +10,33 @@ with it.
 
 ## Unreleased
 
+### The first iOS captures in the corpus (vectors 47-48)
+
+- No spec text changes. Two vectors from an iPhone 11 Pro (S1 spike,
+  `vcap-sdk-ios`), and the first evidence in this repository that anything but
+  Android can produce or be read at either layer.
+- **Vector 47**, a 1600×1200 HEIC the device sealed itself: the corpus's first
+  `platform: "ios"`, its first `secure_hw: "secureEnclave"`, and its first
+  signature made by a Secure Enclave. The core hash the device computed is the
+  one `tools/src/verify.ts` recomputes — which is where a writer's JCS, its
+  DER→P1363 conversion and its low-`s` normalization are proven right
+  *together*, since any one of them wrong would not land on that number.
+- **Vector 48**, a `qt  ` container `AVAssetWriter` wrote, with §5 recomputed
+  from it. Until now every demuxed vector came out of Android's `MediaMuxer`, so
+  a reader could pass them all while reading one muxer's habits: this file has
+  the `qt  ` brand, a `wide` box before `mdat`, `tapt` and `sdtp` where a reader
+  must skip what it does not know, a movie timescale of 600, an edit list that
+  is present and says nothing — and chunk offsets in **`stco`**, 32-bit, a
+  branch no container vector had ever executed. Its `media.mime` is
+  `video/quicktime`, the first video here that is not `video/mp4`, which is what
+  §8's `video/` prefix rule was written for.
+- The chain in 48 is synthesized with the test key and proves nothing about
+  iOS: the spike inserted vcap SEIs and never sealed a video. The container and
+  its content hashes are the device's. `vectors/README.md` says which vectors
+  are which weight of evidence.
+- `tools/src/derive-ios-vectors.ts` rebuilds both from the spike's artifacts,
+  the way `derive-container-vectors.ts` does for 36-39.
+
 ### BREAKING — `media.w` and `media.h` are required (§8, §9, D9)
 
 - §8 requires the pixel dimensions of every proof. They are not evidence —

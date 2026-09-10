@@ -1,0 +1,23 @@
+{
+  "capture_id": "U6GrPcDedfoBX1iKISwmSA",
+  "device": {
+    "key_id": "6YoFSROFh9q5nBtLrocZ8ActuXQKWmrwuJPHrezE-JE",
+    "platform": "ios",
+    "secure_hw": "secureEnclave"
+  },
+  "media": {
+    "h": 1200,
+    "hash": "BEuwCjRhtws9rJCpvrm1UmsFC_GU-p1o2rcaa3W12Ok",
+    "mime": "image/heic",
+    "w": 1600
+  },
+  "sig": {
+    "alg": "ES256",
+    "pub": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE78OGZKdEa8m3xqKXsDoMXBEI9plz6Xt-rsYkPmpSwHOQ6Io80RLhRO2NL7gjwtXHCSqPGnl6lICFf8aYdfB09A",
+    "value": "gN6LcWjbevziQZR5-LddKw5lB8VRkcNDamCMe3AI3npfUhSJ6ow1lTGp23PDXXyxqnm06UVF85jjKe4EcNd90Q"
+  },
+  "time": {
+    "device_clock": 1789037738426
+  },
+  "v": "vcap/1.0"
+}
