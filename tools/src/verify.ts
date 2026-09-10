@@ -97,6 +97,11 @@ const b64urlLen = (s: unknown, bytes: number): s is string =>
 const shapeProblem = (proof: Proof): string | null => {
   if (!b64urlLen(proof.capture_id, 16)) return 'capture_id missing or not 16 bytes'
   if (!isObject(proof.media) || typeof proof.media.hash !== 'string' || typeof proof.media.mime !== 'string') return 'media.hash or media.mime missing'
+  // §8: the pixel dimensions are required. They are not evidence — nothing is
+  // proven by them — but every writer holds them at capture, and a reader that
+  // cannot say how large the frame is cannot place a watermark payload or a
+  // segment in it. Missing is malformed, the same as an absent capture_id.
+  if (!Number.isInteger(proof.media.w) || !Number.isInteger(proof.media.h) || (proof.media.w as number) < 1 || (proof.media.h as number) < 1) return 'media.w or media.h missing'
   if (!isObject(proof.device) || typeof proof.device.platform !== 'string' || typeof proof.device.secure_hw !== 'string' || typeof proof.device.key_id !== 'string') return 'device incomplete'
   if (!isObject(proof.sig) || typeof proof.sig.value !== 'string' || typeof proof.sig.pub !== 'string' || typeof proof.sig.alg !== 'string') return 'sig incomplete'
   if ('segments' in proof) {
@@ -217,6 +222,13 @@ export const verifyFile = ({ file, sidecar, recomputeSegments, trust, clock = ne
   const contradicted = new Set<number>()
   if ('segments' in proof) {
     const entries = proof.segments as unknown as SegmentEntry[]
+
+    // §7: a verifier that did not recompute says so. Skipping the recomputation
+    // stays conformant — a sidecar without a demuxable container, a light
+    // library — but the two answers differ: on vector 39 the same file reads
+    // *verified_clip* without the recomputation and *tampered* with it. An
+    // unevaluated check is a weaker verdict, never a silence.
+    if (!recomputeSegments) labels.push('segment content not recomputed')
 
     // §5: the bytes must be the bytes that were signed. A mismatch here is not
     // a clip — a clip is missing segments, this is a present segment whose

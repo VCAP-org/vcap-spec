@@ -351,8 +351,8 @@ const videoCore = (media: Buffer, extra: Proof = {}): Proof => photoCore(media, 
 {
   const proof = sign(videoCore(baseMp4, { segments: chain as unknown as Json }))
   file({ name: '33-mp4-video-sealed', ext: 'mp4', file: seal(baseMp4, proof), proof,
-    expected: { outcome: 'authentic', labels: PHOTO_LABELS, not_evaluated: [], core_hash: hashOf(proof), segments: { verified: [0, 1, 2] } },
-    notes: 'An ISO-BMFF video with media.mime video/mp4, segment_count 3 and the complete chain of vector 25 in the trailer (flag SEGMENTS set). Canonical bytes are the file minus the trailer (§4.1); the chain is verified at message level — content hashes are given, the container is not demuxed by this layer.' })
+    expected: { outcome: 'authentic', labels: [...PHOTO_LABELS, 'segment content not recomputed'], not_evaluated: [], core_hash: hashOf(proof), segments: { verified: [0, 1, 2] } },
+    notes: 'An ISO-BMFF video with media.mime video/mp4, segment_count 3 and the complete chain of vector 25 in the trailer (flag SEGMENTS set). Canonical bytes are the file minus the trailer (§4.1); the chain is verified at message level — content hashes are given, the container is not demuxed by this layer, and the verdict says so with *segment content not recomputed* (§7). Vectors 36-39 are the same question asked of the container.' })
 }
 
 {
@@ -361,6 +361,17 @@ const videoCore = (media: Buffer, extra: Proof = {}): Proof => photoCore(media, 
     expected: { outcome: 'no_proof_found', labels: [], not_evaluated: [] },
     schemaValid: false,
     notes: 'Same video, valid signature, segment_count present, no segments. §8: media.mime starting with video/ makes this a video proof, and segments is required for one — missing required field, no proof found. A verifier that branches on the presence of segments alone would say authentic here.' })
+}
+
+// ---- media.w/h are required (§8) ---------------------------------------------
+
+{
+  const { w: _w, h: _h, ...media } = jpegProof.media as Record<string, Json>
+  const stripped = { ...jpegProof, media } as unknown as Proof
+  file({ name: '46-jpeg-missing-media-dimensions', ext: 'jpg', file: seal(baseJpeg, stripped), proof: stripped,
+    expected: { outcome: 'no_proof_found', labels: [], not_evaluated: [] },
+    schemaValid: false,
+    notes: 'Vector 01 with media.w and media.h removed after signing. §8 requires them: every writer holds the dimensions at capture, and a reader that cannot say how large the frame is cannot place a watermark payload or a segment in it. Missing is malformed — no proof found, not tampered — the same shape as an absent capture_id (vector 21), and like that vector the signature is never examined: the shape check of §8 fires first, so a verifier that reported *tampered* here would be reporting a check it had not run.' })
 }
 
 // ---- JPEG fill bytes (§4.1: kept, not judged) ---------------------------------

@@ -1,14 +1,25 @@
 # vcap proof format, version 1.0
 
-**Status: `vcap/1.0` FROZEN — 9 September 2026, tag `v1.0`.** Written 8
-September 2026 as step 1 of the work order in `Doc/06-fase1-avvio.md` §3,
-amended the same day after the cryptographic review (step 2,
-`reviews/01-crypto-review-draft-1.0.md`) and on 9 September after the
-implementability review on real hardware (step 3,
-`reviews/implementability-android.md`). The six format decisions below are
-final. From this tag the format grows by addition only (§9); §11 lists what is
-still being verified and why none of it can change the wire format. Changes
-land through `CHANGELOG.md`.
+**Status: `vcap/1.0` DRAFT — the six format decisions are settled, the wire
+contract is not yet binding.** Tag `v1.0` (9 September 2026) is a working tag
+and its GitHub release is a pre-release. Written 8 September 2026 as step 1 of
+the work order in `Doc/06-fase1-avvio.md` §3, amended the same day after the
+cryptographic review (step 2, `reviews/01-crypto-review-draft-1.0.md`) and on
+9 September after the implementability review on real hardware (step 3,
+`reviews/implementability-android.md`).
+
+**When the format freezes.** The additive-only rule of §9 starts at the first
+publication: the first build on a store, or the first SDK handed to an
+integrator. Until then a breaking change is allowed, because the only sealed
+files in existence are test vectors and our own devices' output, and we can
+re-seal both. After it, never — the constraint does not come from our
+discipline but from the files we cannot re-sign, in hands that are not ours.
+Every breaking change taken while this notice stands is recorded in
+`CHANGELOG.md` as such, and the in-file version string stays `vcap/1.0`: a
+draft label belongs on a tag, never in bytes that outlive it.
+
+The string `"v": "vcap/1.0"` is therefore already permanent. What is still
+open is the shape around it; §11 lists it.
 
 ## 1. Scope
 
@@ -311,13 +322,24 @@ sig(n)          = ECDSA-P256-SHA256( message(n) ), P1363, low s (§4.2)
     verify. Recomputation is optional — a verifier without a demuxer verifies
     the signature layer and nothing here changes that — but a verifier that
     holds the file and skips it has checked that somebody signed some hashes,
-    not that the frames in front of the reader are those frames. A contradicted
+    not that the frames in front of the reader are those frames. A verifier
+    that skips it stays conformant and **MUST** say so, with *segment content
+    not recomputed* (§7): the two answers differ — on vector 39 the same file
+    reads *verified_clip* without the recomputation and *tampered* with it — so
+    a reader who is not told which one ran cannot know what the verdict means. A contradicted
     segment is not a missing one: a clip lacks segments, this file *has* the
     segment and its bytes are not the bytes that were signed, which is
     substitution inside a signed range and never amber (vector 39);
-  - `segments[].range` (byte range in the received file) is informational and
-    **not signed**: it helps a UI point at a frame, and a verifier MUST NOT
-    conclude anything from it.
+  - `segments[].range` is **deprecated**: writers MUST NOT emit it, and
+    verifiers MUST ignore it where an older file carries it. It was a byte
+    range in the received file, unsigned, and a verifier was already forbidden
+    to conclude anything from it — so it offered a UI a frame offset that no
+    two writers were obliged to compute alike, since the offsets are taken
+    before the trailer is appended and any clip moves them. A field nobody may
+    trust and everybody may compute differently is an invitation to trust it
+    by accident. Removing it invalidates nothing: it is outside the core hash
+    and outside the per-segment message, so every file already sealed verifies
+    unchanged.
 
 Photos have no `segments`; their signature is the one in §4.2.
 
@@ -603,6 +625,7 @@ entry records a valid App Attest binding for `device.key_id`. Web: `none`.
 | any of the above | valid at the proven instant of capture, expired since | any | unchanged by the expiry | (nothing: expiry alone says nothing) |
 | any of the above | expired, and the capture time is only `time.device_clock` | any | **amber** | attestation chain expired, capture time not proven |
 | `none` | session key, or no attestation | n/a | **amber, never green** | origin not hardware-attested |
+| any of the above | a video proof whose `content_hash` values were not recomputed from the container (§5) | any | unchanged | segment content not recomputed |
 | any | claimed level above the level the `attestation` attachment proves | — | **amber at best, flagged** | inconsistent claim |
 | any | `integrity.verdict` is `failed`, or mock location provider flagged | — | **amber at best, prominently flagged** | device integrity failed |
 | any | `sig` invalid, or attestation leaf ≠ `sig.pub` | — | **red** | tampered |
@@ -654,8 +677,12 @@ entry records a valid App Attest binding for `device.key_id`. Web: `none`.
 
 ## 8. Decision 5 — Optional versus invalidating
 
-**Required.** `v`, `capture_id`, `media`, `device.secure_hw`, `device.key_id`,
-`sig`, and for a video proof `media.segment_count` and `segments`. A proof is
+**Required.** `v`, `capture_id`, `media`, `media.mime`, `media.hash`,
+`media.w`, `media.h`, `device.secure_hw`, `device.key_id`, `sig`, and for a
+video proof `media.segment_count` and `segments`. The pixel dimensions are
+required and are **not** evidence — nothing is proven by them — but every
+writer holds them at capture, and a reader that cannot say how large the frame
+is cannot place a watermark payload or a segment in it (vector 46). A proof is
 a **video proof** when `media.mime` starts with `video/`; nothing else decides
 it — not the container, not `duration_ms` — so a video proof without
 `segments` is *no proof found*, and a still image carrying `segments` is
@@ -741,7 +768,11 @@ side by side with it.
   the core (§6.1), so they do not disturb the signature. A newer capture must
   not be unverifiable by an older verifier.
 - **Unknown major**: *unsupported format version*, with the version shown.
-- **After the 1.0 tag, additive only**: new optional keys, and new values only in
+- **From the first publication, additive only** — see the status notice at the
+  top: the rule binds from the first store build or the first SDK handed to an
+  integrator, not from the `v1.0` tag, and while the format is a draft a
+  breaking change is allowed and recorded as one in `CHANGELOG.md`. What the
+  rule permits once it binds: new optional keys, and new values only in
   fields documented as extensible (`watermark.layout`, `location.evidence[].kind`,
   `timestamp.tsa_issuer`, `integrity.source`, `attestation_status.source`).
   Every extensible field states the fallback for an older verifier. A new value
@@ -752,9 +783,12 @@ side by side with it.
   schema-invalid in the same document that named it. `device.secure_hw`, `sig.alg`, the set of
   core keys and the segment message layout are **not** extensible: changing any
   of them is a new minor with a new separator (§5) or a new major.
-- **Never** reuse a key name with a different meaning, never promote an optional
-  key to required, never change the meaning of an existing enum value. A layout
-  change desynchronizes every already-sealed file: add a version instead.
+- **Never**, once the rule binds: reuse a key name with a different meaning,
+  promote an optional key to required, or change the meaning of an existing
+  enum value. A layout change desynchronizes every already-sealed file: add a
+  version instead. `media.w`/`media.h` were promoted to required while this
+  format was a draft (§8, vector 46) — that is the kind of change this line
+  forbids afterwards, and it is recorded in `CHANGELOG.md` as breaking.
 - The watermark layout is declared in the proof and numbered, so a detector knows
   which decoder to run without guessing.
 
@@ -783,9 +817,10 @@ who finds it out later stops trusting the rest:
 
 ---
 
-## 11. Review status at the freeze
+## 11. Review status
 
-Frozen 9 September 2026. The open items below are follow-ups: each is either
+Draft as of 10 September 2026 (see the status notice at the top: the additive
+rule starts at first publication). The open items below are follow-ups: each is either
 evidence still to collect (measurements, vectors) or a value in a field §9
 declares extensible. None of them changes the core keys, the trailer, the
 segment message or the meaning of an existing enum value; if one ever needs
@@ -828,10 +863,10 @@ says.
       encoder, with `content_hash` recomputed from the NAL units and audio
       frames — Android H.264 and HEVC done (vectors 36–39, `kind: container`);
       iOS after S1, and the MOV branch with it
-- [ ] `REVIEW (BE)` whether a verifier that cannot recompute segment hashes must
-      say so in its labels, the way it says *integrity unevaluated*. Adding a
-      label is additive under §9, but it changes the expected labels of every
-      video vector, so it is a decision and not an edit
+- [x] Whether a verifier that cannot recompute segment hashes must say so in
+      its labels: **yes** — *segment content not recomputed* (§5, §7), decided
+      10 September 2026 (D10). Recomputation stays optional, declaring it does
+      not
 - [ ] Vectors for the proof level (§7): attestation chains, registry entries,
       revocation — after C6 exposes the material
 - [ ] Vectors for `timestamp` and `anchor` attachments — after C7/C8

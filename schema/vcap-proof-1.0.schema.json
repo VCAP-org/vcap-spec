@@ -25,7 +25,9 @@
       "additionalProperties": false,
       "required": [
         "mime",
-        "hash"
+        "hash",
+        "w",
+        "h"
       ],
       "properties": {
         "mime": {
@@ -230,7 +232,9 @@
             "items": {
               "type": "integer",
               "minimum": 0
-            }
+            },
+            "deprecated": true,
+            "description": "Deprecated and unsigned: writers MUST NOT emit it, verifiers MUST ignore it (§5)."
           },
           "hash": {
             "$ref": "#/$defs/bytes32"
