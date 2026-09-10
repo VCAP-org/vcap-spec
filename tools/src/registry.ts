@@ -253,3 +253,67 @@ export const verifyKeyStatus = (
   if (!verifyEs256(message, signature, key)) return { ok: false, reason: 'the status signature does not verify' }
   return { ok: true, status: statement.status }
 }
+
+/**
+ * §6.2 `integrity`: the platform's relay of a Play Integrity or App Attest
+ * verdict about the device, signed over `core_hash ‖ UTF-8(verdict)`.
+ *
+ * Why it is relayed rather than carried: an integrity verdict arrives as a
+ * token only the developer's server can decrypt, so a device cannot put it in
+ * the core as anything but a self-declaration — and a self-declaration by the
+ * app is worthless against the compromised device it exists to flag. Signed by
+ * the registry, it is Google's or Apple's word, relayed, under a key the
+ * verifier already holds for tree heads.
+ *
+ * It **corroborates and never carries**: §7 takes the proven level from
+ * `attestation`, and the same rooted device that would fail an integrity check
+ * also fails to produce a chain. So a `failed` verdict is shown and changes no
+ * ceiling — the format's promise is that this file was signed by the key it
+ * names, and a device's state is a different question that §7 answers from
+ * different evidence.
+ */
+export interface IntegrityAttachment {
+  source: string
+  verdict: string
+  evaluated_at: number
+  sig: string
+}
+
+export type IntegrityOutcome =
+  | { ok: true, source: string, verdict: string, evaluatedAt: number }
+  | { ok: false, reason: string, trusted: boolean }
+
+const INTEGRITY_VERDICTS = new Set(['hardware', 'basic', 'unevaluated', 'failed'])
+const INTEGRITY_SOURCES = new Set(['playIntegrity', 'appAttest', 'none'])
+
+export const verifyIntegrity = (
+  attachment: IntegrityAttachment, coreHash: Buffer, logs: readonly TrustedLog[]
+): IntegrityOutcome => {
+  if (!INTEGRITY_SOURCES.has(attachment.source)) {
+    return { ok: false, reason: `unknown source ${attachment.source}`, trusted: true }
+  }
+  if (!INTEGRITY_VERDICTS.has(attachment.verdict)) {
+    return { ok: false, reason: `unknown verdict ${attachment.verdict}`, trusted: true }
+  }
+  let signature: Buffer
+  try {
+    signature = Buffer.from(attachment.sig, 'base64url')
+  } catch {
+    return { ok: false, reason: 'the signature is not base64url', trusted: true }
+  }
+  // `core_hash ‖ UTF-8(verdict)`: the verdict is inside the signature, so a
+  // relay cannot be re-labelled after the fact — which is the whole reason a
+  // string this short is signed at all.
+  const message = Buffer.concat([coreHash, Buffer.from(attachment.verdict, 'utf8')])
+  const signed = logs.some((log) => {
+    const key = publicKeyFromSpki(Buffer.from(log.spki, 'base64'))
+    return key !== null && verifyEs256(message, signature, key)
+  })
+  if (!signed) {
+    // No trusted key made this signature. Whether that is a forgery or a
+    // registry this verifier does not follow cannot be told apart from here,
+    // and the honest report is the weaker one.
+    return { ok: false, reason: 'no trusted registry key signed this verdict', trusted: false }
+  }
+  return { ok: true, source: attachment.source, verdict: attachment.verdict, evaluatedAt: attachment.evaluated_at }
+}

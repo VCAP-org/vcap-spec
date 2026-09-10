@@ -106,5 +106,9 @@ as `expected.json`, and the same `core_bytes_hex` for `jcs` vectors.
 
 ## Not here yet, and why
 
+Every attachment §6.2 defines now has vectors: `attestation`,
+`attestation_status`, `registry` with the online key status, `anchor`,
+`timestamp` and `integrity`.
+
 - **Watermark-only match, cropped photo beyond the correction budget**:
   detector vectors, ML review.

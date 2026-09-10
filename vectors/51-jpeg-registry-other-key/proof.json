@@ -58,8 +58,8 @@
     "leaf_index": 3,
     "leaf": {
       "type": "key",
-      "key_id": "6f6b84ce099311962169acd637d3ae515271e9c88072fb8c42767ac4ee84205c",
-      "public_key": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEUjeSlheouRmz2mSR174/Xd83HSVGcZEm3bmQGX1UwJYD5ffti64nKl3FYa6WziZytU2HVXOJ7LriiVVrNnKSAw==",
+      "key_id": "86d56c5e36e17292d1864d909e3c4bf75635e14ba9c390cd48af19a3c6de9e9a",
+      "public_key": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEYpgOLNw0zgSC6w+JY3LBbaxOgTILBwHKlJmf5RWSxI2QsgAp7ANaNRbyYlj90qnVq8p5fJshrYWQT0JaM2rIqQ==",
       "secure_hw": "tee",
       "attestation_digest": "8728db8fabd28a775d55e91002b1d09f11b6f31d52b348c48ee4c013e77fb003",
       "registered_at": 1757246400000
@@ -72,8 +72,8 @@
     "tree_head": {
       "tree_size": 7,
       "timestamp": 1757329200000,
-      "root_hash": "GM1hNSznzYCYvPeSHth97c3KnXzIkaBXoZeh_5Rtfqw",
-      "signature": "hwiusm1xF1XXggarbemOrDydOF6k_msU7bzZUsGGltMf18t0Z7PNn6IOa_NEKSZ0c-N_KL4qwG1vA6oNHwev3g"
+      "root_hash": "nO_uZi2-h-ffdTODavYl-UnGTP1wGp2TKwY2Y05nhhY",
+      "signature": "vo7OWIgAXlhsUFcH0cWPt1qAV4l7eAlovD8emF8IM2QmWfNgQOYXTIERZG1-A-FLxRMjOQrxtUIQogg8UgCE9w"
     }
   }
 }

@@ -7,7 +7,7 @@ import { type SegmentEntry, verifyChain } from './segments.js'
 import { type Segment, containerSegments } from './container.js'
 import { RANK, validateChain } from './attestation.js'
 import { type TrustBundle } from './trust.js'
-import { type KeyStatusStatement, type RegistryAttachment, verifyKeyStatus, verifyRegistry } from './registry.js'
+import { type IntegrityAttachment, type KeyStatusStatement, type RegistryAttachment, verifyIntegrity, verifyKeyStatus, verifyRegistry } from './registry.js'
 import { type AnchorAttachment, type ChainRead, verifyAnchor } from './anchor.js'
 import { verifyTimestampToken } from './rfc3161.js'
 import { jcs } from './jcs.js'
@@ -48,7 +48,6 @@ export interface Verdict {
 const ABSENT_LABELS: [string, string][] = [
 
   ['attestation', 'origin not hardware-attested'],
-  ['integrity', 'integrity unevaluated'],
   ['watermark', 'no watermark']
 ]
 
@@ -231,6 +230,9 @@ export const verifyFile = ({ file, sidecar, recomputeSegments, trust, clock = ne
   // §6.2 `timestamp`: the only instant in a file that a device does not
   // assert about itself, and the one a verifier needs no network for.
   const timestamp = timestampOutcome(proof, Buffer.from(hash, 'hex'), trust, labels)
+  // §6.2 `integrity`. It corroborates and never carries, so it produces a
+  // label and no level: see `integrityOutcome`.
+  integrityOutcome(proof, Buffer.from(hash, 'hex'), trust, labels)
   // A declared watermark is the writer saying a mark was embedded, not a
   // promise a reader finds it. This verifier ships no detector, so the only
   // honest §7 outcome is *watermark not evaluated* — never silence, which a
@@ -419,6 +421,36 @@ type RegistryVerdict = { ok: false } | { ok: true, secureHw: string, beforeCaptu
 type AnchorVerdict = { ok: false } | { ok: true, blockTime: number | null }
 
 type TimestampVerdict = { ok: false } | { ok: true, genTime: Date }
+
+/**
+ * §6.2 `integrity`, which is the one attachment that changes **no ceiling**.
+ *
+ * §7 takes the proven level from `attestation`, and the same rooted device
+ * that would fail an integrity check also fails to produce a chain — so a
+ * `failed` verdict is worth showing and is not worth a verdict of its own. The
+ * format's promise is that this file was signed by the key it names; a
+ * device's state is a different question, answered from different evidence.
+ *
+ * What it does produce is a label naming the relayed verdict, because a reader
+ * shown nothing would take "no news" for "good news" — and *integrity
+ * unevaluated* means the opposite of that.
+ */
+const integrityOutcome = (proof: Proof, coreHash: Buffer, trust: TrustBundle | undefined, labels: string[]): void => {
+  if (!isObject(proof.integrity)) {
+    labels.push('integrity unevaluated')
+    return
+  }
+  const outcome = verifyIntegrity(proof.integrity as unknown as IntegrityAttachment, coreHash, trust?.logs ?? [])
+  if (!outcome.ok) {
+    labels.push('integrity unevaluated')
+    // The same distinction the registry draws: evidence that does not hold up
+    // is a fact a reader can act on, while evidence this verifier cannot read
+    // is absence.
+    if (outcome.trusted) labels.push('integrity evidence invalid')
+    return
+  }
+  labels.push(`integrity ${outcome.verdict}`)
+}
 
 /**
  * §6.2 `timestamp`, and the §8 label rule again: absent is *no trusted time*,

@@ -622,6 +622,25 @@ Field table — type, required, verified against:
   signed by a key the verifier already has for tree heads. Absent →
   *integrity unevaluated* (§8). The server *adds* evidence; it is never
   *needed* for a verdict.
+
+  A verifier MUST check the signature over `core_hash ‖ UTF-8(verdict)` under a
+  trusted registry key and that `source` and `verdict` are values this section
+  names. A valid attachment is shown as **`integrity <verdict>`** and **changes
+  no ceiling**: §7 takes the proven level from `attestation`, and the same
+  rooted device that fails an integrity check also fails to produce a chain to
+  a hardware root — so counting it again would count one fact twice. `failed`
+  is therefore *authentic, and here is what Google said*, which is the point of
+  showing it at all: a reader shown nothing takes no news for good news.
+
+  The verdict is inside the signed message, and that is what the signature
+  buys: a verdict cannot be **strengthened**, because `failed` cannot become
+  `hardware` without breaking it. It cannot buy the other direction. A
+  relabelled attachment is indistinguishable from one signed by a registry the
+  verifier does not follow — both are "no key of mine made this signature" —
+  and an attacker who wanted to suppress a `failed` verdict could delete the
+  attachment for the same result. Something whose absence and whose invalidity
+  are the same answer cannot be load-bearing, which is the reason this
+  attachment has no row in §7's table.
 - **`timestamp.tsr`** — RFC 3161 TimeStampToken, base64url DER, whose
   `messageImprint` **is `core_hash`** (hash algorithm `sha256`, hashed message =
   the 32 bytes of `core_hash`). A timestamp over `media.hash` would prove the
@@ -771,6 +790,7 @@ because "no trusted time" on a tampered file is noise.
 | `registry` present, `log_id` unknown to this verifier | *log not trusted* | not evidence that failed: evidence this verifier cannot read |
 | the log's signed status, when offline | *revocation not checked* | the key was in the log; whether it still is cannot be established without asking |
 | `timestamp` present, no TSA root pinned | *trusted time not evaluated* | evidence this verifier cannot read |
+| `integrity` present and valid | *integrity `<verdict>`* | what Google or Apple said about the device, relayed — shown, and never a ceiling |
 | `anchor` present, chain not consulted | *anchoring not verified* | the path reaches the claimed root; nobody checked the chain recorded it |
 
 **An attachment that is present and does not hold up carries two labels: the
