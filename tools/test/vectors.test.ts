@@ -31,7 +31,7 @@ describe('conformance vectors', () => {
       expect(validateExpected(expected).errors).toEqual([])
       // `verifier_clock` is an input the vector declares, not a field a
       // verifier produces: it is destructured out with the other inputs.
-      const { kind, debug: _debug, schema_valid: schemaValid, verifier_clock: verifierClock, ...want } = expected
+      const { kind, debug: _debug, schema_valid: schemaValid, verifier_clock: verifierClock, key_status: keyStatus, ...want } = expected
 
       if (kind === 'file' || kind === 'container') {
         // A container vector is a file vector plus the §5 recomputation: same
@@ -42,9 +42,11 @@ describe('conformance vectors', () => {
           file: readFileSync(join(path, input)),
           sidecar: existsSync(sidecarPath) ? readFileSync(sidecarPath) : undefined,
           recomputeSegments: kind === 'container',
-          // The anchors the corpus ships, and the clock the vector pins.
+          // The anchors the corpus ships, the clock the vector pins, and the
+          // log's answer it declares the verifier fetched.
           trust,
-          clock: verifierClock ? new Date(verifierClock) : undefined
+          clock: verifierClock ? new Date(verifierClock) : undefined,
+          keyStatus
         })
         expect(pick(verdict, want)).toEqual(want)
         const proofPath = join(path, 'proof.json')
