@@ -1,0 +1,31 @@
+{
+  "kind": "container",
+  "outcome": "authentic",
+  "labels": [
+    "integrity unevaluated",
+    "key not in transparency log",
+    "no trusted time",
+    "no watermark",
+    "not anchored",
+    "origin not hardware-attested"
+  ],
+  "not_evaluated": [],
+  "core_hash": "94d0e4350287e0a564d547cc2f0e7ebeca266c700c486b936037404ef21fdca3",
+  "segments": {
+    "verified": [
+      0,
+      1,
+      2
+    ]
+  },
+  "level": {
+    "claimed": "secureEnclave",
+    "proven": "none",
+    "ceiling": "amber"
+  },
+  "validated_at": {
+    "instant": "2026-09-10T10:55:38.426Z",
+    "source": "device_clock"
+  },
+  "schema_valid": true
+}

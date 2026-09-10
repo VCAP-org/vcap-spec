@@ -12,10 +12,11 @@ import { createHash } from 'node:crypto'
  * and it is deliberately written from §5 rather than from the Android
  * implementation that produced the vectors.
  *
- * It reads sample tables only: no fragmented MP4 (`moof`), no edit lists. The
- * captures the format cares about are progressive files written by a muxer at
- * the end of a recording, and a vector that needed `moof` would need a writer
- * that emits it first.
+ * It reads sample tables only: no fragmented MP4 (`moof`). The captures the
+ * format cares about are progressive files written by a muxer at the end of a
+ * recording, and a vector that needed `moof` would need a writer that emits it
+ * first. Edit lists it does read — see `editsOf`, and vector 36 for the file
+ * that made them necessary.
  */
 
 /** The vcap SEI UUID: SHA-256("vcap/1.0/sei")[0:16] (§5). */

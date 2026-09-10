@@ -6,7 +6,7 @@ its input:
 | `kind` | Input | What it exercises |
 |---|---|---|
 | `file` | `input.<ext>`, optional `input.<ext>.vcap` sidecar, `proof.json` for reading | trailer, canonical bytes, core signature, key binding, version policy, absence labels |
-| `container` | `input.mp4`, `proof.json` for reading | everything `file` does **plus** §5: every present segment's `content_hash` recomputed from the NAL units and audio frames of the received container |
+| `container` | `input.mp4` or `input.mov`, `proof.json` for reading | everything `file` does **plus** §5: every present segment's `content_hash` recomputed from the NAL units and audio frames of the received container |
 | `segments` | `segments.json` — `capture_id`, `pub`, `segment_count`, `segments[]` | the §5 chain at message level: content hashes given, no container |
 | `jcs` | `core.json` | canonicalization: expected `core_bytes_hex` and `core_hash` |
 
@@ -58,15 +58,23 @@ again produces different bytes and every attested vector would be rewritten on
 every run for nothing. Run the script only to change what a chain *says*, and
 expect the vectors that use it to change with it.
 
-**The `container` vectors are the exception.** They were sealed by real hardware
-and carry a real device's key in `sig.pub`, so `npm run generate` cannot make
-them — it has no camera and no device key, and it now owns only the directories
-it declares, printing the ones it left alone. It used to delete every numbered
-directory before rewriting, which for these four was not a rewrite but a loss. `tools/src/derive-container-vectors.ts`
-rebuilds all four from the two sealed files a device produced, which is what
-keeps the two edited cases (38, 39) auditable rather than asserted. An
-implementation that only ever meets this repository's test key never learns
-whether it can read a real one.
+**The vectors that came off a device are the exception.** `npm run generate`
+cannot make them — it has no camera and no device key — and it now owns only the
+directories it declares, printing the ones it left alone. It used to delete
+every numbered directory before rewriting, which for these was not a rewrite
+but a loss. Two scripts rebuild them instead, each pointed at the artifacts a
+device produced: `tools/src/derive-container-vectors.ts` for 36-39 (Android) and
+`tools/src/derive-ios-vectors.ts` for 47-48 (iOS). That is what keeps the edited
+cases (38, 39) auditable rather than asserted.
+
+They are not all the same weight of evidence, and each `NOTES.md` says which it
+is. 36-39 and 47 carry a **real device signature**: an implementation that only
+ever meets this repository's test key never learns whether it can read a real
+one, and 47 is the only proof here made by a Secure Enclave. In 48 the
+**container** is the device's and every `content_hash` is recomputed from it,
+but the chain over them is synthesized with the test key — the S1 spike inserted
+vcap SEIs and never sealed a video, so there was no iOS video signature to
+carry.
 
 ## Running them
 
@@ -81,10 +89,6 @@ as `expected.json`, and the same `core_bytes_hex` for `jcs` vectors.
 
 ## Not here yet, and why
 
-- **Container-level video on iOS/MOV**: vectors 36–39 cover Android's H.264 and
-  HEVC; the MOV branch arrives with S1. The chain alone is still covered at
-  message level (25–31), which is the layer a verifier without a demuxer
-  implements.
 - **Proof level** (§7: attestation chains, registry inclusion, revocation):
   after C6 exposes the material. The signature layer here never evaluates it.
 - **`timestamp` and `anchor` attachments**: after C7/C8.
