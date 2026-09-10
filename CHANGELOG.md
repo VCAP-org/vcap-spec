@@ -25,6 +25,32 @@ with it.
   from the model, which is an artifact fetched by digest and stays out.
 - No change to the proof format, the schema or any vector verdict.
 
+### The integrity slice, the last attachment (vectors 64-67, §6.2, §8)
+
+- The reference verifier now checks `integrity`: the signature over
+  `core_hash ‖ UTF-8(verdict)` under a trusted registry key, and that `source`
+  and `verdict` are values §6.2 names. A valid attachment reads as
+  **`integrity <verdict>`**; §8's table gains that row.
+- **It changes no ceiling, and §6.2 now says why.** §7 takes the proven level
+  from `attestation`, and the same rooted device that fails an integrity check
+  also fails to produce a chain to a hardware root — counting it again would
+  count one fact twice. Vector 65 pins `failed` as *authentic, and here is what
+  Google said*, which is the vector most likely to be "fixed" by somebody who
+  reads it as too lenient.
+- **What the signature buys, and what it cannot.** The verdict is inside the
+  signed message, so a verdict cannot be *strengthened*. It cannot buy the
+  other direction: a relabelled attachment (vector 66) is indistinguishable
+  from one signed by a registry the verifier does not follow, and an attacker
+  suppressing a `failed` verdict could simply delete the attachment for the
+  same answer. Something whose absence and whose invalidity are the same
+  answer cannot be load-bearing — which is the reason this attachment has no
+  row in §7's table, now written down rather than implied.
+- Vector 67 is where *integrity evidence invalid* belongs: a verdict outside
+  the enumeration, correctly signed. Present, readable and meaningless, and
+  schema-invalid too — the two gates disagreeing about a proof would say the
+  schema and the verifier disagree about the format.
+- With this every attachment §6.2 defines has vectors behind it.
+
 ### The timestamp slice, and the last of §7 (vectors 59-63, §6.2, §8)
 
 - The reference verifier now validates `timestamp.tsr`: CMS SignedData over

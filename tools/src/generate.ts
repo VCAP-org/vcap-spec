@@ -976,6 +976,108 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
   }
 }
 
+
+// ---- integrity: the attachment that changes no ceiling ---------------------
+//
+// §6.2's `integrity` relays a Play Integrity or App Attest verdict about the
+// device, signed by the registry over `core_hash ‖ UTF-8(verdict)`. A device
+// cannot carry one itself: the verdict arrives as a token only the developer's
+// server can decrypt, so in the core it would be a self-declaration — and a
+// self-declaration by the app is worthless against the compromised device it
+// exists to flag.
+//
+// It corroborates and never carries. §7 takes the proven level from
+// `attestation`, and the same rooted device that fails an integrity check also
+// fails to produce a chain, so a `failed` verdict is shown and moves no
+// ceiling. Vector 66 is the one that pins that, and it is the vector most
+// likely to be "fixed" by somebody who reads it as too lenient.
+{
+  const CAPTURE = 1757332800000
+  const day = 86_400_000
+  const logKey = createPrivateKey({ key: Buffer.from(TEST_LOG_KEY_PKCS8_BASE64, 'base64'), format: 'der', type: 'pkcs8' })
+
+  /** §6.2: `core_hash ‖ UTF-8(verdict)`, signed by the registry's key. */
+  const integrityFor = (proof: Proof, o: { verdict?: string, source?: string, forge?: boolean, otherKey?: boolean } = {}): Proof => {
+    const verdict = o.verdict ?? 'hardware'
+    const message = Buffer.concat([coreHash(proof), Buffer.from(verdict, 'utf8')])
+    const key = o.otherKey
+      ? createPrivateKey({ key: generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).privateKey.export({ type: 'pkcs8', format: 'der' }), format: 'der', type: 'pkcs8' })
+      : logKey
+    const signature = o.forge
+      // A signature over another verdict: the bytes are real, the claim is not.
+      ? signEs256(Buffer.concat([coreHash(proof), Buffer.from('basic', 'utf8')]), key)
+      : signEs256(message, key)
+    return { source: o.source ?? 'playIntegrity', verdict, evaluated_at: CAPTURE + 1000, sig: signature.toString('base64url') }
+  }
+
+  const withIntegrity = (o: Parameters<typeof integrityFor>[1] = {}): Proof => {
+    const proof = sign(photoCore(baseJpeg, 'image/jpeg'))
+    return { ...proof, integrity: integrityFor(proof, o) }
+  }
+  const NO_INTEGRITY_LABEL = PHOTO_LABELS.filter((l) => l !== 'integrity unevaluated')
+
+  {
+    const proof = withIntegrity()
+    file({ name: '64-jpeg-integrity-hardware', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: {
+        outcome: 'authentic',
+        labels: [...NO_INTEGRITY_LABEL, 'integrity hardware'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'none', ceiling: 'amber' },
+        validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+      },
+      notes: 'A Play Integrity verdict of `hardware`, relayed and signed by the registry over `core_hash ‖ UTF-8("hardware")`. *integrity unevaluated* is gone and the label names what came back.\n\nThe verdict is inside the signature, which is the reason a string this short is signed at all: a relay that covered only the core hash could be re-labelled after the fact, and `failed` would become `hardware` with the signature still checking out.\n\nThe key is the one that signs the log\'s tree heads (§6.2), so a verifier needs nothing it does not already hold — and a verifier holding no log key reports the absence rather than a failure, which is vector 67.' })
+  }
+
+  {
+    const proof = withIntegrity({ verdict: 'failed', source: 'playIntegrity' })
+    file({ name: '65-jpeg-integrity-failed', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: {
+        outcome: 'authentic',
+        labels: [...NO_INTEGRITY_LABEL, 'integrity failed'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'none', ceiling: 'amber' },
+        validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+      },
+      notes: '**The vector most likely to be "fixed" by somebody who reads it as too lenient.** Google says this device failed its integrity check, the registry relays it, and the outcome is still `authentic` with the ceiling unmoved.\n\nThat is deliberate and it is §7. The proven level comes from `attestation`, and the same rooted device that fails an integrity check also fails to produce a chain to a hardware root — so the level already says `none` here, and lowering it further on the strength of a corroborating signal would be counting one fact twice. The format\'s promise is that this file was signed by the key it names; the state of the device is a different question, answered from different evidence.\n\nWhat the verdict must do is **show it**, which is what the label is for. A reader shown nothing would take no news for good news, and this is news.' })
+  }
+
+  {
+    const proof = withIntegrity({ forge: true })
+    file({ name: '66-jpeg-integrity-relabelled', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: {
+        outcome: 'authentic',
+        labels: PHOTO_LABELS,
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'none', ceiling: 'amber' },
+        validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+      },
+      notes: 'A genuine registry signature over `core_hash ‖ "basic"`, presented with `verdict: "hardware"`. Every byte of the signature is real; the field beside it was changed after the signing.\n\nIt reads as **one label, and it is the absent one** — and that is the honest answer rather than a shortcoming. A verifier cannot tell a relabelled verdict from one signed by a registry it does not follow: both are "no key of mine made this signature", and inventing a distinction it cannot support would be worse than reporting the weaker reading.\n\nNor does the relabelling gain anything. An attacker who wanted to suppress a `failed` verdict could simply **delete the attachment**, which produces the same *integrity unevaluated*. That is inherent to a corroborating attachment and it is why §7 gives this one no ceiling: something whose absence and whose invalidity are the same answer cannot be load-bearing.\n\nWhat the signature *does* buy is the other direction: a verdict cannot be strengthened. `failed` cannot become `hardware`, because the verdict is inside the signed message — which is the reason a string this short is signed at all.' })
+  }
+
+  {
+    const proof = withIntegrity({ verdict: 'green' })
+    file({ name: '67-jpeg-integrity-unknown-verdict', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      schemaValid: false,
+      expected: {
+        outcome: 'authentic',
+        labels: [...NO_INTEGRITY_LABEL, 'integrity unevaluated', 'integrity evidence invalid'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'none', ceiling: 'amber' },
+        validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+      },
+      notes: 'A verdict of `green`, correctly signed by the registry over `core_hash ‖ UTF-8("green")`. §6.2 lists four verdicts and this is not one of them, so the attachment is **readable, genuine and meaningless**.\n\nThis is where *integrity evidence invalid* belongs and where the relabelled vector 66 could not reach it: a signature nobody recognises is indistinguishable from absence, while a value outside the enumeration is present evidence that does not parse into anything a reader can be told. Both labels of §8.\n\nAlso schema-invalid, which is the point of having both gates: the schema refuses it on the shape and the verifier refuses it on the meaning, and a proof that passed one and not the other would say the two disagree about the format.' })
+  }
+}
+
 // what it can rebuild is the difference between a generator and a broom.
 const owned = new Set(vectors.map((v) => v.name))
 if (existsSync(VECTORS)) {
