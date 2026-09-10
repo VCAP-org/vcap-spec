@@ -1,10 +1,53 @@
 # Changelog
 
-`vcap/1.0` is frozen. Changes after the tag are additive only (spec §9): new
-optional keys, new values in fields declared extensible. Every entry names the
-section it touches, the vectors it adds and what an older verifier does with it.
+`vcap/1.0` is a **draft**: the six format decisions are settled, the wire
+contract is not binding yet. The additive-only rule of §9 starts at the first
+publication — the first store build, or the first SDK handed to an integrator —
+not at the `v1.0` tag, which is a working tag with a pre-release. Until then a
+breaking change is allowed and is marked **BREAKING** here. Every entry names
+the section it touches, the vectors it adds and what an older verifier does
+with it.
 
 ## Unreleased
+
+### BREAKING — `media.w` and `media.h` are required (§8, §9, D9)
+
+- §8 requires the pixel dimensions of every proof. They are not evidence —
+  nothing is proven by them — but every writer holds them at capture, and a
+  reader that cannot say how large the frame is cannot place a watermark
+  payload or a segment in it. Missing is malformed: *no proof found*, the same
+  shape as an absent `capture_id`, and the signature is never examined because
+  the §8 shape check fires first. **Vector 46** pins it.
+- Why this is breaking and taken anyway: a proof without them was conformant
+  yesterday and is not today. Every vector already carried them and the Android
+  core already writes them unconditionally, so nothing in the project changes
+  behaviour — but a third-party writer built against the old schema would break,
+  which is exactly what §9 forbids once the format is published. It is taken now
+  because now is the only time it is free.
+
+### BREAKING — `segments[].range` is deprecated (§5, D9)
+
+- Writers MUST NOT emit it; verifiers MUST ignore it where an older file carries
+  it. It was unsigned, a verifier was already forbidden to conclude anything
+  from it, and its base was never specified: the offsets are taken before the
+  trailer is appended and any clip moves them, so two writers had no obligation
+  to agree. A field nobody may trust and everybody may compute differently is an
+  invitation to trust it by accident.
+- No file is invalidated: `range` is outside the core hash and outside the
+  per-segment message, so every already-sealed file verifies unchanged, and no
+  vector carried it.
+
+### A verifier that does not recompute segment content says so (§5, §7, D10)
+
+- Recomputing the §5 `content_hash` values from the container stays **optional**
+  — a sidecar without a demuxable container, a light library — but a verifier
+  that skips it MUST report *segment content not recomputed*. The two answers
+  differ: on vector 39 the same file reads *verified_clip* without the
+  recomputation and *tampered* with it, so a reader who is not told which one
+  ran cannot know what the verdict means. Same shape as the watermark labels.
+- **Vector 33** now carries the label; vectors 36–39 (`kind: container`) do not,
+  because there the recomputation runs. An older verifier that omits the label
+  is not wrong about the file, only silent about its own coverage.
 
 ### The instant a proof is validated at (§6.2, §7, §9)
 
