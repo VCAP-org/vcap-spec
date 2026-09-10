@@ -1,4 +1,4 @@
-import { createHash, createPrivateKey } from 'node:crypto'
+import { createHash, createPrivateKey, generateKeyPairSync } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { type Json, jcs } from './jcs.js'
@@ -11,6 +11,7 @@ import { type SegmentEntry, SEPARATOR, ZERO_LINK, linkOf, segmentMessage } from 
 import { signChain, signEs256 } from './sign.js'
 import { TEST_KEY_PKCS8_BASE64 } from './testkey.js'
 import { TEST_LOG_KEY_PKCS8_BASE64 } from './testlogkey.js'
+import { type KeyStatusStatement, keyStatusMessage, leafHash, leafKeyId, nodeHash, treeHeadMessage } from './registry.js'
 import { loadTrust } from './trust.js'
 import { type Verdict, verifyFile, verifySegments } from './verify.js'
 import { validateProof } from './schema.js'
@@ -98,7 +99,7 @@ const bmffBox = (type: string, payload: Buffer): Buffer => {
 
 // ---- vectors --------------------------------------------------------------
 
-interface FileVector { kind: 'file', name: string, ext: string, file: Buffer, sidecar?: Buffer, proof?: Proof, expected: Partial<Verdict> & { outcome: Verdict['outcome'] }, schemaValid?: boolean, notes: string, verifierClock?: number }
+interface FileVector { kind: 'file', name: string, ext: string, file: Buffer, sidecar?: Buffer, proof?: Proof, expected: Partial<Verdict> & { outcome: Verdict['outcome'] }, schemaValid?: boolean, notes: string, verifierClock?: number, keyStatus?: Json }
 interface SegVector { kind: 'segments', name: string, input: { capture_id: string, pub: string, segment_count: number, segments: SegmentEntry[] }, expected: Partial<Verdict> & { outcome: Verdict['outcome'] }, notes: string, debug?: Json }
 interface JcsVector { kind: 'jcs', name: string, input: Json, expected: { core_bytes_hex: string, core_hash: string }, notes: string }
 type Vector = FileVector | SegVector | JcsVector
@@ -527,6 +528,212 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
 // It used to delete every numbered directory, which quietly destroyed the
 // container vectors: they are sealed by real hardware and signed by a device
 // key nobody here holds, so a rewrite is not a rewrite but a loss. Owning only
+
+// ---- registry: the key in the transparency log, and the first green ---------
+//
+// §6.2's `registry` is the one attachment a verifier checks entirely offline:
+// the proof carries the leaf, its RFC 6962 audit path and a signed tree head,
+// so "the key was in the log when that head was signed" needs no server. What
+// it cannot carry is the *absence* of a later revocation leaf — nothing in a
+// Merkle tree proves a leaf does not exist — which is why §6.2 makes
+// revocation a signed statement fetched online instead.
+//
+// These are the vectors that make **green** reachable for the first time. Up to
+// vector 45 the corpus topped out at amber and said why: the key was not in the
+// log. Now it can be, and the four failures around it are here too, because a
+// green that cannot be refused is a green nobody should trust.
+{
+  const CAPTURE = 1757332800000
+  const day = 86_400_000
+  const chainOf = (name: string): string[] => (JSON.parse(readFileSync(join(VECTORS, '_chains', `${name}.json`), 'utf8')) as { chain: string[] }).chain
+  const logKey = createPrivateKey({ key: Buffer.from(TEST_LOG_KEY_PKCS8_BASE64, 'base64'), format: 'der', type: 'pkcs8' })
+  const digest = (...parts: Buffer[]): Buffer => parts.reduce((h, part) => h.update(part), createHash('sha256')).digest()
+  // `log_id` is the log key's own identifier: SHA-256 of its DER SPKI,
+  // base64url — the same derivation `device.key_id` uses for a signing key.
+  const LOG_ID = digest(spkiOf(logKey)).toString('base64url')
+
+  const statusAttachment = (proof: Proof, fetchedAt: number, entries: Json): Proof => {
+    const at = Buffer.alloc(8)
+    at.writeBigUInt64BE(BigInt(fetchedAt))
+    const message = Buffer.concat([coreHash(proof), jcs(entries), at])
+    return { source: 'googleStatusList', fetched_at: fetchedAt, entries, sig: signEs256(message, logKey).toString('base64url') }
+  }
+
+  /**
+   * A tree of `size` leaves with ours at `index`, and the audit path for it.
+   *
+   * The other leaves are stand-ins: what a path proves is the shape of the
+   * tree, so their content is irrelevant and their *number* is not — a
+   * one-leaf tree would exercise no path at all, and a power of two would hide
+   * the incomplete-level case that trips a naive verifier.
+   */
+  const treeWith = (leaf: Buffer, index: number, size: number): { root: Buffer, path: Buffer[] } => {
+    let level = Array.from({ length: size }, (_, i) => i === index ? leaf : leafHash(Buffer.from(`filler ${i}`, 'utf8')))
+    const path: Buffer[] = []
+    let position = index
+    while (level.length > 1) {
+      if (position % 2 === 1) path.push(level[position - 1] as Buffer)
+      else if (position + 1 < level.length) path.push(level[position + 1] as Buffer)
+      const next: Buffer[] = []
+      for (let i = 0; i < level.length; i += 2) {
+        next.push(i + 1 < level.length ? nodeHash(level[i] as Buffer, level[i + 1] as Buffer) : level[i] as Buffer)
+      }
+      level = next
+      position = Math.floor(position / 2)
+    }
+    return { root: level[0] as Buffer, path }
+  }
+
+  /** The §6.2 attachment for a key, with every field the spec names. */
+  const registryFor = (o: {
+    keyId?: string, pub?: string, secureHw?: string, headTimestamp?: number,
+    logId?: string, forgePath?: boolean, index?: number, size?: number
+  } = {}): Proof => {
+    const leaf: Proof = {
+      type: 'key',
+      // Hex, which is how a log leaf records the digest that `device.key_id`
+      // carries in base64url. One value, two encodings.
+      key_id: leafKeyId(o.keyId ?? KEY_ID) as string,
+      public_key: (o.pub ?? spkiOf(privateKey).toString('base64')),
+      secure_hw: o.secureHw ?? 'tee',
+      attestation_digest: digest(Buffer.from('the chain as the log received it', 'utf8')).toString('hex'),
+      registered_at: CAPTURE - day
+    }
+    const index = o.index ?? 3
+    const size = o.size ?? 7
+    const { root, path } = treeWith(leafHash(jcs(leaf as Json)), index, size)
+    const timestamp = o.headTimestamp ?? CAPTURE - 3600000
+    return {
+      log_id: o.logId ?? LOG_ID,
+      leaf_index: index,
+      leaf,
+      inclusion_path: (o.forgePath
+        ? path.map(() => digest(Buffer.from('not the sibling', 'utf8')))
+        : path).map((hash) => hash.toString('base64url')),
+      tree_head: {
+        tree_size: size,
+        timestamp,
+        root_hash: root.toString('base64url'),
+        signature: signEs256(treeHeadMessage(size, timestamp, root), logKey).toString('base64url')
+      }
+    }
+  }
+
+  /** An attested photo with a registry attachment and a clean status list. */
+  const registered = (o: Parameters<typeof registryFor>[0] = {}, statusEntries: Json = [{ serial: '02', status: 'valid' }]): Proof => {
+    const base = { ...sign(photoCore(baseJpeg, 'image/jpeg')), attestation: chainOf('tee') }
+    return { ...base, attestation_status: statusAttachment(base, CAPTURE - 1800000, statusEntries), registry: registryFor(o) }
+  }
+
+  // Every absence label except the three this vector answers.
+  const GREEN_LABELS = PHOTO_LABELS.filter((l) =>
+    l !== 'origin not hardware-attested' && l !== 'key not in transparency log')
+
+  /** §6.2's online status, signed by the log for one instant only. */
+  const statusStatement = (at: number, status: 0 | 1 | 2, treeSize = 7): Json => ({
+    log_id: LOG_ID,
+    at,
+    tree_size: treeSize,
+    status,
+    signature: signEs256(keyStatusMessage(Buffer.from(KEY_ID, 'base64url'), at, treeSize, status), logKey).toString('base64url')
+  })
+
+  {
+    const proof = registered()
+    file({ name: '49-jpeg-registry-verified', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: {
+        outcome: 'authentic',
+        labels: [...GREEN_LABELS, 'revocation not checked'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
+        validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+      },
+      notes: 'The corpus\'s first **green**. Everything §7 asks for is present and checkable offline: a chain that proves `tee` to the pinned test root, a signed status list saying its certificates were valid, and a `registry` attachment whose tree head the log signed before the declared capture, with an RFC 6962 audit path that lands on the signed root and a leaf naming this key and this public key.\n\nThe tree has **seven** leaves and ours is the fourth. Neither number is arbitrary: a one-leaf tree exercises no path, and a power of two hides the incomplete level where an implementation that pads instead of promoting a lone node gets a different root.\n\n`key not in transparency log` is gone — the label everything up to vector 45 carried — and the ceiling is still **amber**, for the one reason that remains: an inclusion proof shows the key was in the log when a head was signed and cannot show it was not revoked afterwards, because a revocation is a later leaf and nothing in a Merkle tree proves a leaf\'s absence. So *revocation not checked*, and vector 54 is the same proof with the log\'s signed answer supplied.' })
+  }
+
+  {
+    const proof = registered({ forgePath: true })
+    file({ name: '50-jpeg-registry-path-forged', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: {
+        outcome: 'authentic',
+        labels: [...GREEN_LABELS, 'key not in transparency log', 'registry evidence invalid'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
+        validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+      },
+      notes: 'The same proof with every hash in the audit path replaced. The tree head signature still verifies — it is the log\'s, over a root the log really signed — and the leaf still names this key, so the only thing that fails is the walk from the leaf to the root, which is the whole point of an inclusion proof.\n\n**Two labels, not one.** *key not in transparency log* is the §7 consequence: nothing here establishes the registration, so the ceiling drops to amber exactly as if the attachment were absent. *registry evidence invalid* is the fact a reader can act on — somebody handed this verifier a forged proof, which is a different thing from nobody having registered the key, and a verifier that reported only the first would throw away the part worth telling a user. The **core is untouched**: the capture is still signed by the key it says, and the outcome stays `authentic`.' })
+  }
+
+  {
+    // Another key's id and another key's public half: a leaf that is genuinely
+    // in the log, for somebody else.
+    const other = createPrivateKey({ key: generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).privateKey.export({ type: 'pkcs8', format: 'der' }), format: 'der', type: 'pkcs8' })
+    const otherSpki = spkiOf(other)
+    const proof = registered({ keyId: keyId(otherSpki), pub: otherSpki.toString('base64') })
+    file({ name: '51-jpeg-registry-other-key', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: {
+        outcome: 'authentic',
+        labels: [...GREEN_LABELS, 'key not in transparency log', 'registry evidence invalid'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
+        validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+      },
+      notes: 'A registry attachment that is internally perfect — signed head, valid inclusion, a real leaf — and about **another key**. This is the attachment a client would embed by mistake after enrolling twice, or one an attacker would lift from somebody else\'s proof, and the reason §6.2 requires `leaf.key_id == device.key_id` **and** `leaf.public_key == sig.pub`. Checking the id alone is not enough: an id is a hash of a key, so a leaf whose two fields disagreed would be a leaf the log should never have accepted, and the mismatch has to be caught here rather than assumed away.' })
+  }
+
+  {
+    const proof = registered({ logId: digest(Buffer.from('a log nobody pinned', 'utf8')).toString('base64url') })
+    file({ name: '52-jpeg-registry-log-not-trusted', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: {
+        outcome: 'authentic',
+        labels: [...GREEN_LABELS, 'log not trusted'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
+        validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+      },
+      notes: 'A well-formed attachment naming a `log_id` this verifier does not hold a key for. **One label, and not the invalid one.** "Nobody I trust runs that log" is the same fact as an absent attachment — nobody can check the registration — while a forged path (vector 50) is evidence that does not hold up. §8\'s rule is that absent evidence is a weaker verdict and never an error, and a log outside the trust set is absent evidence, not a lie.\n\nIt is also the vector that says a verdict is only ever green *against a named set of anchors*: the same bytes are green for a verifier that pins this log and amber for one that does not, and both are right.' })
+  }
+
+  {
+    const proof = registered()
+    file({ name: '54-jpeg-registry-green', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      keyStatus: statusStatement(CAPTURE, 1),
+      expected: {
+        outcome: 'authentic',
+        labels: GREEN_LABELS,
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'green' },
+        validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+      },
+      notes: 'The corpus\'s first **green**, and it takes one more input than vector 49: the log\'s signed answer about this key at the instant the capture is validated at.\n\n`key_status` in `expected.json` is an **input**, like `verifier_clock` — the verifier fetched it, the corpus declares what it fetched. It has to be, because §6.2 makes revocation an online question: the proof cannot carry the absence of a later revocation leaf, so no file on its own can be green. A conformance corpus that pretended otherwise would be testing a verdict no verifier can reach.\n\nThe statement is bound to **this key and this instant** — `"vcap/1.0/status" ‖ key_id ‖ at ‖ tree_size ‖ status`, signed by the log\'s tree-head key — so a statement about last week, correctly signed, is a valid answer to the wrong question and is refused as one. Everything §7 asks for is now present: `tee` proven by a chain to the pinned root, the chain\'s certificates valid in a signed status list, the key in the log before the capture, and the key not revoked at that instant. Change any one and the ceiling drops, which is what the four vectors around this one are for.' })
+  }
+
+  {
+    const proof = registered({ headTimestamp: CAPTURE + day })
+    file({ name: '53-jpeg-registry-after-capture', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + 2 * day,
+      expected: {
+        outcome: 'authentic',
+        labels: [...GREEN_LABELS, 'registered after the declared capture', 'revocation not checked'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
+        validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+      },
+      notes: 'Valid evidence, a day late. The tree head was signed after `time.device_clock`, so what the log proves is that the key was registered **at some point**, not that it was registered when this capture claims to have happened — a key enrolled after the fact could have signed a file dated before it.\n\nAmber and shown, not rejected: the registration is real and the label says what is missing. `key not in transparency log` is **absent** here, which is the distinction the two labels exist to draw — the key is in the log, and the timing is what does not line up.' })
+  }
+}
+
 // what it can rebuild is the difference between a generator and a broom.
 const owned = new Set(vectors.map((v) => v.name))
 if (existsSync(VECTORS)) {
@@ -557,10 +764,13 @@ for (const vector of vectors) {
       // runs (a chain expires), so a vector that did not pin the clock would
       // change its own answer with the calendar.
       ...(vector.verifierClock ? { verifier_clock: vector.verifierClock } : {}),
+      // Also an input: §6.2 makes revocation an online question, so a vector
+      // that needs it declares what the verifier is assumed to have fetched.
+      ...(vector.keyStatus ? { key_status: vector.keyStatus } : {}),
       ...vector.expected,
       ...(vector.proof ? { schema_valid: schemaValid } : {})
     }, null, 2) + '\n')
-    actual = pick(verifyFile({ file: vector.file, sidecar: vector.sidecar, trust, clock: vector.verifierClock ? new Date(vector.verifierClock) : undefined }), vector.expected)
+    actual = pick(verifyFile({ file: vector.file, sidecar: vector.sidecar, trust, clock: vector.verifierClock ? new Date(vector.verifierClock) : undefined, keyStatus: vector.keyStatus as KeyStatusStatement | undefined }), vector.expected)
     // The schema must agree with the review too: a proof the review calls
     // conforming that the schema refuses is a bug in one of the two.
     if (vector.proof) {

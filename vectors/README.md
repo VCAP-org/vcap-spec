@@ -25,6 +25,13 @@ every certificate path was validated at, and what proved it) appear on the
 vectors that carry attestation evidence. `debug`, where present, is for humans:
 intermediate bytes to compare before touching signatures.
 
+`key_status`, where present, is also an **input**: §6.2's online revocation
+answer, as the corpus declares a verifier is assumed to have fetched it. It has
+to be an input, because the proof cannot carry the *absence* of a later
+revocation leaf — nothing in a Merkle tree proves a leaf does not exist — so no
+file on its own can reach green. A corpus that pretended otherwise would be
+testing a verdict no verifier can reach.
+
 `verifier_clock`, where present, is an **input and not an expectation**: the
 verifier's own clock in ms. A §7 verdict depends on it, because certificates
 expire — an attested capture read a year later is a different question from the
@@ -89,8 +96,6 @@ as `expected.json`, and the same `core_bytes_hex` for `jcs` vectors.
 
 ## Not here yet, and why
 
-- **Proof level** (§7: attestation chains, registry inclusion, revocation):
-  after C6 exposes the material. The signature layer here never evaluates it.
 - **`timestamp` and `anchor` attachments**: after C7/C8.
 - **Watermark-only match, cropped photo beyond the correction budget**:
   detector vectors, ML review.

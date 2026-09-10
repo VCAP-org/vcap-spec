@@ -526,7 +526,12 @@ Field table — type, required, verified against:
   - `leaf`: the log leaf as recorded — `{ "type": "key", "key_id", "public_key",
     "secure_hw", "attestation_digest", "registered_at" }`, integers and
     base64/hex strings only; the verifier serializes it with JCS and hashes
-    `SHA-256(0x00 ‖ bytes)` (RFC 6962 leaf hash).
+    `SHA-256(0x00 ‖ bytes)` (RFC 6962 leaf hash). **`leaf.key_id` is the same
+    digest as `device.key_id` in a different encoding**: 64 lowercase hex
+    characters here, base64url in the core (§6.1), because a log records
+    identifiers in hex and the proof carries bytes in base64url. A verifier
+    compares the digests and not the strings — comparing the strings fails on
+    every honest proof, which is how this sentence came to exist.
   - `inclusion_path`: the RFC 6962 audit path, base64url hashes, bottom first.
   - `tree_head`: `tree_size`, `timestamp` (ms, log clock), `root_hash`
     (base64url), `signature` — ES256 by the log key in P1363 over the
@@ -536,11 +541,33 @@ Field table — type, required, verified against:
   A verifier MUST check, in this order: the tree head signature under the
   trusted key for `log_id`; the leaf hash's inclusion at `leaf_index` in a tree
   of `tree_size` leaves with root `root_hash`; `leaf.key_id == device.key_id`
-  and `leaf.public_key` equal to `sig.pub`. Any failure → *registry evidence
-  invalid*, red for the attachment (the core is unaffected: the capture is
-  still signed by the key, only "in the log" is not proven). `leaf.secure_hw`
-  is the level the log saw proven at registration; it MUST NOT exceed the level
-  proven by `attestation` when both are present.
+  (the same digest, see the encodings above) and `leaf.public_key` equal to
+  `sig.pub`. The order is normative: an unverified tree head makes the root
+  untrusted, so an inclusion proof against it establishes nothing, and
+  reporting "not included" there would blame the path for a bad signature.
+
+  Any failure → **both** *registry evidence invalid* and *key not in
+  transparency log*, amber (the core is unaffected: the capture is still signed
+  by the key, only "in the log" is not proven). Both, because they answer
+  different questions: the second is what a reader is shown — nobody can
+  confirm this key was registered — and the first is what an operator can act
+  on, since somebody presented evidence that does not hold up. A verifier that
+  emitted only the first would leave a UI written against §8's table saying
+  nothing at all about registration in exactly the case that deserves the most
+  attention.
+
+  A `log_id` the verifier holds no key for is **not** a failure of the
+  evidence: it is *log not trusted*, amber, and nothing else. Nobody the
+  verifier trusts runs that log, which is the same amount of knowledge as an
+  absent attachment — §8's rule that absent evidence is a weaker verdict and
+  never an error. The same bytes are green for a verifier that pins the log and
+  amber for one that does not, and both are right: a verdict is only ever green
+  against a named set of anchors.
+
+  `leaf.secure_hw` is the level the log saw proven at registration; it MUST NOT
+  exceed the level proven by `attestation` when both are present, and a leaf
+  that claims more is *inconsistent claim* — the label the format already has
+  for a claim above its evidence.
 
   **Before the capture.** `tree_head.timestamp` is when the log signed a tree
   containing the key. If it exceeds `time.device_clock`, the key was logged
@@ -705,6 +732,9 @@ because "no trusted time" on a tampered file is noise.
 | `timestamp` | *no trusted time* | only the device clock, shown as declared |
 | `anchor` | *not anchored* | existence before a block is not proven |
 | `registry` | *key not in transparency log* | the key may be genuine, but nobody can check its registration or revocation |
+| `registry` present, evidence broken | *registry evidence invalid*, **with** the label above | somebody presented a proof of registration that does not hold up |
+| `registry` present, `log_id` unknown to this verifier | *log not trusted* | not evidence that failed: evidence this verifier cannot read |
+| the log's signed status, when offline | *revocation not checked* | the key was in the log; whether it still is cannot be established without asking |
 | `attestation` (Android) | *origin not hardware-attested* | proven level `none` |
 | `integrity` | *integrity unevaluated* | no statement about the device's state |
 | `watermark` | *no watermark* | the detector did not run, or no mark was looked for |

@@ -25,6 +25,33 @@ with it.
   from the model, which is an artifact fetched by digest and stays out.
 - No change to the proof format, the schema or any vector verdict.
 
+### The registry slice, and the first green (vectors 49-54, §6.2, §8)
+
+- The reference verifier now evaluates `registry`: RFC 6962 leaf and node
+  hashes, inclusion against a signed tree head, and the leaf's binding to
+  `device.key_id` and `sig.pub`. Six vectors cover it — verified, a forged
+  audit path, a leaf naming another key, a log outside the trust set, a tree
+  head signed after the declared capture, and **green**.
+- **Vector 54 is the corpus's first green.** It needs one input more than the
+  others: `key_status`, §6.2's online answer about the key at the instant the
+  capture is validated at. That is a corpus convention, like `verifier_clock`,
+  and it has to be — an inclusion proof shows the key was in the log when a
+  head was signed and cannot show it was not revoked afterwards, because a
+  revocation is a later leaf and nothing in a Merkle tree proves a leaf's
+  absence. No file on its own is green, by design.
+- **§6.2 clarified, twice, both because two implementations disagreed on the
+  vectors.** `leaf.key_id` is the same digest as `device.key_id` in a different
+  encoding — 64 hex characters in the leaf, base64url in the core — so a
+  verifier compares digests and not strings; comparing the strings fails on
+  every honest proof. And a failure of the evidence emits **both** *registry
+  evidence invalid* and *key not in transparency log*, while a `log_id` the
+  verifier holds no key for emits *log not trusted* alone: evidence that does
+  not hold up and evidence this verifier cannot read are different facts, and
+  the second is absent evidence rather than a lie.
+- §8's label table gains those three rows and *revocation not checked*.
+- No change to the wire format or the schema of a proof. `expected.schema.json`
+  gains `key_status` as an input.
+
 ### The first iOS captures in the corpus (vectors 47-48)
 
 - No spec text changes. Two vectors from an iPhone 11 Pro (S1 spike,

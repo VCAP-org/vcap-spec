@@ -7,6 +7,7 @@ import { type SegmentEntry, verifyChain } from './segments.js'
 import { type Segment, containerSegments } from './container.js'
 import { RANK, validateChain } from './attestation.js'
 import { type TrustBundle } from './trust.js'
+import { type KeyStatusStatement, type RegistryAttachment, verifyKeyStatus, verifyRegistry } from './registry.js'
 import { jcs } from './jcs.js'
 
 /**
@@ -45,7 +46,7 @@ export interface Verdict {
 const ABSENT_LABELS: [string, string][] = [
   ['timestamp', 'no trusted time'],
   ['anchor', 'not anchored'],
-  ['registry', 'key not in transparency log'],
+
   ['attestation', 'origin not hardware-attested'],
   ['integrity', 'integrity unevaluated'],
   ['watermark', 'no watermark']
@@ -143,9 +144,16 @@ export interface FileInput {
   trust?: TrustBundle
   /** The verifier's own clock. Injectable so a vector's verdict is a constant. */
   clock?: Date
+  /**
+   * §6.2's online key status, as the caller fetched it. An **input**, like the
+   * clock: this layer contacts nothing, and a vector that needs green has to
+   * declare the statement a verifier is assumed to have obtained. Absent is
+   * *revocation not checked*.
+   */
+  keyStatus?: KeyStatusStatement
 }
 
-export const verifyFile = ({ file, sidecar, recomputeSegments, trust, clock = new Date() }: FileInput): Verdict => {
+export const verifyFile = ({ file, sidecar, recomputeSegments, trust, clock = new Date(), keyStatus }: FileInput): Verdict => {
   // 1. Trailer, sidecar, nesting (§3).
   const trailer = parseTrailer(file)
   if (trailer.kind === 'corrupted') return fail('corrupted_proof', 'footer valid, CRC mismatch')
@@ -206,6 +214,10 @@ export const verifyFile = ({ file, sidecar, recomputeSegments, trust, clock = ne
   const mediaObj = proof.media as { hash: string, segment_count?: number }
   const mediaMatches = mediaHash(media) === mediaObj.hash
   for (const [key, label] of ABSENT_LABELS) if (!(key in proof)) labels.push(label)
+  // §6.2 `registry`, evaluated here and not inside `level` because a clip
+  // returns before the level is computed and still has to say whether the key
+  // was in the log — the label is about the key, not about the verdict.
+  const registry = registryOutcome(proof, spki, trust, labels, deviceClockOf(proof))
   // A declared watermark is the writer saying a mark was embedded, not a
   // promise a reader finds it. This verifier ships no detector, so the only
   // honest §7 outcome is *watermark not evaluated* — never silence, which a
@@ -275,7 +287,7 @@ export const verifyFile = ({ file, sidecar, recomputeSegments, trust, clock = ne
   return {
     outcome: 'authentic', labels: labels.sort(), not_evaluated: notEvaluated, core_hash: hash,
     ...(segments ? { segments } : {}),
-    ...level(proof, spki, Buffer.from(hash, 'hex'), labels, trust, clock)
+    ...level(proof, spki, Buffer.from(hash, 'hex'), labels, trust, clock, registry, keyStatus)
   }
 }
 
@@ -286,14 +298,27 @@ export const verifyFile = ({ file, sidecar, recomputeSegments, trust, clock = ne
  * not a separate verdict — it is part of this one.
  */
 const level = (
-  proof: Proof, spki: Buffer, coreHash: Buffer, labels: string[], trust: TrustBundle | undefined, clock: Date
+  proof: Proof, spki: Buffer, coreHash: Buffer, labels: string[], trust: TrustBundle | undefined, clock: Date,
+  registry: RegistryVerdict, keyStatus: KeyStatusStatement | undefined
 ): Pick<Verdict, 'level' | 'validated_at'> => {
   // The instant (§7). This layer evaluates neither `timestamp` nor `anchor`
   // yet, so the two trusted sources are not reachable here and the instant is
   // the device's claim — which is exactly why the claim caps the verdict.
-  const deviceClock = isObject(proof.time) && typeof proof.time.device_clock === 'number' ? proof.time.device_clock : null
+  const deviceClock = deviceClockOf(proof)
   const instant = deviceClock !== null ? new Date(deviceClock) : clock
   const source = deviceClock !== null ? 'device_clock' as const : 'verifier_clock' as const
+
+  // §6.2 online revocation. The statement is an *input* — this layer contacts
+  // nothing — and its absence is the reason an offline verifier cannot reach
+  // green: *revocation not checked*, by design, because green must never mean
+  // less than it says.
+  if (registry.ok) {
+    const checked = keyStatus === undefined
+      ? null
+      : verifyKeyStatus(keyStatus, Buffer.from((proof.device as Proof).key_id as string, 'base64url'), instant, trust?.logs ?? [])
+    if (checked?.ok === true && checked.status === 2) labels.push('key revoked')
+    else if (checked?.ok !== true || checked.status === 0) labels.push('revocation not checked')
+  }
 
   const claimed = claimedLevel(proof.device as { platform: string, secure_hw: string })
   let proven = 'none'
@@ -322,12 +347,72 @@ const level = (
 
   if (chain && proven !== 'none' && (RANK[claimed] ?? 0) > (RANK[proven] ?? 0)) labels.push('inconsistent claim')
 
-  // Green needs a proven level *and* the key in the log; this layer does not
-  // evaluate `registry`, so the corpus's attested vectors top out at amber and
-  // say why. Red is for a chain that was already revoked at the capture.
-  const ceiling: NonNullable<Verdict['level']>['ceiling'] = labels.includes('attestation key revoked') ? 'red' : 'amber'
+  // A leaf's `secure_hw` is the level the log saw proven at registration. §6.2
+  // forbids it from exceeding what `attestation` proves, and the honest label
+  // is the one the format already has for a claim above its evidence.
+  if (registry.ok && (RANK[registry.secureHw] ?? 0) > (RANK[proven] ?? 0) && !labels.includes('inconsistent claim')) {
+    labels.push('inconsistent claim')
+  }
+
+  // Green needs a proven level *and* the key in the log before the capture.
+  // Red is for a chain, or a key, already revoked at the capture.
+  // Every amber cause has to be checked, not just the two nearest: §7's table
+  // caps the verdict on an unchecked chain revocation and on a capture time
+  // only the device vouches for, and a green that ignored either would be a
+  // stronger claim than the evidence.
+  const amberCauses = ['inconsistent claim', 'chain revocation not checked', 'revocation not checked',
+                       'attestation chain expired, capture time not proven', 'registry evidence invalid']
+  const green = proven !== 'none' && registry.ok && registry.beforeCapture &&
+    !amberCauses.some((cause) => labels.includes(cause))
+  const ceiling: NonNullable<Verdict['level']>['ceiling'] =
+    labels.includes('attestation key revoked') || labels.includes('key revoked') ? 'red'
+      : green ? 'green' : 'amber'
   labels.sort()
   return { level: { claimed, proven, ceiling }, validated_at: { instant: instant.toISOString(), source } }
+}
+
+/**
+ * §6.2 `registry`, reduced to what §7 needs from it: is the key in a log this
+ * verifier trusts, and was it there before the capture was claimed to happen.
+ *
+ * Three failures, and they are deliberately not one label. **Absent** and
+ * **a log nobody trusts** are the same fact — nobody can check the
+ * registration — so both read as *key not in transparency log*, which is §8's
+ * rule that absent evidence is a weaker verdict and not an error. **Evidence
+ * that does not hold up** is a different fact and gets *registry evidence
+ * invalid* on top: conflating a key nobody registered with a forged inclusion
+ * proof throws away the only part a reader can act on.
+ */
+type RegistryVerdict = { ok: false } | { ok: true, secureHw: string, beforeCapture: boolean }
+
+/** `time.device_clock`, or null when the proof declares none. */
+const deviceClockOf = (proof: Proof): number | null =>
+  isObject(proof.time) && typeof proof.time.device_clock === 'number' ? proof.time.device_clock : null
+
+const registryOutcome = (
+  proof: Proof, spki: Buffer, trust: TrustBundle | undefined, labels: string[], deviceClock: number | null
+): RegistryVerdict => {
+  if (!isObject(proof.registry)) {
+    labels.push('key not in transparency log')
+    return { ok: false }
+  }
+  const keyId = ((proof.device as Proof).key_id ?? '') as string
+  const outcome = verifyRegistry(proof.registry as unknown as RegistryAttachment, { keyId, sigPub: spki }, trust?.logs ?? [])
+  if (!outcome.ok) {
+    // A log nobody pinned is its own fact, and the shipping verifier already
+    // says so: *log not trusted* rather than the absent-evidence label, which
+    // would tell a reader nobody registered the key when somebody may well
+    // have, in a log this verifier does not follow.
+    if (!outcome.trusted) labels.push('log not trusted')
+    else labels.push('key not in transparency log', 'registry evidence invalid')
+    return { ok: false }
+  }
+  // The tree head is when the log signed a tree containing the key. Later than
+  // the declared capture means the key was logged after the fact, which is
+  // shown and caps the verdict rather than invalidating anything.
+  const beforeCapture = deviceClock === null || outcome.treeHeadTimestamp <= deviceClock
+  if (!beforeCapture) labels.push('registered after the declared capture')
+  return { ok: true, secureHw: outcome.secureHw, beforeCapture }
 }
 
 /**
