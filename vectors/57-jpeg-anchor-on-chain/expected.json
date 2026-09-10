@@ -1,0 +1,29 @@
+{
+  "kind": "file",
+  "verifier_clock": 1757419200000,
+  "chain_read": {
+    "root": "C-h_xMuR9KuPJAdv-J1UFsQ1-33Qkd9u0QhPrEljFn8",
+    "tree_size": 5,
+    "block_time": 1757332890000
+  },
+  "outcome": "authentic",
+  "labels": [
+    "integrity unevaluated",
+    "key not in transparency log",
+    "no trusted time",
+    "origin not hardware-attested",
+    "watermark not evaluated"
+  ],
+  "not_evaluated": [],
+  "core_hash": "dc59127e528a04d6e285de3abe748559e49c7f1ef66b238092a6b13afeeb5119",
+  "level": {
+    "claimed": "tee",
+    "proven": "none",
+    "ceiling": "amber"
+  },
+  "validated_at": {
+    "instant": "2025-09-08T12:01:30.000Z",
+    "source": "anchor"
+  },
+  "schema_valid": true
+}

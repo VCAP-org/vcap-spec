@@ -156,6 +156,28 @@
           "type": "string"
         }
       }
+    },
+    "chain_read": {
+      "type": "object",
+      "description": "An input, not an expectation: what a caller read from the anchoring contract for this `anchor_id`. Absent means the chain was not consulted, which is *anchoring not verified*. `block_time` is what makes the block's instant available to \u00a77.",
+      "additionalProperties": false,
+      "required": [
+        "root",
+        "tree_size"
+      ],
+      "properties": {
+        "root": {
+          "type": "string"
+        },
+        "tree_size": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "block_time": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
     }
   },
   "allOf": [

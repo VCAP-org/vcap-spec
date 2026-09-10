@@ -12,6 +12,7 @@ import { signChain, signEs256 } from './sign.js'
 import { TEST_KEY_PKCS8_BASE64 } from './testkey.js'
 import { TEST_LOG_KEY_PKCS8_BASE64 } from './testlogkey.js'
 import { type KeyStatusStatement, keyStatusMessage, leafHash, leafKeyId, nodeHash, treeHeadMessage } from './registry.js'
+import { type ChainRead } from './anchor.js'
 import { loadTrust } from './trust.js'
 import { type Verdict, verifyFile, verifySegments } from './verify.js'
 import { validateProof } from './schema.js'
@@ -99,7 +100,7 @@ const bmffBox = (type: string, payload: Buffer): Buffer => {
 
 // ---- vectors --------------------------------------------------------------
 
-interface FileVector { kind: 'file', name: string, ext: string, file: Buffer, sidecar?: Buffer, proof?: Proof, expected: Partial<Verdict> & { outcome: Verdict['outcome'] }, schemaValid?: boolean, notes: string, verifierClock?: number, keyStatus?: Json }
+interface FileVector { kind: 'file', name: string, ext: string, file: Buffer, sidecar?: Buffer, proof?: Proof, expected: Partial<Verdict> & { outcome: Verdict['outcome'] }, schemaValid?: boolean, notes: string, verifierClock?: number, keyStatus?: Json, chainRead?: Json }
 interface SegVector { kind: 'segments', name: string, input: { capture_id: string, pub: string, segment_count: number, segments: SegmentEntry[] }, expected: Partial<Verdict> & { outcome: Verdict['outcome'] }, notes: string, debug?: Json }
 interface JcsVector { kind: 'jcs', name: string, input: Json, expected: { core_bytes_hex: string, core_hash: string }, notes: string }
 type Vector = FileVector | SegVector | JcsVector
@@ -734,6 +735,131 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
   }
 }
 
+
+// ---- anchor: existence before a block, and the first instant nobody asserts -
+//
+// §6.2's `anchor` is two halves and only one is offline. Recomputing the batch
+// root from `core_hash`, `index`, `tree_size` and `merkle_path` needs nothing
+// but the proof; comparing it with what the contract recorded needs a chain
+// read, which the corpus declares as an input the way it declares `key_status`.
+//
+// The half that matters most is the block's timestamp. Every instant in the
+// corpus so far has been `time.device_clock` — the device's own word, which is
+// exactly why §7 caps those verdicts. Vector 57 is the first vector whose
+// proven instant is one nobody can move.
+{
+  const CAPTURE = 1757332800000
+  const BLOCK = CAPTURE + 90_000
+  const day = 86_400_000
+
+  /** The anchor tree: leaves are `SHA-256(0x00 ‖ core_hash)`, same as the log. */
+  const batchWith = (coreHashBytes: Buffer, index: number, size: number): { root: Buffer, path: Buffer[] } => {
+    let level = Array.from({ length: size }, (_, i) =>
+      i === index ? leafHash(coreHashBytes) : leafHash(createHash('sha256').update(`another capture ${i}`).digest()))
+    const path: Buffer[] = []
+    let position = index
+    while (level.length > 1) {
+      if (position % 2 === 1) path.push(level[position - 1] as Buffer)
+      else if (position + 1 < level.length) path.push(level[position + 1] as Buffer)
+      const next: Buffer[] = []
+      for (let i = 0; i < level.length; i += 2) {
+        next.push(i + 1 < level.length ? nodeHash(level[i] as Buffer, level[i + 1] as Buffer) : level[i] as Buffer)
+      }
+      level = next
+      position = Math.floor(position / 2)
+    }
+    return { root: level[0] as Buffer, path }
+  }
+
+  const anchorFor = (proof: Proof, o: { forgePath?: boolean, index?: number, size?: number } = {}): Proof => {
+    const index = o.index ?? 2
+    const size = o.size ?? 5
+    const { root, path } = batchWith(coreHash(proof), index, size)
+    return {
+      chain: 'base-sepolia',
+      tx: '0x' + createHash('sha256').update('the anchoring transaction').digest('hex'),
+      block: 46561942,
+      anchor_id: 0,
+      index,
+      tree_size: size,
+      root: root.toString('base64url'),
+      merkle_path: (o.forgePath
+        ? path.map(() => createHash('sha256').update('not the sibling').digest())
+        : path).map((hash) => hash.toString('base64url'))
+    }
+  }
+
+  // A plain photo, so the anchor is the only thing under test.
+  const anchored = (o: Parameters<typeof anchorFor>[1] = {}): Proof => {
+    const proof = sign(photoCore(baseJpeg, 'image/jpeg'))
+    return { ...proof, anchor: anchorFor(proof, o) }
+  }
+  const ANCHOR_LABELS = PHOTO_LABELS.filter((l) => l !== 'not anchored')
+
+  {
+    const proof = anchored()
+    file({ name: '55-jpeg-anchor-path-only', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: {
+        outcome: 'authentic',
+        labels: [...ANCHOR_LABELS, 'anchoring not verified'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'none', ceiling: 'amber' },
+        validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+      },
+      notes: 'The offline half of §6.2\'s `anchor`: the audit path recomputes the batch root from `core_hash`, `index` and `tree_size`, with leaves `SHA-256(0x00 ‖ core_hash)` — deliberately the same tree as the transparency log, so a verifier carries one Merkle implementation and not two.\n\nAnd it proves nothing yet. The root is still only the proof\'s word about itself until somebody reads what the contract recorded, so the label is *anchoring not verified* and the ceiling is amber — **never red**, because a verifier with no network has learned nothing bad. *not anchored* is gone, which is the label an absent attachment carries; the difference between "no anchor" and "an anchor I could not check" is the whole point of two labels.\n\nFive leaves, ours third: an odd size, so the walk meets the incomplete level, and an odd position, so it meets a sibling on each side.' })
+  }
+
+  {
+    const proof = anchored({ forgePath: true })
+    file({ name: '56-jpeg-anchor-path-forged', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: {
+        outcome: 'authentic',
+        labels: [...ANCHOR_LABELS, 'not anchored', 'anchor evidence invalid'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'none', ceiling: 'amber' },
+        validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+      },
+      notes: 'Every hash in the audit path replaced, so the recomputed root is not the one the attachment claims. Detectable **offline**, with no chain and no network, which is why this is `anchor evidence invalid` and not the same answer as vector 55.\n\nTwo labels, by the rule §8 states once for every attachment: the absent label is what a reader is shown — nothing here anchors this capture — and the invalid label is what an operator can act on, since somebody presented a path that does not hold up. The core is untouched and the outcome stays `authentic`: an anchor is evidence added after the capture, and bad evidence about a signed file does not unsign it.' })
+  }
+
+  {
+    const proof = anchored()
+    const root = (proof.anchor as Proof).root as string
+    file({ name: '57-jpeg-anchor-on-chain', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      chainRead: { root, tree_size: 5, block_time: BLOCK },
+      expected: {
+        outcome: 'authentic',
+        labels: ANCHOR_LABELS,
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'none', ceiling: 'amber' },
+        validated_at: { instant: new Date(BLOCK).toISOString(), source: 'anchor' }
+      },
+      notes: '**The first vector whose proven instant is not the device\'s word.** `chain_read` is an input — the corpus declares what a caller read from the contract, the way it declares `key_status` — and with it the recomputed root matches what the contract recorded for this `anchor_id`, so the block\'s timestamp becomes the instant the proof is validated at: `validated_at.source` is `anchor`, ninety seconds after `time.device_clock`.\n\nThat is the point of anchoring, and it is worth being precise about what it proves: an upper bound. The capture existed **before** that block, which nobody can move; it says nothing about how long before. The device\'s claim is still a claim, and now it is a claim bounded by a fact.\n\nThe ceiling is amber for an unrelated reason — this photo carries no attestation, so the proven level is `none` and §7 never lets that be green whatever the instant. Vectors 49-54 are the other half of that sentence.' })
+  }
+
+  {
+    const proof = anchored()
+    file({ name: '58-jpeg-anchor-chain-disagrees', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      chainRead: { root: createHash('sha256').update('a root the contract never recorded').digest().toString('base64url'), tree_size: 5, block_time: BLOCK },
+      expected: {
+        outcome: 'authentic',
+        labels: [...ANCHOR_LABELS, 'not anchored', 'anchor evidence invalid'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'none', ceiling: 'amber' },
+        validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+      },
+      notes: 'A perfect audit path to a root the contract does not have. This is the case the chain read exists for, and the one an implementation is most likely to get wrong by comparing only the root: a batch of a different size can share a root with this one when it is a prefix, so `tree_size` is compared too.\n\nNote what happens to the instant. The block time is present in the read and is **not used**: an anchor whose root the chain contradicts proves nothing, so `validated_at` falls back to `device_clock` and the verdict says the anchor is invalid. A verifier that took the block time from an anchor it had just rejected would be dating a capture by a transaction that does not contain it.' })
+  }
+}
+
 // what it can rebuild is the difference between a generator and a broom.
 const owned = new Set(vectors.map((v) => v.name))
 if (existsSync(VECTORS)) {
@@ -767,10 +893,11 @@ for (const vector of vectors) {
       // Also an input: §6.2 makes revocation an online question, so a vector
       // that needs it declares what the verifier is assumed to have fetched.
       ...(vector.keyStatus ? { key_status: vector.keyStatus } : {}),
+      ...(vector.chainRead ? { chain_read: vector.chainRead } : {}),
       ...vector.expected,
       ...(vector.proof ? { schema_valid: schemaValid } : {})
     }, null, 2) + '\n')
-    actual = pick(verifyFile({ file: vector.file, sidecar: vector.sidecar, trust, clock: vector.verifierClock ? new Date(vector.verifierClock) : undefined, keyStatus: vector.keyStatus as KeyStatusStatement | undefined }), vector.expected)
+    actual = pick(verifyFile({ file: vector.file, sidecar: vector.sidecar, trust, clock: vector.verifierClock ? new Date(vector.verifierClock) : undefined, keyStatus: vector.keyStatus as KeyStatusStatement | undefined, chainRead: vector.chainRead as ChainRead | undefined }), vector.expected)
     // The schema must agree with the review too: a proof the review calls
     // conforming that the schema refuses is a bug in one of the two.
     if (vector.proof) {
