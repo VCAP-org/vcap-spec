@@ -10,6 +10,21 @@ with it.
 
 ## Unreleased
 
+### The watermark payload layouts are public (new document)
+
+- `spec/watermark-layouts-1.0.md` defines `photo-bch-v3` and `video-rep-v1`:
+  the 256-bit carrier, the BCH and repetition layouts, bit order, the strength
+  convention, each decoder's single failure answer, why `mark_id` collides on
+  purpose, and the versioning rules that keep an already-sealed file
+  verifiable. `vectors/_watermark/layouts.json` pins both with worked cases.
+- Why it moves here: the proof format names a layout in `watermark.layout` and
+  a verifier that cannot read the payload cannot say *watermark matched*. The
+  layouts existed, written down, in a private repository — which makes them
+  documentation and not a contract. §1 said the format "does not define
+  watermark internals"; it now separates the layout, which is a wire contract,
+  from the model, which is an artifact fetched by digest and stays out.
+- No change to the proof format, the schema or any vector verdict.
+
 ### The first iOS captures in the corpus (vectors 47-48)
 
 - No spec text changes. Two vectors from an iPhone 11 Pro (S1 spike,
