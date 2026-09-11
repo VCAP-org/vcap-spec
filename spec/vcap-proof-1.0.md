@@ -643,18 +643,24 @@ Field table — type, required, verified against:
   trusted bound). *Revoked at the declared capture time* → **red** for the
   key's standing, shown with the reason.
 - **`anchor`** — existence before a block, verifiable against the chain and
-  nothing of ours. `chain` names the network (`base`, `base-sepolia`);
-  `tx` and `block` locate the anchoring transaction; `anchor_id` is the
-  contract's sequential id of the batch; `root` (base64url) is the batch root
-  the contract recorded with `tree_size` leaves; `index` is this proof's
-  position; `merkle_path` is the RFC 6962 audit path, base64url, bottom first.
+  nothing of ours. `chain` names the network (`base`, `base-sepolia`; `ebsi`,
+  `ebsi-pilot` for EBSI's Hyperledger Besu ledger); `tx` and `block` locate
+  the anchoring transaction; `anchor_id` is the contract's sequential id of
+  the batch; `root` (base64url) is the batch root the contract recorded with
+  `tree_size` leaves; `index` is this proof's position; `merkle_path` is the
+  RFC 6962 audit path, base64url, bottom first.
   Leaves are `SHA-256(0x00 ‖ core_hash)` and nodes `SHA-256(0x01 ‖ left ‖
   right)` — the same tree as the transparency log, so a verifier carries one
   Merkle implementation. A verifier MUST recompute the root from `core_hash`,
   `index`, `tree_size` and `merkle_path`, then read `(root, tree_size)` for
   `anchor_id` from the contract (or a light client) and compare both; the
-  block's timestamp is the proven upper bound. Without network: *anchoring not
-  verified*, amber, never red — a verifier that could not ask has learned
+  block's timestamp is the proven upper bound. On `ebsi` and `ebsi-pilot`
+  that read goes through EBSI's Ledger API gateway,
+  `POST /ledger/v4/blockchains/besu`: a JSON-RPC proxy that forwards the
+  read methods a verifier needs — `eth_call`, `eth_getTransactionReceipt`,
+  `eth_getLogs` — without any authorisation, against the contract address
+  published for that chain (EBSI Ledger API v4). Without network: *anchoring
+  not verified*, amber, never red — a verifier that could not ask has learned
   nothing bad. A path that does not recompute to `root`, or a chain that
   recorded a different `(root, tree_size)`, is a failure of the evidence and
   carries both labels of §8. **Both** values are compared, not the root alone:
