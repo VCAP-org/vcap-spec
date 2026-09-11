@@ -10,6 +10,20 @@ with it.
 
 ## Unreleased
 
+### EBSI as an anchoring chain (§6.2)
+
+- §6.2 now names `ebsi` and `ebsi-pilot` as values of `anchor.chain`, for
+  EBSI's Hyperledger Besu ledger, and says how a verifier reads it: through
+  the Ledger API gateway `POST /ledger/v4/blockchains/besu`, a JSON-RPC proxy
+  that forwards the read methods the anchor check needs — `eth_call`,
+  `eth_getTransactionReceipt`, `eth_getLogs` — without any authorisation, plus
+  the contract address published for that chain. Source: EBSI Ledger API v4,
+  https://hub.ebsi.eu/apis/pilot/ledger/v4/post-blockchains-besu.
+- No change to the wire format, the schema (`chain` is already an
+  identifier) or any vector. Prose only, so no vector: a v1.0 verifier with
+  no client for the chain reads the attachment as *anchoring not verified*,
+  exactly as §6.2 already says.
+
 ### C2PA interoperability, the sidecar, stripped metadata (§3.1, §4.1, new document, vectors 68-73)
 
 - `spec/c2pa-interop-1.0.md`, informative except where marked: what vcap and
