@@ -4,6 +4,7 @@
   "outcome": "authentic",
   "labels": [
     "integrity unevaluated",
+    "location declared only",
     "no trusted time",
     "not anchored",
     "registered after the declared capture",

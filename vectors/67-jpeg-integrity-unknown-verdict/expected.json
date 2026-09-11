@@ -6,6 +6,7 @@
     "integrity evidence invalid",
     "integrity unevaluated",
     "key not in transparency log",
+    "location declared only",
     "no trusted time",
     "not anchored",
     "origin not hardware-attested",

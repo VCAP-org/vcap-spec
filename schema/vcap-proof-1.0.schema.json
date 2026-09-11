@@ -142,7 +142,8 @@
             "declared",
             "corroborated",
             "authenticated"
-          ]
+          ],
+          "description": "The level the device claims (§7.1). A writer claims `declared`; `authenticated` is reserved for device-side evidence a later minor defines; `corroborated` is never a writer's claim, it comes from the `location_corroboration` attachment. The verifier computes the reached level and the claim never raises it."
         },
         "lat_udeg": {
           "type": "integer",
@@ -157,6 +158,21 @@
         "acc_cm": {
           "type": "integer",
           "minimum": 0
+        },
+        "alt_cm": {
+          "type": "integer",
+          "minimum": -1000000,
+          "maximum": 10000000,
+          "description": "height above the WGS 84 ellipsoid, integer centimetres"
+        },
+        "source": {
+          "$ref": "#/$defs/identifier",
+          "description": "How the device obtained the fix: gnss, network or manual. Extensible (§9); an unknown value is still a declared position."
+        },
+        "at": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "device clock when the fix was taken, ms since the Unix epoch; may precede time.device_clock"
         },
         "evidence": {
           "type": "array",
@@ -496,6 +512,48 @@
         },
         "sig": {
           "$ref": "#/$defs/p1363"
+        }
+      }
+    },
+    "location_corroboration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "result",
+        "at",
+        "sig"
+      ],
+      "description": "§6.2: an operator-side check of the declared position, relayed and signed by the registry. Never carries a phone number.",
+      "properties": {
+        "method": {
+          "$ref": "#/$defs/identifier",
+          "description": "The CAMARA API the registry called: camara-location-verification, camara-number-verification, camara-sim-swap. Extensible (§9); a v1.0 verifier reads an unknown method as *location corroboration not evaluated*."
+        },
+        "result": {
+          "enum": [
+            "match",
+            "no-match",
+            "unknown"
+          ]
+        },
+        "radius_m": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "the circle around the declared position the operator was asked about; required by §6.2 when method is camara-location-verification"
+        },
+        "at": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "registry clock when the operator answered, ms"
+        },
+        "operator_ref": {
+          "$ref": "#/$defs/opaqueRef",
+          "description": "an opaque registry-side reference to the operator or aggregator. MUST NOT be, contain or be derived from an MSISDN."
+        },
+        "sig": {
+          "$ref": "#/$defs/p1363",
+          "description": "registry key ES256 over \"vcap/1.0/location\" ‖ core_hash ‖ JCS(attachment without sig)"
         }
       }
     }

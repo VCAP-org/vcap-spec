@@ -13,6 +13,7 @@ import { TEST_KEY_PKCS8_BASE64, TEST_OTHER_KEY_PKCS8_BASE64 } from './testkey.js
 import { TEST_LOG_KEY_PKCS8_BASE64 } from './testlogkey.js'
 import { type KeyStatusStatement, keyStatusMessage, leafHash, leafKeyId, nodeHash, treeHeadMessage } from './registry.js'
 import { type ChainRead } from './anchor.js'
+import { corroborationMessage } from './location.js'
 import { loadTrust } from './trust.js'
 import { type Verdict, verifyFile, verifySegments } from './verify.js'
 import { validateProof } from './schema.js'
@@ -109,7 +110,7 @@ type Vector = FileVector | SegVector | JcsVector
 
 // Every sealed vector declares `watermark`, and no verifier here has a
 // detector: *watermark not evaluated* belongs on all of them (§7).
-const PHOTO_LABELS = ['integrity unevaluated', 'key not in transparency log', 'no trusted time', 'not anchored', 'origin not hardware-attested', 'watermark not evaluated']
+const PHOTO_LABELS = ['integrity unevaluated', 'key not in transparency log', 'location declared only', 'no trusted time', 'not anchored', 'origin not hardware-attested', 'watermark not evaluated']
 
 const jpegProof = sign(photoCore(baseJpeg, 'image/jpeg'))
 const jpegSealed = seal(baseJpeg, jpegProof)
@@ -1138,6 +1139,151 @@ file({ name: '72-jpeg-footer-crc-mismatch-sidecar', ext: 'jpg', file: seal(baseJ
   file({ name: '71-jpeg-sidecar-metadata-stripped', ext: 'jpg', file: stripApp0(baseJpeg), sidecar: jcs(jpegProof as Json), proof: jpegProof,
     expected: { outcome: 'tampered', labels: [], not_evaluated: [], core_hash: hashOf(jpegProof) },
     notes: 'The proof of vector 01 in a sidecar next to a copy of the image whose APP0 segment was removed — the header a metadata-stripping pipeline leaves, with the pixels untouched. Vector 17 is the same sidecar over the unchanged file and reads *authentic*; this one reads *tampered*, because the canonical bytes (§4.1) include every header segment that is not a JUMBF APP11, and the signature is valid over a `media.hash` the received bytes no longer produce.\n\nThis is the row of the transformation table in `spec/c2pa-interop-1.0.md` §5 that a reader is most tempted to soften: a platform that re-encodes or strips metadata leaves a file whose sidecar cannot restore the verdict. The format has no "probably the same picture" outcome for a photo — §8 says a `media.hash` mismatch with a valid `sig` is red — and what remains is the watermark, which a detector may turn into *origin traced*, never into authentic.' })
+}
+
+
+// ---- the position level (§7.1): declared, corroborated, and the two that are not
+//
+// Every photo in this corpus already declares a position — Milan, ±12.5 m —
+// and reads *location declared only*: the device signed the coordinates and
+// nothing else vouches for them. These vectors are the rest of §7.1: the
+// attachment that raises the level to `corroborated`, the four ways it fails
+// to, and the claims a core can make that no evidence here supports.
+//
+// The attachment is the registry's word about an operator's answer, signed
+// with the key that signs tree heads, over
+// `"vcap/1.0/location" ‖ core_hash ‖ JCS(body)`. It never carries a phone
+// number. And it is orthogonal to the verdict: nothing below moves a ceiling.
+{
+  const CAPTURE = 1757332800000
+  const day = 86_400_000
+  const logKey = createPrivateKey({ key: Buffer.from(TEST_LOG_KEY_PKCS8_BASE64, 'base64'), format: 'der', type: 'pkcs8' })
+  const DECLARED_LABELS = PHOTO_LABELS
+  const CORROBORATED_LABELS = [...PHOTO_LABELS.filter((l) => l !== 'location declared only'), 'location corroborated'].sort()
+
+  /** §6.2's attachment, signed over this proof's core hash unless told otherwise. */
+  const corroborationFor = (proof: Proof, o: { method?: string, result?: string, radius?: number | null, key?: typeof logKey, over?: Proof } = {}): Proof => {
+    const method = o.method ?? 'camara-location-verification'
+    const body: Proof = {
+      method,
+      result: o.result ?? 'match',
+      ...(o.radius === null ? {} : { radius_m: o.radius ?? 2000 }),
+      at: CAPTURE + 42_000,
+      operator_ref: 'op-it-01'
+    }
+    const message = corroborationMessage(coreHash(o.over ?? proof), body as { [key: string]: Json })
+    return { ...body, sig: signEs256(message, o.key ?? logKey).toString('base64url') }
+  }
+
+  const corroborated = (o: Parameters<typeof corroborationFor>[1] = {}, core: Proof = {}): Proof => {
+    const proof = sign(photoCore(baseJpeg, 'image/jpeg', core))
+    return { ...proof, location_corroboration: corroborationFor(proof, o) }
+  }
+  const at = (core: Proof): { level: { claimed: string, proven: string, ceiling: 'amber' }, validated_at: { instant: string, source: 'device_clock' } } => ({
+    level: { claimed: (core.device as Proof | undefined)?.secure_hw as string ?? 'tee', proven: 'none', ceiling: 'amber' },
+    validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+  })
+
+  {
+    // The full claim: altitude, source and the fix time, all integers.
+    const proof = sign(photoCore(baseJpeg, 'image/jpeg', {
+      location: { level: 'declared', lat_udeg: 45464664, lon_udeg: 9188540, alt_cm: 12240, acc_cm: 1250, source: 'gnss', at: CAPTURE - 1500, evidence: [] }
+    }))
+    file({ name: '74-jpeg-location-declared', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: { outcome: 'authentic', labels: DECLARED_LABELS, not_evaluated: [], core_hash: hashOf(proof), ...at({}), location: { claimed: 'declared', level: 'declared' } },
+      notes: 'The complete §6.1 position claim: coordinates in microdegrees, height above the WGS 84 ellipsoid and accuracy in centimetres, `source: gnss`, and `at`, the device clock when the fix was taken, 1.5 s before the capture. Every number is an integer, because the core has no other kind (§6.1).\n\nThe level is **declared** and the label says *location declared only*: the device signed these coordinates, and the signature proves the device said them — nothing about whether they are true. Android lets an app hand the OS a mock provider and iOS lets a simulator do the same, and the OS is the only thing standing between the app and any coordinates it likes (`threat-model.md` §5.7). That is the honest worth of a signed position, and the verifier names it rather than letting coordinates on a green verdict read as verified.' })
+  }
+
+  {
+    const proof = corroborated()
+    file({ name: '75-jpeg-location-corroborated', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: { outcome: 'authentic', labels: CORROBORATED_LABELS, not_evaluated: [], core_hash: hashOf(proof), ...at({}), location: { claimed: 'declared', level: 'corroborated' } },
+      notes: 'A `location_corroboration` attachment: the registry called the operator\'s CAMARA Location Verification about a 2 km circle around the declared position, the operator answered `TRUE`, and the registry signed `match` with the key that signs its tree heads, over `"vcap/1.0/location" ‖ core_hash ‖ JCS(body)`. The level is **corroborated**.\n\nWhat a verifier must say about it, in these words or ones that keep their meaning: *the registry attests that the operator confirmed the zone, radius 2000 m*. Not "verified by the operator" — the operator\'s answer is JSON over TLS with no transportable signature, so the only thing a proof can carry is the registry\'s countersignature of what the registry saw (§6.2, D12). That is trust in the registry, stated, and it is the same construction as `integrity`.\n\nAnd it is orthogonal to the verdict. The ceiling is amber for the reason every unattested photo\'s is, and it would be amber with the attachment deleted: the position level says how much the coordinates are worth, never how much the file is.' })
+  }
+
+  {
+    const proof = corroborated({ key: otherKey })
+    file({ name: '76-jpeg-location-corroboration-other-signer', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: { outcome: 'authentic', labels: [...DECLARED_LABELS, 'location corroboration not verified'].sort(), not_evaluated: [], core_hash: hashOf(proof), ...at({}), location: { claimed: 'declared', level: 'declared' } },
+      notes: 'The same attachment, signed by a key no verifier here trusts — a registry nobody follows, or nobody at all. The level falls back to **declared** and the label is *location corroboration not verified*, next to *location declared only*: the absent-evidence label a reader is shown, and the one that says why.\n\nNot *evidence invalid*: a signature no trusted key made is indistinguishable from one made by a registry this verifier does not follow, exactly as for `integrity` (vector 66), and the honest report is the weaker one. Vector 77 is the other case this label covers.' })
+  }
+
+  {
+    // A genuine registry statement about another capture, lifted onto this one.
+    const other = sign(photoCore(baseJpeg, 'image/jpeg', { time: { device_clock: CAPTURE - day } }))
+    const proof = corroborated({ over: other })
+    file({ name: '77-jpeg-location-corroboration-other-core', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: { outcome: 'authentic', labels: [...DECLARED_LABELS, 'location corroboration not verified'].sort(), not_evaluated: [], core_hash: hashOf(proof), ...at({}), location: { claimed: 'declared', level: 'declared' } },
+      notes: 'A corroboration the trusted registry really signed — over **another proof\'s** core hash, and moved onto this one. Every byte of the signature is genuine; it corroborates a different capture. Under this core hash it does not verify, so the answer is the one vector 76 gives: **declared**, *location corroboration not verified*.\n\nThe two vectors share an `expected.json` on purpose. To a verifier they are the same fact — no key it trusts signed this message — and a spec that asked it to tell them apart would be asking for a distinction the bytes do not carry. What binds a corroboration to a position is the core hash inside the signed message: the core carries the coordinates, so a statement about this core is a statement about these coordinates, and about no others.' })
+  }
+
+  {
+    const proof = corroborated({ method: 'camara-geofencing', radius: null })
+    file({ name: '78-jpeg-location-corroboration-unknown-method', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: { outcome: 'authentic', labels: [...DECLARED_LABELS, 'location corroboration not evaluated'].sort(), not_evaluated: [], core_hash: hashOf(proof), ...at({}), location: { claimed: 'declared', level: 'declared' } },
+      notes: 'A correctly signed corroboration whose `method` is `camara-geofencing`, a value §6.2 does not define. `method` is extensible (§9), so this is a v1.0 verifier reading a proof from a later minor: it does not know what was checked, and it says so — **declared**, *location corroboration not evaluated* — the same reading §7 gives an unknown `secure_hw`. Evidence this verifier cannot read is absent evidence, not a lie (§8), so the *invalid* label stays away.\n\nThe schema accepts it, because an identifier is an identifier; whether a verifier understands the value is the verifier\'s business, not the format\'s.' })
+  }
+
+  {
+    const proof = corroborated({ result: 'no-match' })
+    file({ name: '79-jpeg-location-contradicted', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: { outcome: 'authentic', labels: [...DECLARED_LABELS, 'location contradicted'].sort(), not_evaluated: [], core_hash: hashOf(proof), ...at({}), location: { claimed: 'declared', level: 'declared' } },
+      notes: 'The operator said the line was **not** in the 2 km circle around the declared position, and the registry relayed that. The level is what the device alone can reach, **declared**, and the label is *location contradicted*.\n\nIt does not touch the ceiling, and that is the line §7.1 draws: the position level is orthogonal to the verdict. A contradicted position is news a reader must be shown — shown, not silently downgraded, because a verifier that turned it into amber would be saying the file is less authentic, and the file is exactly as authentic as it was. What is less believable is where it says it was taken. The SIM being elsewhere is also the honest limit of the method: it is the SIM the operator locates, not the camera (`threat-model.md` §5.7).' })
+  }
+
+  {
+    const proof = corroborated({ result: 'TRUE' })
+    file({ name: '80-jpeg-location-corroboration-unknown-result', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      schemaValid: false,
+      expected: { outcome: 'authentic', labels: [...DECLARED_LABELS, 'location corroboration evidence invalid'].sort(), not_evaluated: [], core_hash: hashOf(proof), ...at({}), location: { claimed: 'declared', level: 'declared' } },
+      notes: 'A result of `TRUE` — the operator\'s raw CAMARA value, which a registry MUST map onto §6.2\'s three before signing — correctly signed by the trusted registry. `result` is **not** extensible: it decides the level, so a value outside `match`, `no-match`, `unknown` is present, genuine and meaningless, and this is where *location corroboration evidence invalid* belongs (the same place vector 67 puts `integrity`\'s). Also schema-invalid, and the two gates agreeing is the point: the schema refuses the shape, the verifier refuses the meaning.' })
+  }
+
+  {
+    // A claim of the top level, with the evidence array a later minor would fill.
+    const core: Proof = { location: { level: 'authenticated', lat_udeg: 45464664, lon_udeg: 9188540, acc_cm: 1250, source: 'gnss', evidence: [{ kind: 'osnma' }] } }
+    const proof = sign(photoCore(baseJpeg, 'image/jpeg', core))
+    file({ name: '81-jpeg-location-claimed-authenticated', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: { outcome: 'authentic', labels: [...DECLARED_LABELS, 'location claimed above evidence', 'location evidence not evaluated'].sort(), not_evaluated: [], core_hash: hashOf(proof), ...at({}), location: { claimed: 'authenticated', level: 'declared' } },
+      notes: 'The core claims **authenticated** and carries an evidence entry of kind `osnma` — the shape a future writer would use for a Galileo OSNMA-authenticated fix. §7.1 reserves the level and defines no evidence kind that reaches it in this version, so a v1.0 verifier weighs what it can: the coordinates are signed, **declared**, with *location claimed above evidence* for the claim and *location evidence not evaluated* for the array it cannot read.\n\nBoth labels are true from where this verifier stands and neither is an accusation: a later verifier that implements the kind may reach the level. What no verifier of any version may do is take the claim\'s word for it — `location.level` is what the device says it reached, and a claim never raises a level (§7.1), for the same reason `device.secure_hw` never does.' })
+  }
+
+  {
+    const core: Proof = { location: { level: 'corroborated', lat_udeg: 45464664, lon_udeg: 9188540, acc_cm: 1250, evidence: [] } }
+    const proof = sign(photoCore(baseJpeg, 'image/jpeg', core))
+    file({ name: '82-jpeg-location-claimed-corroborated', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: { outcome: 'authentic', labels: [...DECLARED_LABELS, 'location claimed above evidence'].sort(), not_evaluated: [], core_hash: hashOf(proof), ...at({}), location: { claimed: 'corroborated', level: 'declared' } },
+      notes: 'A core claiming **corroborated** with no attachment behind it. Corroboration happens after the capture, in the registry, and lives in `location_corroboration`; a writer has nothing to base the claim on at signing time and §6.1 forbids it. The verifier does not argue: the level is what the evidence reaches, **declared**, and *location claimed above evidence* says the core asked for more than it showed. Schema-valid, because the value is one the enumeration defines — the schema gates shapes, the verifier weighs claims.' })
+  }
+
+  {
+    const core: Proof = { location: { level: 'surveyed', lat_udeg: 45464664, lon_udeg: 9188540, acc_cm: 1250, evidence: [] } }
+    const proof = sign(photoCore(baseJpeg, 'image/jpeg', core))
+    file({ name: '83-jpeg-location-unknown-claimed-level', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      schemaValid: false,
+      expected: { outcome: 'authentic', labels: DECLARED_LABELS, not_evaluated: [], core_hash: hashOf(proof), ...at({}), location: { claimed: 'declared', level: 'declared' } },
+      notes: '`location.level` is `surveyed`, a value no version defines. The field is not extensible (§9), so the schema rejects the document; the verifier, as §7 says of an unknown `secure_hw`, treats rather than refuses: a signed position is worth **declared** whatever word sits next to it, so the claim is read as `declared` and nothing is flagged — there is no claim above the evidence, only a word this verifier does not know. Authentic, schema-invalid, and the two disagreeing means what it meant in vector 40: "not a v1.0 document" and "still verifiable" are different statements.' })
+  }
+
+  {
+    // A `location` with a level and no coordinates: a claim about nothing,
+    // with a genuine corroboration of it.
+    const proof = corroborated({}, { location: { level: 'declared', evidence: [] } })
+    file({ name: '84-jpeg-location-corroboration-without-position', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: { outcome: 'authentic', labels: [...PHOTO_LABELS.filter((l) => l !== 'location declared only'), 'location corroboration not evaluated'].sort(), not_evaluated: [], core_hash: hashOf(proof), ...at({}), location: { claimed: 'none', level: 'none' } },
+      notes: 'A core whose `location` has a `level` and **no coordinates**, and a correctly signed corroboration of it. A position is two coordinates; without both the core declares nothing, whatever `level` says, and the level is **none** — the same as a proof with no `location` at all (vector 47), and with the same silence: absence is not a claim about place, so no label. The attachment has nothing to corroborate and is listed as *location corroboration not evaluated*: it may well be genuine, and it is about nothing this verifier can point to on a map.' })
+  }
 }
 
 // what it can rebuild is the difference between a generator and a broom.

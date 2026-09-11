@@ -4,6 +4,7 @@
   "outcome": "authentic",
   "labels": [
     "integrity unevaluated",
+    "location declared only",
     "log not trusted",
     "no trusted time",
     "not anchored",

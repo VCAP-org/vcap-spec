@@ -6,6 +6,7 @@
     "chain revocation not checked",
     "integrity unevaluated",
     "key not in transparency log",
+    "location declared only",
     "not anchored",
     "watermark not evaluated"
   ],

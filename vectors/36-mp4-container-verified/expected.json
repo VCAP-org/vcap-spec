@@ -18,5 +18,9 @@
       2
     ]
   },
+  "location": {
+    "claimed": "none",
+    "level": "none"
+  },
   "schema_valid": true
 }
