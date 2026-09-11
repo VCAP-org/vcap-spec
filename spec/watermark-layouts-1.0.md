@@ -125,7 +125,7 @@ decoder has exactly one failure answer:
   answer; a corrected block either checks out or does not exist.
 - `video-rep-v1`: CRC mismatch → **no id**, plus the agreement figure.
 
-The verifier reports *no watermark recovered* (§8 of the proof format) and
+The verifier reports *watermark not recovered* (§8 of the proof format) and
 produces its verdict from the signature alone. The proof format's own rule
 outranks everything here: a valid signature makes a file authentic with no
 watermark at all, and a watermark without a valid signature is never a green
