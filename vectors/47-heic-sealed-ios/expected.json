@@ -20,5 +20,9 @@
     "instant": "2026-09-10T10:55:38.426Z",
     "source": "device_clock"
   },
+  "location": {
+    "claimed": "none",
+    "level": "none"
+  },
   "schema_valid": true
 }

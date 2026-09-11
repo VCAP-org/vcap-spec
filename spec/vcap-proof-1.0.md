@@ -433,7 +433,7 @@ when there is one), each verifiable on its own and each bound to `core_hash`.
   "watermark":{ "algo", "layout": "photo-bch-v3" | "video-rep-v1",
                 "payload_bits", "ecc", "strength", "mark_id" },
   "time":     { "device_clock" },
-  "location": { "level", "lat_udeg", "lon_udeg", "acc_cm", "evidence": [ ... ] },
+  "location": { "level", "lat_udeg", "lon_udeg", "alt_cm", "acc_cm", "source", "at", "evidence": [ ... ] },
   "policy":   { "pseudonymous": true|false, "retention_ref" },
 
   // ---- signature over the core (§4.2) ----
@@ -446,7 +446,8 @@ when there is one), each verifiable on its own and each bound to `core_hash`.
                    "tree_head": { "tree_size", "timestamp", "root_hash", "signature" } },
   "timestamp":   { "tsr", "tsa_issuer" },
   "anchor":      { "chain", "tx", "block", "anchor_id", "index", "tree_size", "root", "merkle_path" },
-  "integrity":   { "source", "verdict", "evaluated_at", "sig" }
+  "integrity":   { "source", "verdict", "evaluated_at", "sig" },
+  "location_corroboration": { "method", "result", "radius_m", "at", "operator_ref", "sig" }
 }
 ```
 
@@ -493,6 +494,29 @@ Rules that keep five implementations byte-identical:
 - `time.device_clock` is the device's own clock as integer milliseconds since
   the Unix epoch, UTC, signed by the device: a declaration, shown as such.
   Trusted time comes from the `timestamp` attachment.
+- `location` is the **declared** position, and every member is optional but
+  `level`: `lat_udeg`, `lon_udeg` (integer microdegrees, `int32`, ±90 000 000
+  and ±180 000 000), `alt_cm` (height above the WGS 84 ellipsoid, integer
+  centimetres, signed), `acc_cm` (the horizontal accuracy the OS reported,
+  integer centimetres, `uint32`), `source` — how the fix was obtained: `gnss`,
+  `network`, `manual`; extensible (§9), an unknown value is still a declared
+  position — and `at`, the device clock when the fix was taken, ms, which may
+  precede `time.device_clock` by the age of the fix. A position is two
+  coordinates: a `location` without both `lat_udeg` and `lon_udeg` declares
+  nothing (vector 84). `level` is the level the device **claims** (§7.1): a
+  writer claims `declared`; `authenticated` is reserved for a writer carrying
+  device-side `evidence` of a kind a later minor defines (none in this
+  version); `corroborated` is never a writer's claim, because corroboration
+  happens after the capture and lives in the `location_corroboration`
+  attachment (vector 82). The verifier computes the level the evidence
+  reaches and the claim never raises it, exactly as `device.secure_hw` never
+  does. `evidence[]` is reserved: entries are objects with a `kind` (§9,
+  extensible) and a v1.0 verifier lists a non-empty array as *location
+  evidence not evaluated* (vector 81). Signed by the device means: the device
+  says so. The app obtains the fix from the OS and the OS is the only thing
+  between the app and any coordinates it likes — a mock location provider on
+  Android, a simulated location on iOS — so a signed position is worth
+  exactly *declared* (`threat-model.md` §5.7).
 
 Field table — type, required, verified against:
 
@@ -506,7 +530,7 @@ Field table — type, required, verified against:
 | `device.key_id` | yes | `sig.pub`, attestation leaf, registry entry |
 | `watermark` | no | detector output, if the detector ran |
 | `time.device_clock` | no | nothing — declared |
-| `location` | no | `location.level` and evidence rules (C15) |
+| `location` | no | `location_corroboration` and the level rules (§7.1) |
 | `policy.pseudonymous` | no | consistency: no device identifiers present |
 
 ### 6.2 The signature and the attachments
@@ -521,6 +545,7 @@ Field table — type, required, verified against:
 | `timestamp.tsr` | sync | RFC 3161 token, TSA chain, validated offline | `messageImprint = core_hash` |
 | `anchor` | sync | RFC 6962 path from `SHA-256(0x00 ‖ core_hash)` to the root the chain recorded | leaf = `core_hash` |
 | `integrity` | sync | registry key signature over `core_hash ‖ verdict` | by construction |
+| `location_corroboration` | sync, after an operator answered | registry key signature over `"vcap/1.0/location" ‖ core_hash ‖ JCS(body)` | signature covers `core_hash`, which covers the declared position |
 
 - **`attestation`** — the key attestation certificate chain, leaf first, each
   certificate DER in base64url, `[...]`. Present on Android (required for any
@@ -703,6 +728,72 @@ Field table — type, required, verified against:
   attachment for the same result. Something whose absence and whose invalidity
   are the same answer cannot be load-bearing, which is the reason this
   attachment has no row in §7's table.
+- **`location_corroboration`** *(optional, added after v1.0; D12)* — an
+  operator-side check of the declared position, relayed and countersigned by
+  the registry. The registry, after the capture and with the user's consent
+  handled by the operator, calls a CAMARA API about the line in the capturing
+  device and maps the answer onto three values. What the proof carries is
+  **the registry's word about the operator's answer**, and a verifier MUST say
+  so in those terms — *the registry attests that the operator confirmed the
+  zone, radius 2000 m* — never "verified by the operator": the operator's
+  answer is JSON over TLS with no transportable signature, so nothing but a
+  registry countersignature can travel in a file. Same construction, same
+  limit as `integrity`: evidence, never a verdict, and trust in the registry,
+  stated.
+  - `method`: which API was called — `camara-location-verification` (is the
+    line inside a circle around the declared position), `camara-number-verification`
+    (the line the operator authenticated on the device's own data session is
+    the one the registry holds for this device), `camara-sim-swap` (no recent
+    SIM change on that line). Extensible (§9): an unknown method is
+    *location corroboration not evaluated* (vector 78). How the registry
+    combines these into one `result` is the registry's rule and not this
+    format's; the method says what was asked so a reader can weigh the answer.
+  - `result`: `match`, `no-match` or `unknown`. **Not extensible**, because it
+    decides the level: the registry MUST map the operator's raw values
+    (`TRUE`, `FALSE`, `PARTIAL`, `UNKNOWN`, an error) onto these three before
+    signing, and a verifier reading any other value under a valid signature
+    reports *location corroboration evidence invalid* (vector 80).
+  - `radius_m`: the circle the operator was asked about, metres, `uint32`.
+    Required when `method` is `camara-location-verification`; a zone check
+    without its zone is *evidence invalid*. Operators enforce minimum radii of
+    one to two kilometres: a `match` corroborates *the same area*, never the
+    same point, and a verifier shows the radius.
+  - `at`: ms, registry clock, when the operator answered.
+  - `operator_ref`: optional, an opaque registry-side reference to the
+    operator or aggregator, `[A-Za-z0-9_-]{1,64}`. It MUST NOT be, contain, or
+    be derived from a phone number: **no MSISDN enters a proof, ever**, in the
+    clear, hashed or truncated. The registry keeps the line-to-key mapping
+    behind access control, next to the key-to-organization one.
+  - `sig`: the registry signing key's ES256 signature, P1363, over
+    `"vcap/1.0/location" ‖ core_hash ‖ JCS(A)` where `A` is the attachment
+    object without `sig`. JCS of the body rather than a fixed-length layout,
+    so a later minor can add a member and a v1.0 verifier — which
+    canonicalizes every member it sees — still verifies; the result is inside
+    the message, so `no-match` cannot become `match`. **Which key**: the one
+    that signs that log's tree heads, found as for `attestation_status`.
+
+  A verifier MUST check, in this order: that the core declares a position
+  (else nothing is corroborated: level `none`, *location corroboration not
+  evaluated*, vector 84); that it knows `method`; that the signature verifies
+  under a trusted log key over this core hash — a signature no trusted key
+  made is *location corroboration not verified*, and it covers both a signer
+  this verifier does not follow and a genuine statement about **another**
+  proof, because to a verifier those are the same bytes (vectors 76, 77; the
+  reasoning of `integrity`); then that `result`, `at` and `radius_m` are what
+  this section says. A valid `match` reaches **corroborated** (vector 75); a
+  valid `no-match` is *location contradicted*, level `declared`, and it moves
+  no ceiling (vector 79) — the file is exactly as authentic as before, what is
+  less believable is where it says it was taken; `unknown` is silence, level
+  `declared`.
+
+  **What corroborated means, and what it does not.** The operator locates the
+  **SIM**, at cell granularity, at the time of the call; it does not locate
+  the camera. A SIM in a different device than the one that signed, a
+  tethered laptop, a complicit phone in the right cell with a fabricated
+  file: none of these is caught here, and `camara-number-verification` over
+  the capturing device's own data session is the method that narrows the
+  first two. The residual risk is in `threat-model.md` §5.7, and it is the
+  reason this level is called *corroborated* and not *verified*.
 - **`timestamp.tsr`** — RFC 3161 TimeStampToken, base64url DER, whose
   `messageImprint` **is `core_hash`** (hash algorithm `sha256`, hashed message =
   the 32 bytes of `core_hash`). A timestamp over `media.hash` would prove the
@@ -823,6 +914,51 @@ entry records a valid App Attest binding for `device.key_id`. Web: `none`.
   v1.0 rejects such a document and is right to — *"not a v1.0 document"* and
   *"still verifiable"* are different statements (vector 40).
 
+### 7.1 The position level
+
+A second level, on a second axis. The proof level above says how strong the
+**origin** claim is; the position level says how much the **coordinates**
+in the core are worth, and the two never mix: the position level MUST NOT
+raise a verdict to green or lower it to red, and it MUST NOT change the
+ceiling of §7's table (vectors 75, 79). It is `location.level` in the
+verifier's output, one of four values, and a verifier MUST name it whenever
+the core declares a position — "guaranteed" is not a value and never appears.
+
+| level | what reaches it | label shown |
+|---|---|---|
+| `none` | no `location` in the core, or one without both coordinates (vector 84) | nothing: absence is not a claim about place |
+| `declared` | `lat_udeg` and `lon_udeg` signed by the device (§6.1) | *location declared only* |
+| `corroborated` | a `location_corroboration` attachment (§6.2) under a trusted registry key, over this core hash, with `result: match` | *location corroborated* — shown as the registry attesting the operator's answer, with the method and the radius |
+| `authenticated` | **reserved** — a device-side `evidence[]` entry of a kind that binds the fix to a signal the device cannot forge, such as a Galileo OSNMA-authenticated GNSS solution attested by the device. No kind is defined in this version and **no v1.0 verifier reaches this level** | — |
+
+Rules:
+
+- **The claim never raises the level.** `location.level` in the core is what
+  the device claims (§6.1); the verifier computes the level from the
+  evidence. A claim above the computed level is shown as *location claimed
+  above evidence* (vectors 81, 82), never applied. A value outside the
+  enumeration is read as `declared`, the level any signed position reaches on
+  its own (vector 83) — treated, not refused, as §7 says of `secure_hw`.
+- **`authenticated` is not reachable in this version**, and a verifier says
+  so with what it has: a core claiming it reads *location claimed above
+  evidence*, and a non-empty `evidence[]` reads *location evidence not
+  evaluated* — both true from where a v1.0 verifier stands, neither an
+  accusation, and a later verifier that implements the kind may reach the
+  level (vector 81). The level is reserved now so that the word exists in
+  every verifier before any device can earn it: as of September 2026 no
+  smartphone chipset implements OSNMA, so the level is empty and the format
+  says so rather than letting *declared* stretch.
+- **Corroborated is the registry's word.** The level says: a registry this
+  verifier trusts attests that an operator's check agreed with the declared
+  position, to a stated radius and method. A verifier MUST show it in those
+  terms (§6.2). It is trust in the registry, and it is optional: without the
+  attachment the level is `declared`, a weaker answer and never an error.
+- **Every failure of the attachment lands on `declared`**, with the label
+  that says why (§8): *not evaluated* for evidence this verifier cannot read,
+  *not verified* for a signature no trusted key made, *evidence invalid* for
+  a verified signature over content outside §6.2, *contradicted* for a
+  verified `no-match`. None is red. None is amber.
+
 ---
 
 ## 8. Decision 5 — Optional versus invalidating
@@ -858,7 +994,9 @@ because "no trusted time" on a tampered file is noise.
 **An attachment that is present and does not hold up carries two labels: the
 absent label above, and its own *… evidence invalid*.** So a broken `registry`
 is *key not in transparency log* **and** *registry evidence invalid*; a broken
-`anchor` is *not anchored* **and** *anchor evidence invalid*. One rule for every
+`anchor` is *not anchored* **and** *anchor evidence invalid*; a broken
+`location_corroboration` is *location declared only* **and** *location
+corroboration evidence invalid*. One rule for every
 attachment, and the reason is what a reader sees: the absent label is the
 statement a user is shown — nobody can confirm this key was registered, nothing
 anchors this capture — and a verifier that emitted only the *invalid* label
@@ -874,7 +1012,14 @@ verdict and never an error, and it carries the absent label or its own
 | `attestation` (Android) | *origin not hardware-attested* | proven level `none` |
 | `integrity` | *integrity unevaluated* | no statement about the device's state |
 | `watermark` | *no watermark* | the detector did not run, or no mark was looked for |
-| `location` | nothing shown | absence is not a claim about place |
+| `location` | nothing shown | absence is not a claim about place: `location.level` is `none` (§7.1) |
+| `location` present, no valid corroboration | *location declared only* | the device signed the coordinates and nothing else vouches for them |
+| `location_corroboration` present and valid, `match` | *location corroborated* | the registry attests the operator's answer, to the stated method and radius; the position level is `corroborated` and no ceiling moves |
+| `location_corroboration` present and valid, `no-match` | *location contradicted* | the operator's check disagreed with the declared position; shown, level `declared`, no ceiling moves |
+| `location_corroboration` present, no trusted key verifies it | *location corroboration not verified* | a signer this verifier does not follow, or a statement about another proof — the same bytes |
+| `location_corroboration` present, unknown `method`, no log key held, or no position to corroborate | *location corroboration not evaluated* | evidence this verifier cannot read |
+| `location.evidence` non-empty | *location evidence not evaluated* | device-side kinds arrive with a later minor; this version weighs none |
+| `location.level` claimed above the level reached | *location claimed above evidence* | the claim is the device's; the level is the evidence's |
 | `policy.retention_ref` | nothing shown | no vault involved |
 
 **A declared watermark that does not come back.** `watermark` is the writer
@@ -946,13 +1091,15 @@ side by side with it.
   breaking change is allowed and recorded as one in `CHANGELOG.md`. What the
   rule permits once it binds: new optional keys, and new values only in
   fields documented as extensible (`watermark.layout`, `location.evidence[].kind`,
-  `timestamp.tsa_issuer`, `integrity.source`, `attestation_status.source`).
+  `location.source`, `location_corroboration.method`, `timestamp.tsa_issuer`,
+  `integrity.source`, `attestation_status.source`).
   Every extensible field states the fallback for an older verifier. A new value
   in such a field is a short machine name in one of the two spellings the format
   already uses — lowercase-hyphen (`bch-255-131`, `base-sepolia`) or camelCase
   (`secureEnclave`, `playIntegrity`, `googleStatusList`) — and the schema
   accepts both. It once accepted only the first, which made `googleStatusList`
-  schema-invalid in the same document that named it. `device.secure_hw`, `sig.alg`, the set of
+  schema-invalid in the same document that named it. `device.secure_hw`, `sig.alg`,
+  `location.level`, `location_corroboration.result`, the set of
   core keys and the segment message layout are **not** extensible: changing any
   of them is a new minor with a new separator (§5) or a new major.
 - **Never**, once the rule binds: reuse a key name with a different meaning,
@@ -978,7 +1125,10 @@ who finds it out later stops trusting the rest:
 - **Who held the device.** The proof binds a key to hardware and, through the
   registry, to an organization — not to a person. And the key is a pseudonym for
   the device, linkable across captures (§6.2).
-- **Where it was**, beyond the level `location.level` declares (C15).
+- **Where it was**, beyond the position level the verifier reaches (§7.1):
+  *declared* is the device's word, *corroborated* is the registry's word
+  about an operator's cell-level answer on the SIM, and *authenticated* is a
+  word nothing earns yet.
 - **That the device was not compromised** below the attestation boundary: a
   rooted device with a virtual camera can sign an injected frame. This is why
   `integrity` exists, why it is signed by the registry and not declared by the
@@ -1020,6 +1170,15 @@ says.
 - [~] `REVIEW (mobile)` NAL byte definition and audio DTS rule reproducible on both encoders — the DTS clock is now named (M8) and the timeline with it (edit lists, §5); H.264 and HEVC on Android are reproduced byte for byte by a second implementation written from this text (`tools/src/container.ts`, vectors 36–37), which is what "reproducible" was asking; iOS pending (S1)
 - [x] `REVIEW (mobile)` hashing two interleaved tracks during encoding — resolved: 8 KB and 0.5 ms per segment on a TEE device (M8)
 - [ ] `REVIEW (mobile)` metadata stripping before sealing for pseudonymous captures
+- [ ] `REVIEW (LEAD)` the `authenticated` position level (§7.1) is reserved
+      and unreachable: the first `location.evidence[].kind` that reaches it
+      (Galileo OSNMA attested by the device) waits for a smartphone chipset
+      that exposes OSNMA — none does as of September 2026 (S4). Arrives as a
+      new kind in an extensible field, with its vectors; no change to the core keys
+- [ ] `REVIEW (BE)` the registry's mapping from CAMARA raw results (`TRUE`,
+      `FALSE`, `PARTIAL` with `matchRate`, `UNKNOWN`) and from
+      number-verification plus SIM-swap onto §6.2's `result` — a registry
+      rule, to be published with the platform (C15, D12), not a format change
 - [x] `REVIEW (ML)` `watermark.layout` values and what the detector reports when
       the layout is declared but the payload does not decode — resolved in §7:
       *origin traced* / *watermark not recovered* / *watermark not evaluated*,
@@ -1035,6 +1194,7 @@ says.
       revocation snapshot on either side of the instant): **45** in `vectors/`
       when this item closed, **73** with the registry, anchor, timestamp,
       integrity, iOS, C2PA co-existence and sidecar slices since,
+      **84** with the position level (74–84),
       checked by the reference verifier in `tools/` (steps 4–5). The §7 vectors
       trust the anchors in `vectors/_trust/`, whose attestation root is a test
       root: they prove the level logic, not that an implementation can walk a

@@ -5,6 +5,7 @@
   "labels": [
     "integrity unevaluated",
     "key not in transparency log",
+    "location declared only",
     "not anchored",
     "origin not hardware-attested",
     "watermark not evaluated"

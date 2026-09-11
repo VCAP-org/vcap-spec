@@ -10,6 +10,7 @@ import { type TrustBundle } from './trust.js'
 import { type IntegrityAttachment, type KeyStatusStatement, type RegistryAttachment, verifyIntegrity, verifyKeyStatus, verifyRegistry } from './registry.js'
 import { type AnchorAttachment, type ChainRead, verifyAnchor } from './anchor.js'
 import { verifyTimestampToken } from './rfc3161.js'
+import { LOCATION_LEVELS, LOCATION_RANK, verifyLocationCorroboration } from './location.js'
 import { jcs } from './jcs.js'
 
 /**
@@ -42,6 +43,9 @@ export interface Verdict {
   // it. A verifier must be able to say this, because the same file reads
   // differently when the capture time is a device's claim.
   validated_at?: { instant: string, source: 'timestamp' | 'anchor' | 'device_clock' | 'verifier_clock' }
+  // §7.1: the position level the core claims and the one the evidence
+  // reaches. Orthogonal to the outcome — present on every non-red verdict.
+  location?: { claimed: string, level: string }
   reason?: string
 }
 
@@ -53,7 +57,8 @@ const ABSENT_LABELS: [string, string][] = [
 
 const KNOWN_KEYS = new Set([
   'v', 'capture_id', 'media', 'device', 'watermark', 'time', 'location', 'policy',
-  'sig', 'segments', 'attestation', 'attestation_status', 'registry', 'timestamp', 'anchor', 'integrity'
+  'sig', 'segments', 'attestation', 'attestation_status', 'registry', 'timestamp', 'anchor', 'integrity',
+  'location_corroboration'
 ])
 
 /**
@@ -233,6 +238,10 @@ export const verifyFile = ({ file, sidecar, recomputeSegments, trust, clock = ne
   // §6.2 `integrity`. It corroborates and never carries, so it produces a
   // label and no level: see `integrityOutcome`.
   integrityOutcome(proof, Buffer.from(hash, 'hex'), trust, labels)
+  // §7.1 the position level. Computed here, before the video branch, because
+  // it is orthogonal to the outcome: a clip's coordinates are worth exactly
+  // what an original's are.
+  const location = locationOutcome(proof, Buffer.from(hash, 'hex'), trust, labels)
   // A declared watermark is the writer saying a mark was embedded, not a
   // promise a reader finds it. This verifier ships no detector, so the only
   // honest §7 outcome is *watermark not evaluated* — never silence, which a
@@ -293,7 +302,7 @@ export const verifyFile = ({ file, sidecar, recomputeSegments, trust, clock = ne
     }
     if (chain.status === 'tampered') return { ...tampered(chain.reason ?? 'segment chain'), segments }
     if (!mediaMatches || chain.status === 'clip') {
-      return { outcome: 'verified_clip', labels: labels.sort(), not_evaluated: notEvaluated, core_hash: hash, segments, reason: mediaMatches ? 'segments missing' : 'media.hash does not match the received file' }
+      return { outcome: 'verified_clip', labels: labels.sort(), not_evaluated: notEvaluated, core_hash: hash, segments, location, reason: mediaMatches ? 'segments missing' : 'media.hash does not match the received file' }
     }
   } else if (!mediaMatches) {
     return tampered('media.hash does not match the canonical bytes')
@@ -302,7 +311,8 @@ export const verifyFile = ({ file, sidecar, recomputeSegments, trust, clock = ne
   return {
     outcome: 'authentic', labels: labels.sort(), not_evaluated: notEvaluated, core_hash: hash,
     ...(segments ? { segments } : {}),
-    ...level(proof, spki, Buffer.from(hash, 'hex'), labels, trust, clock, registry, keyStatus, anchor, timestamp)
+    ...level(proof, spki, Buffer.from(hash, 'hex'), labels, trust, clock, registry, keyStatus, anchor, timestamp),
+    location
   }
 }
 
@@ -511,6 +521,57 @@ const anchorOutcome = (
   // proof's word about itself, so nothing is anchored yet.
   if (!outcome.onChain) labels.push('anchoring not verified')
   return { ok: true, blockTime: outcome.blockTime }
+}
+
+/**
+ * §7.1 the position level, and the §8 labels around it.
+ *
+ * The claim in the core never raises the level: `location.level` is what the
+ * device says it reached, and the verifier computes what the evidence reaches
+ * — `declared` for signed coordinates, `corroborated` for a
+ * `location_corroboration` a trusted registry key signed over this core with
+ * `result: match`. `authenticated` needs an evidence kind this version does
+ * not implement, so no proof reaches it here and a claim of it is shown as
+ * claimed above evidence, with the evidence it carries listed as not
+ * evaluated. Nothing here touches the ceiling.
+ */
+const locationOutcome = (
+  proof: Proof, coreHash: Buffer, trust: TrustBundle | undefined, labels: string[]
+): NonNullable<Verdict['location']> => {
+  const claim = isObject(proof.location) ? proof.location : null
+  const attachment = isObject(proof.location_corroboration) ? proof.location_corroboration : null
+  // A position is two coordinates. A `location` without both declares
+  // nothing, whatever its `level` says, and an attachment about it has
+  // nothing to corroborate.
+  const declared = claim !== null && Number.isInteger(claim.lat_udeg) && Number.isInteger(claim.lon_udeg)
+  if (!declared) {
+    if (attachment !== null) labels.push('location corroboration not evaluated')
+    return { claimed: 'none', level: 'none' }
+  }
+  // `level` is not extensible (§9): a value this version does not know is
+  // read as `declared`, the level any signed position reaches on its own.
+  const claimed = typeof claim.level === 'string' && LOCATION_LEVELS.has(claim.level) ? claim.level : 'declared'
+  let level = 'declared'
+  if (attachment !== null) {
+    const outcome = verifyLocationCorroboration(attachment, coreHash, trust?.logs ?? [])
+    if (!outcome.ok) {
+      labels.push(!outcome.evaluated
+        ? 'location corroboration not evaluated'
+        : outcome.trusted ? 'location corroboration evidence invalid' : 'location corroboration not verified')
+    } else if (outcome.result === 'match') {
+      level = 'corroborated'
+    } else if (outcome.result === 'no-match') {
+      // The operator's check disagreed with the declared position. Shown, and
+      // the level stays what the device alone can reach; never a ceiling.
+      labels.push('location contradicted')
+    }
+  }
+  // Device-side evidence kinds arrive with a later minor (§7.1). None is
+  // implemented here, so whatever the array carries is listed, not weighed.
+  if (Array.isArray(claim.evidence) && claim.evidence.length > 0) labels.push('location evidence not evaluated')
+  labels.push(level === 'corroborated' ? 'location corroborated' : 'location declared only')
+  if ((LOCATION_RANK[claimed] ?? 0) > (LOCATION_RANK[level] ?? 0)) labels.push('location claimed above evidence')
+  return { claimed, level }
 }
 
 /** `time.device_clock`, or null when the proof declares none. */

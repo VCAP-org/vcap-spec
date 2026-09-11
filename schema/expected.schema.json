@@ -116,6 +116,33 @@
         }
       }
     },
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claimed",
+        "level"
+      ],
+      "description": "\u00a77.1: the position level the core claims and the level the evidence reaches. Orthogonal to the outcome.",
+      "properties": {
+        "claimed": {
+          "enum": [
+            "none",
+            "declared",
+            "corroborated",
+            "authenticated"
+          ]
+        },
+        "level": {
+          "enum": [
+            "none",
+            "declared",
+            "corroborated",
+            "authenticated"
+          ]
+        }
+      }
+    },
     "verifier_clock": {
       "type": "integer",
       "minimum": 0,

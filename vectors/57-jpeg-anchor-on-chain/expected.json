@@ -10,6 +10,7 @@
   "labels": [
     "integrity unevaluated",
     "key not in transparency log",
+    "location declared only",
     "no trusted time",
     "origin not hardware-attested",
     "watermark not evaluated"

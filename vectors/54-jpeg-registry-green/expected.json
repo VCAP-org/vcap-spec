@@ -11,6 +11,7 @@
   "outcome": "authentic",
   "labels": [
     "integrity unevaluated",
+    "location declared only",
     "no trusted time",
     "not anchored",
     "watermark not evaluated"

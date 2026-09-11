@@ -10,7 +10,9 @@ a 1.0 writer has no business emitting them.
 What it pins, beyond types: base64url lengths (16-byte ids, 32-byte hashes,
 64-byte P1363 signatures, 91-byte P-256 SPKI), integer-only numbers in the
 core, enum values of `platform`, `secure_hw`, `layout`, `level`, `source`,
-`verdict`, and `media.segment_count` required whenever `segments` is present.
+`verdict`, `location_corroboration.result`, `additionalProperties: false`
+inside every known object (`location_corroboration` included), and
+`media.segment_count` required whenever `segments` is present.
 
 `expected.schema.json` is the shape of a vector's `expected.json`.
 
@@ -25,11 +27,12 @@ npm run validate -- path/to/proof.json [more.json …]     # exit 1 on the first
 
 Without arguments, `npm run validate` walks `vectors/`: every `expected.json`
 must be well formed, and every `proof.json` must be schema-valid exactly when
-its vector says so (`schema_valid`). Six vectors are schema-invalid on
+its vector says so (`schema_valid`). Eight vectors are schema-invalid on
 purpose — DER signature (13), major 2 (16), missing `capture_id` (21), a float
 in the core (22), an unknown `secure_hw` (40), an `integrity.verdict` outside
-the enumeration (67) — and the generator refuses to write a vector whose review
-verdict and schema verdict disagree.
+the enumeration (67), a `location_corroboration.result` outside it (80), an
+unknown `location.level` (83) — and the generator refuses to write a vector
+whose review verdict and schema verdict disagree.
 
 Programmatic use: `validateProof(json)` in `tools/src/schema.ts` returns
 `{ valid, errors }` with JSON pointers and messages, never values.
