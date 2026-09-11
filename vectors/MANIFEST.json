@@ -1,0 +1,600 @@
+{
+  "corpus_version": "1.0.0",
+  "vector_count": 84,
+  "vectors": [
+    {
+      "name": "01-jpeg-sealed",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "bb2cc09cb5695215bb5707a277265ec99f2f0b2ca70ca5a75663e7b6c1c507c6",
+      "files": 4
+    },
+    {
+      "name": "02-jpeg-c2pa-added-after-sealing",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "f31c004a772720f5e8b4bedc37557fd2732508b6a60cecca1d902ed92037dd6c",
+      "files": 4
+    },
+    {
+      "name": "03-jpeg-app11-non-jumbf-present-at-sealing",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "2a7c84dbb1acf5d53d9826058253d94b150b0f9bf07faad828d7d10e51db33ee",
+      "files": 4
+    },
+    {
+      "name": "04-jpeg-app11-non-jumbf-added-after-sealing",
+      "kind": "file",
+      "outcome": "tampered",
+      "sha256": "f416e65b87308a68965b5f742514f91b5c7a0979b667abae3d3ebe3897ddf165",
+      "files": 4
+    },
+    {
+      "name": "05-jpeg-no-trailer",
+      "kind": "file",
+      "outcome": "no_proof_found",
+      "sha256": "abb68eb3c7ff7c6e13e781e90316cf5d67086817b44923d79c689ec2d4bee3ac",
+      "files": 3
+    },
+    {
+      "name": "06-jpeg-footer-crc-mismatch",
+      "kind": "file",
+      "outcome": "corrupted_proof",
+      "sha256": "f96921c98ed7df8af352d3aeac3f1a868ae80498ede7cf089ee6f92153214b1e",
+      "files": 4
+    },
+    {
+      "name": "07-jpeg-fake-magic-without-structure",
+      "kind": "file",
+      "outcome": "no_proof_found",
+      "sha256": "0700513fb270682fdeaabeee00c896f52a1b0d697b77ae67624d95464db8fceb",
+      "files": 3
+    },
+    {
+      "name": "08-jpeg-truncated-payload",
+      "kind": "file",
+      "outcome": "no_proof_found",
+      "sha256": "c34f3a7f808b91520b49150be8f9c34b737eb077fbdc88d8a278c3e2a13eea35",
+      "files": 3
+    },
+    {
+      "name": "09-jpeg-double-sealed",
+      "kind": "file",
+      "outcome": "nested_proof",
+      "sha256": "f93506b0d43b301bd3f78723e8a62f628a25729a6060d722354616d513373486",
+      "files": 4
+    },
+    {
+      "name": "10-jpeg-core-edited",
+      "kind": "file",
+      "outcome": "tampered",
+      "sha256": "ab2acdea484103c09ed32d25c65e91919ab44b2aa2089078c844bc1136afee89",
+      "files": 4
+    },
+    {
+      "name": "11-jpeg-pixels-edited",
+      "kind": "file",
+      "outcome": "tampered",
+      "sha256": "d825b4aba1f10d36d41d681c1b6200a7a2a3135e0a1eaaa724115e0b153b3347",
+      "files": 4
+    },
+    {
+      "name": "12-jpeg-sig-high-s",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "3b8adb5e1b4a0019cd957b77cf94b54283ded99fb0630ce3ecfc1665a172d1db",
+      "files": 4
+    },
+    {
+      "name": "13-jpeg-sig-der",
+      "kind": "file",
+      "outcome": "tampered",
+      "sha256": "25cb07f98cf7fef65cda314f4292ce84bff251ca35a2d9b868cf878438e7c587",
+      "files": 4
+    },
+    {
+      "name": "14-jpeg-key-id-mismatch",
+      "kind": "file",
+      "outcome": "tampered",
+      "sha256": "bf01661f667683e9752595958a62fc3fadda54e12cf56f741e8777ab490642f4",
+      "files": 4
+    },
+    {
+      "name": "15-jpeg-unknown-minor",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "fd107fbd8ead77ddb2d3003b65dc04cb45e366a286c398beeefbaacf2b384bc8",
+      "files": 4
+    },
+    {
+      "name": "16-jpeg-unknown-major",
+      "kind": "file",
+      "outcome": "unsupported_format_version",
+      "sha256": "5fc1c240fa994f6e287c49cf5f8c0142ef3f5107fa58411ae3167471e29be291",
+      "files": 4
+    },
+    {
+      "name": "17-jpeg-sidecar-only",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "847763ddf23b25b3f1c6f9719d555d964c3ebe25ea90448b6c77b1eeaee97e64",
+      "files": 5
+    },
+    {
+      "name": "18-jpeg-sidecar-differs",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "dc0db116c25fa7f2af18668431b40a1415e7d52cb411e0e75074172a23fdbb48",
+      "files": 5
+    },
+    {
+      "name": "19-jpeg-flags-disagree",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "292d2bd7d0630ce233fbf0b98441154bbeccffed6417e4fc69daff46ce1844d0",
+      "files": 4
+    },
+    {
+      "name": "20-jpeg-payload-not-canonical",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "c191ebbd2fc8ee66997155aa2044f24c9c6938f1edb644ab517a585046866481",
+      "files": 4
+    },
+    {
+      "name": "21-jpeg-missing-capture-id",
+      "kind": "file",
+      "outcome": "no_proof_found",
+      "sha256": "631137852102636fea326be62adceb3a85dff4b05c49b5d70d9b9c74a28703cf",
+      "files": 4
+    },
+    {
+      "name": "22-jpeg-float-in-core",
+      "kind": "file",
+      "outcome": "no_proof_found",
+      "sha256": "c0df76d210f284dc393c0123dd99d31bf76848034d706cc5428652ea77653a5d",
+      "files": 4
+    },
+    {
+      "name": "23-heic-sealed",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "36f7b66f037cf2afbc6a4688c519592dad5a374fa40dc22fc0dac3fd810ae81e",
+      "files": 4
+    },
+    {
+      "name": "24-heic-existing-free-box",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "297d8599978935cbe36e8c25eaa15011e9c44b5786afe400629a7f400304afbf",
+      "files": 4
+    },
+    {
+      "name": "25-seg-chain-complete",
+      "kind": "segments",
+      "outcome": "authentic",
+      "sha256": "03e24b5ab9fe315ab0d9644eeff91dc4f61cffba1e7e14a38322cbff0c861de5",
+      "files": 3
+    },
+    {
+      "name": "26-seg-chain-reordered",
+      "kind": "segments",
+      "outcome": "tampered",
+      "sha256": "67620ed7f1606fbb04f83b23ab85d9c9476fd4d21ff963d3137f6c4d795efa0e",
+      "files": 3
+    },
+    {
+      "name": "27-seg-chain-clip-from-middle",
+      "kind": "segments",
+      "outcome": "verified_clip",
+      "sha256": "827c5ec105fcd8c3bebc93b78d187674e2425bc7cfc8bd25aa2712b8ea48308d",
+      "files": 3
+    },
+    {
+      "name": "28-seg-chain-gap",
+      "kind": "segments",
+      "outcome": "verified_clip",
+      "sha256": "9d68d220fb668b36e6a228ea730965a43bcd6846b744c8e3188fdbf6d48dc6e9",
+      "files": 3
+    },
+    {
+      "name": "29-seg-chain-sig-high-s",
+      "kind": "segments",
+      "outcome": "authentic",
+      "sha256": "2e991083d489d0493d3bb5d941c147cb2abf4b9097a46c8daab5e388fe2b48b1",
+      "files": 3
+    },
+    {
+      "name": "30-seg-chain-wrong-separator",
+      "kind": "segments",
+      "outcome": "tampered",
+      "sha256": "e7d1541427dc11f7a0ed0dd17dc48803fa92fe750c8be17cba4750d0c49dd5c9",
+      "files": 3
+    },
+    {
+      "name": "31-seg-chain-prev-link-forged",
+      "kind": "segments",
+      "outcome": "tampered",
+      "sha256": "f5c21602b57bed24c5884160f8940f2e08206d045a0fc1861820db8eb055fc18",
+      "files": 3
+    },
+    {
+      "name": "32-jcs-core-canonicalization",
+      "kind": "jcs",
+      "sha256": "89f6fa46b0172237081c49cf741709b38dcd56056bc54be2ce1f6b0ca150ddb8",
+      "files": 3
+    },
+    {
+      "name": "33-mp4-video-sealed",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "b0a9ea0f37f50e1bda6b4f7f6992c14383a6327e3f86abd5633ecc3d734d81f7",
+      "files": 4
+    },
+    {
+      "name": "34-mp4-video-without-segments",
+      "kind": "file",
+      "outcome": "no_proof_found",
+      "sha256": "e9b563713c3a6f439933a4d01cdd5fc8452d0cfaaaece0fe16fd327cd1832ab3",
+      "files": 4
+    },
+    {
+      "name": "35-jpeg-fill-bytes",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "8d0c44300e4ba6172a9ff45b1255e2ce98804a3552a7bdfa6b60951f175e1954",
+      "files": 4
+    },
+    {
+      "name": "36-mp4-container-verified",
+      "kind": "container",
+      "outcome": "authentic",
+      "sha256": "b49ac71eb416c3e08ec8bac5f95c2553ee6dd633ce94f647d2664d6d2634a811",
+      "files": 4
+    },
+    {
+      "name": "37-mp4-container-hevc",
+      "kind": "container",
+      "outcome": "authentic",
+      "sha256": "a14a1766dac44876192be5480b0da0495e027fb83e881b54b16229c5e0ea746b",
+      "files": 4
+    },
+    {
+      "name": "38-mp4-container-clip",
+      "kind": "container",
+      "outcome": "verified_clip",
+      "sha256": "d1b787bdacf707ec671daa6bacb8734a03551b83b489082681843da9ba0b1c62",
+      "files": 4
+    },
+    {
+      "name": "39-mp4-container-frame-replaced",
+      "kind": "container",
+      "outcome": "tampered",
+      "sha256": "3f243eeb9a0e560c09d2d56e73520ec25cd72a6e49e2f792c24832aeab8233e1",
+      "files": 4
+    },
+    {
+      "name": "40-jpeg-unknown-secure-hw",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "0ebb8c4324fd982e25dd6d2740e607260c2808a120ab42353cda1bf91f7a2713",
+      "files": 4
+    },
+    {
+      "name": "41-jpeg-attested-tee",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "f33f91bdb74e59c30e2ba77b59807236de9c7e908c3fecec422f6e5de88788ca",
+      "files": 4
+    },
+    {
+      "name": "42-jpeg-attested-strongbox",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "b60757d9d11b9f8861c890320419b60dafee74f688c68440d2bdd61fac31bea1",
+      "files": 4
+    },
+    {
+      "name": "43-jpeg-attestation-expired-since",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "cc26778f15c756283e8b512528e26edc76985d2c127dbac7b1d7abff9e725d92",
+      "files": 4
+    },
+    {
+      "name": "44-jpeg-attestation-revoked-before-capture",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "8dd60b4613f263fefd73d0fb8f539eaf3ba4da00462328ce785aec266c9c9f0a",
+      "files": 4
+    },
+    {
+      "name": "45-jpeg-attestation-revoked-after-capture",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "f43dcddaa7ddc523506fc000c9baab7668ec9c9b774ea050ff3c606ea51db604",
+      "files": 4
+    },
+    {
+      "name": "46-jpeg-missing-media-dimensions",
+      "kind": "file",
+      "outcome": "no_proof_found",
+      "sha256": "5558fac7ecc7860cb5711b3500d2303f013490b3687642b19f2bbf1306fa5f51",
+      "files": 4
+    },
+    {
+      "name": "47-heic-sealed-ios",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "0a5e0b70371768054e1921f2e4a408b10acbf053d4c272441d95f42959c97775",
+      "files": 4
+    },
+    {
+      "name": "48-mov-container-ios",
+      "kind": "container",
+      "outcome": "authentic",
+      "sha256": "f72e58f35621a3a6ed1e9321e49d00b06b3d89a610464a725af8257851edfbd9",
+      "files": 4
+    },
+    {
+      "name": "49-jpeg-registry-verified",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "db0e91239706b8e055951819e07a719e65a6a394850a8948b7331e97139de1cc",
+      "files": 4
+    },
+    {
+      "name": "50-jpeg-registry-path-forged",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "aa00bc99ed1ced461485476ffb79aa45d3158f1edf8008f5110369bcc4bc075d",
+      "files": 4
+    },
+    {
+      "name": "51-jpeg-registry-other-key",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "5bca23a40d01f78035c64f0cfee977ca04de475c275019ecf2f9847f92ab8c2a",
+      "files": 4
+    },
+    {
+      "name": "52-jpeg-registry-log-not-trusted",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "54f1f0fba9635e0a1b6d5381721090e07fc926adeaa99aed4f137abd72edc15e",
+      "files": 4
+    },
+    {
+      "name": "53-jpeg-registry-after-capture",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "b233ecb74cfd7a9cb06328d4a1552929f663e099d47e4049a8763d77b3580927",
+      "files": 4
+    },
+    {
+      "name": "54-jpeg-registry-green",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "4deebe5f63f1d40ee3e9959fd6c03556e66956e2353545dc24fe76bae6348860",
+      "files": 4
+    },
+    {
+      "name": "55-jpeg-anchor-path-only",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "b103c2fc10bb898701db66ed22171d37a0e500bb752c78447d5da55b31215213",
+      "files": 4
+    },
+    {
+      "name": "56-jpeg-anchor-path-forged",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "c15c40e06f9008e322512a0e4ca49c3ae93c4124f08d423e8bc7ac05ac0240c3",
+      "files": 4
+    },
+    {
+      "name": "57-jpeg-anchor-on-chain",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "1ce9b5489ad1174f8a081a05b760adb352b4860bec166416920e3d381948e7fa",
+      "files": 4
+    },
+    {
+      "name": "58-jpeg-anchor-chain-disagrees",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "bebe8664ce7307dbe7ad6466db81c78af8776cdec873d74bab2d339e3e3da763",
+      "files": 4
+    },
+    {
+      "name": "59-jpeg-timestamped",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "5100cdf3e56bfb1e427ebe7ba0b16ca566e6212a08ee6c84833bfa1d129d39a4",
+      "files": 4
+    },
+    {
+      "name": "60-jpeg-timestamp-other-imprint",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "ea9a843de4217a833b8ce21b6510d3c9257f48fdc144096582aa8af92a276026",
+      "files": 4
+    },
+    {
+      "name": "61-jpeg-timestamp-untrusted-tsa",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "92423beaa6f6aee06307a3661dd8ae2682d62ee42c9b195161bd9a124da95814",
+      "files": 4
+    },
+    {
+      "name": "62-jpeg-timestamp-no-eku",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "529712909ee6fd25562f4bb8fd9396c7a0a0e72cbd7d90102e1af88957aa0d89",
+      "files": 4
+    },
+    {
+      "name": "63-jpeg-expired-chain-timestamped",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "dc78e839829fb5f72d966101c7bd2b9264fadac1ef6590f523f5c87135def74a",
+      "files": 4
+    },
+    {
+      "name": "64-jpeg-integrity-hardware",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "a1fec5e5a6ecb09044a6dbbc26e90fc6061a094a1bf900d6d02686e92a94739c",
+      "files": 4
+    },
+    {
+      "name": "65-jpeg-integrity-failed",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "439f76596d441c27a84f5ff4142c0818cd28274e6a776d832ae6b85bb9fc92a1",
+      "files": 4
+    },
+    {
+      "name": "66-jpeg-integrity-relabelled",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "a44ecc33bf41660cab0cc1992e4f3404bd38c3ca25102782c2e7a391193b6543",
+      "files": 4
+    },
+    {
+      "name": "67-jpeg-integrity-unknown-verdict",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "8727a94c421d2684799ccd5d3d44708dfbf71e667e9570f18eeeb46f30f08c3b",
+      "files": 4
+    },
+    {
+      "name": "68-jpeg-c2pa-present-at-sealing",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "190b6ce34fcbf57bc3ca91284350963731d891d0f6dc953ce2d04bb6c6f16a51",
+      "files": 4
+    },
+    {
+      "name": "69-heic-c2pa-update-box-after-trailer",
+      "kind": "file",
+      "outcome": "no_proof_found",
+      "sha256": "86c7556917a5630a0fc9710a9be349529ca51d60d841bc2cd688b5f0a67222cc",
+      "files": 4
+    },
+    {
+      "name": "70-heic-c2pa-update-box-after-trailer-sidecar",
+      "kind": "file",
+      "outcome": "tampered",
+      "sha256": "cf790d8b49815e662de8af9281fcd94391cf3b8eac44145bd2cd7cb0189f7e1b",
+      "files": 5
+    },
+    {
+      "name": "71-jpeg-sidecar-metadata-stripped",
+      "kind": "file",
+      "outcome": "tampered",
+      "sha256": "4ce9b4cb34284749b3263e5dee48aeccdb8efa48b3323e546d4354de07359cee",
+      "files": 5
+    },
+    {
+      "name": "72-jpeg-footer-crc-mismatch-sidecar",
+      "kind": "file",
+      "outcome": "corrupted_proof",
+      "sha256": "91abe1c3b6c48f4bde52fe175112775bf7ca1650c0ada08c8cfafe4a667ec466",
+      "files": 5
+    },
+    {
+      "name": "73-heic-c2pa-added-after-sealing",
+      "kind": "file",
+      "outcome": "tampered",
+      "sha256": "248b073fd1961f9d03676b6a7bbbf7b8f005e1a48adcfc291995749249a1e22d",
+      "files": 4
+    },
+    {
+      "name": "74-jpeg-location-declared",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "72f1b9c0c4b52900ed8cc0d5b78955848909ad37ab42185c6e991ae059a8e266",
+      "files": 4
+    },
+    {
+      "name": "75-jpeg-location-corroborated",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "bda29de0113bc61515aaa46af668e4c1fffe28a0f922aeefcae098aeb2d638e9",
+      "files": 4
+    },
+    {
+      "name": "76-jpeg-location-corroboration-other-signer",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "314246edae1962f49f23c58e4dd9ff02de720c8425d72228e4412e505d626a88",
+      "files": 4
+    },
+    {
+      "name": "77-jpeg-location-corroboration-other-core",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "db851cb1607ef7204610a1520847cc49cd7726b65fe3355971c73890b2576c19",
+      "files": 4
+    },
+    {
+      "name": "78-jpeg-location-corroboration-unknown-method",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "ecc64d65078d2d57d747cef72ff07adda585e2c06b74c58d8f2e5770a7ba1a31",
+      "files": 4
+    },
+    {
+      "name": "79-jpeg-location-contradicted",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "e6a5c8d4c0adfd2c65a2f4f60c0351e8b400a1634105a0a006c6907f1c730a88",
+      "files": 4
+    },
+    {
+      "name": "80-jpeg-location-corroboration-unknown-result",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "5dc47f87c772d6adefb76152f20bb98972d76a3722deb41c1f115279d0d650eb",
+      "files": 4
+    },
+    {
+      "name": "81-jpeg-location-claimed-authenticated",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "b42a4aac516a964ce444d38f121d1da8a4d3cae21b998483b5599027a5f778cc",
+      "files": 4
+    },
+    {
+      "name": "82-jpeg-location-claimed-corroborated",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "8100a91b58bc995480e43335f41661ec08c1909bec39a295a3c3bfd4e1ba133a",
+      "files": 4
+    },
+    {
+      "name": "83-jpeg-location-unknown-claimed-level",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "48ad58dc3c9f7ed04cfc6570301e097aafb9e40ac01cfc11ca54cf2fa54b0d04",
+      "files": 4
+    },
+    {
+      "name": "84-jpeg-location-corroboration-without-position",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "b194cc6b012290a82032f5cab5b216eab7e6b51ae90f0b73f77bc728ba0baa40",
+      "files": 4
+    }
+  ],
+  "fixtures": {
+    "_media": "c8ae0d49e385dfb73f93f60bbf51b94faf18a32da46314416033f6ab309258bd",
+    "_trust": "15884a7b974f5fac6a6e479674d5a6760b9ef2caad6b51b0cc62d9346c5dbeac",
+    "_chains": "14c74c018f4022f397fc7bef3659922a68044fe9c62ffc2e2334a70508ffca82",
+    "_timestamps": "9d215df2fc7b14490a40aca6dce7a24fa03c67a12cc54a120a1a19c662f9ffa0",
+    "_watermark": "9aa771f902f4d9a97ebb7ae096cdb417aa913aad7fd435085056c5f6e6d7fea3"
+  }
+}
