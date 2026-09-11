@@ -1078,6 +1078,69 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
   }
 }
 
+// ---- C2PA co-existence and the sidecar (§3.1, spec/c2pa-interop-1.0.md) ----
+
+{
+  // The C2PA manifest store is in the JPEG header (APP11, before SOS) and the
+  // vcap trailer is after EOI, so in byte order the manifest is always before
+  // the trailer. The order a vector can vary is temporal: vector 02 adds the
+  // manifest after sealing, this one seals a file that already carries it.
+  // §4.1 strips JUMBF APP11 either way, so the canonical bytes — and with them
+  // media.hash, the core and the signature — are those of vector 01.
+  file({ name: '68-jpeg-c2pa-present-at-sealing', ext: 'jpg', file: seal(insertAfterApp0(baseJpeg, jumbf), jpegProof), proof: jpegProof,
+    expected: { outcome: 'authentic', labels: PHOTO_LABELS, not_evaluated: [], core_hash: hashOf(jpegProof) },
+    notes: 'A C2PA-style APP11 JUMBF segment present **when the file was sealed**, the mirror of vector 02 where it is added afterwards. The proof is byte-identical to vector 01\'s — same `media.hash`, same `core_hash`, same signature — because §4.1 excludes JUMBF APP11 from the canonical bytes whichever came first.\n\nThis is the vector for "what if the C2PA manifest is placed after the vcap trailer": in a JPEG it cannot be. The manifest store lives in APP11 marker segments in the header (C2PA 2.4, Annex A.3.1), before SOS; the trailer follows EOI. The only order that varies is the order in time, and this vector and vector 02 are its two values. What differs between them is the *C2PA* side, not ours: here the trailer was appended after the manifest\'s `c2pa.hash.data` was computed, so the C2PA hard binding — which covers every byte not excluded, EOI to end of file included — no longer matches (`spec/c2pa-interop-1.0.md` §3).' })
+}
+
+{
+  // A C2PA `uuid` box as Annex A.5.1 defines it: FullBox with the C2PA
+  // extended type, then `box_purpose` as a NUL-terminated string, then data.
+  // An update manifest store "shall exist as the last box of the file"
+  // (A.5.3) — the position the vcap footer needs.
+  const C2PA_UUID = Buffer.from('d8fec3d61b0e483c92975828877ec481', 'hex')
+  const c2paUuidBox = (purpose: string, data: Buffer): Buffer =>
+    bmffBox('uuid', Buffer.concat([C2PA_UUID, Buffer.alloc(4), Buffer.from(`${purpose}\0`, 'ascii'), data]))
+  const heicProof = sign(photoCore(baseHeic, 'image/heic'))
+  const updateAppended = Buffer.concat([seal(baseHeic, heicProof), c2paUuidBox('update', Buffer.from('000000186a756d620000001063327061', 'hex'))])
+
+  file({ name: '69-heic-c2pa-update-box-after-trailer', ext: 'heic', file: updateAppended, proof: heicProof,
+    expected: { outcome: 'no_proof_found', labels: [], not_evaluated: [] },
+    notes: 'Vector 23 with a C2PA `uuid` box of purpose `update` appended **after** the vcap trailer, where C2PA 2.4 Annex A.5.3 says an update manifest store goes: "the last box of the file". The vcap footer must be the last 16 bytes (§3), so the two formats claim the same position and the later writer wins. Here it is C2PA: the footer is no longer at the end, the file carries no trailer a §3 reader can find, and the verdict is *no proof found* — not *corrupted*, because nothing structurally valid was found and broken.\n\nThis is why `spec/c2pa-interop-1.0.md` §3 forbids appending a C2PA update manifest to a sealed ISO-BMFF file, and why the reverse order — the trailer re-appended after the update box — is not available either: C2PA requires its box last. A verifier that scanned the file for a footer that is not at the end would be violating §3 ("found by seeking from the end, never by scanning") and would turn this vector into an authentic verdict for a file whose end nobody signed.' })
+
+  file({ name: '70-heic-c2pa-update-box-after-trailer-sidecar', ext: 'heic', file: updateAppended, sidecar: jcs(heicProof as Json), proof: heicProof,
+    expected: { outcome: 'tampered', labels: [], not_evaluated: [], core_hash: hashOf(heicProof) },
+    notes: 'Vector 69 with the proof also in a sidecar. The sidecar is read because no trailer is found (§3.1), and the canonical bytes are then the **whole** received file — the original bytes, the stale trailer and the appended C2PA box (§4.1 step 1: no valid footer, `F\' = F`). `media.hash` does not match and on a photo that is *tampered* (§8).\n\nThe verdict is honest and it is the point: a sidecar restores full verification only over bytes that did not change, and here they did. A verifier must not carve out "the bytes that look like a trailer" to rescue the match — §3 finds a trailer at the end or not at all, and a reader that recognised trailers by their shape anywhere in a file would accept a proof that somebody merely pasted in.' })
+
+  // The C2PA store goes after `ftyp` (Annex A.5.3). Inserted into a sealed
+  // file it sits inside the canonical bytes: §4.1 removes nothing from BMFF.
+  const ftypEnd = baseHeic.readUInt32BE(0)
+  const sealedHeic = seal(baseHeic, heicProof)
+  const manifestInserted = Buffer.concat([sealedHeic.subarray(0, ftypEnd), c2paUuidBox('manifest', Buffer.concat([Buffer.alloc(8), Buffer.from('000000186a756d620000001063327061', 'hex')])), sealedHeic.subarray(ftypEnd)])
+  file({ name: '73-heic-c2pa-added-after-sealing', ext: 'heic', file: manifestInserted, proof: heicProof,
+    expected: { outcome: 'tampered', labels: [], not_evaluated: [], core_hash: hashOf(heicProof) },
+    notes: 'Vector 23 with a C2PA `uuid` manifest box inserted after `ftyp` — where C2PA 2.4 Annex A.5.3 puts the manifest store — **after** sealing. The mirror of vector 02: on a JPEG §4.1 excludes the JUMBF APP11 and the manifest may come and go; on ISO-BMFF nothing is excluded, the box is inside the canonical bytes, `media.hash` no longer matches and the photo is *tampered*.\n\nThis is the vector behind §4.1\'s "video embeds the manifest BEFORE sealing" and the same rule for HEIC. The asymmetry is not a preference: a C2PA `c2pa.hash.data` over a JPEG covers to end of file, so a manifest written before the trailer would be broken by the trailer, while a `c2pa.hash.bmff.v3` with `/free` excluded is not — so each container has exactly one order in which both bindings hold (`spec/c2pa-interop-1.0.md` §3).' })
+}
+
+// §3.1: a sidecar never rescues a trailer that was found and is broken. The
+// trailer is structurally valid and its CRC fails: somebody edited the file,
+// and that is the verdict whatever sits next to it.
+file({ name: '72-jpeg-footer-crc-mismatch-sidecar', ext: 'jpg', file: seal(baseJpeg, jpegProof, { crcOverride: 0xdeadbeef }), sidecar: jcs(jpegProof as Json), proof: jpegProof,
+  expected: { outcome: 'corrupted_proof', labels: [], not_evaluated: [] },
+  notes: 'Vector 06 — a structurally valid footer whose CRC does not match the payload — with an intact copy of the proof in a sidecar. The verdict stays *corrupted proof* (§3.1): the sidecar is a fallback for a trailer that is **absent**, not a substitute for one that is present and broken. The CRC exists to tell corruption from stripping, and a file whose trailer was found and fails its CRC was edited after sealing; showing the sidecar\'s proof as the file\'s would hide exactly that.' })
+
+{
+  // Removes the JFIF APP0 segment (the first marker segment of base.jpg):
+  // what a metadata-stripping pipeline does to a header, without touching
+  // the entropy-coded data.
+  const stripApp0 = (jpeg: Buffer): Buffer => {
+    const app0Len = jpeg.readUInt16BE(4)
+    return Buffer.concat([jpeg.subarray(0, 2), jpeg.subarray(2 + 2 + app0Len)])
+  }
+  file({ name: '71-jpeg-sidecar-metadata-stripped', ext: 'jpg', file: stripApp0(baseJpeg), sidecar: jcs(jpegProof as Json), proof: jpegProof,
+    expected: { outcome: 'tampered', labels: [], not_evaluated: [], core_hash: hashOf(jpegProof) },
+    notes: 'The proof of vector 01 in a sidecar next to a copy of the image whose APP0 segment was removed — the header a metadata-stripping pipeline leaves, with the pixels untouched. Vector 17 is the same sidecar over the unchanged file and reads *authentic*; this one reads *tampered*, because the canonical bytes (§4.1) include every header segment that is not a JUMBF APP11, and the signature is valid over a `media.hash` the received bytes no longer produce.\n\nThis is the row of the transformation table in `spec/c2pa-interop-1.0.md` §5 that a reader is most tempted to soften: a platform that re-encodes or strips metadata leaves a file whose sidecar cannot restore the verdict. The format has no "probably the same picture" outcome for a photo — §8 says a `media.hash` mismatch with a valid `sig` is red — and what remains is the watermark, which a detector may turn into *origin traced*, never into authentic.' })
+}
+
 // what it can rebuild is the difference between a generator and a broom.
 const owned = new Set(vectors.map((v) => v.name))
 if (existsSync(VECTORS)) {

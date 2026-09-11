@@ -111,12 +111,57 @@ by seeking from the end, never by scanning.
   what sits next to the file: verifiers MUST NOT check it. Unknown reserved bits
   are ignored, not fatal.
 - **Sidecar.** The same JSON, byte-identical, in `<filename>.vcap` next to the
-  file. Used when a pipeline cannot append to the container, and always allowed
-  as a redundant copy. A sidecar has no footer. When both exist, the trailer is
-  authoritative; a sidecar that differs is reported (*sidecar differs*) and not
-  used.
+  file: §3.1.
 - **The magic carries no brand** (decision P8): `VCAP` is the codename, and
   sealed files are immutable while the product name is provisional.
+
+### 3.1 The sidecar
+
+The detached form of the proof, for a pipeline that cannot append to the
+container, for a file whose trailer a platform stripped, and always allowed as
+a redundant copy. Normative; the rationale and what a sidecar does and does not
+restore are in `c2pa-interop-1.0.md` §4 and §5.
+
+- **Content.** Exactly the bytes a trailer's payload would carry: the proof
+  JSON, UTF-8, no BOM, JCS-canonical of the whole object (§6.1). Nothing else —
+  no box header, no footer, no CRC. Those exist for discovery from the end of a
+  file and for telling corruption from stripping; a separate file has a length
+  of its own and cannot be "stripped" without disappearing. A reader parses it
+  as it parses a payload and MUST NOT depend on the canonical form (§6.1); a
+  sidecar that is not a JSON object with a well-formed `v` is *no proof found*.
+- **Discovery.** The sidecar of `F` is the file named `<filename of F>.vcap` —
+  the full name, extension included, plus `.vcap` (`IMG_0001.jpg` →
+  `IMG_0001.jpg.vcap`) — in the same directory. A verifier MAY also accept a
+  sidecar its caller hands it (two files in one upload, two parts of one
+  request). It MUST NOT look anywhere else, and MUST NOT fetch one from a
+  location the file or the proof names: nothing in the format names one, and
+  the verification path contains no server. Served over HTTP the media type is
+  `application/json`; there is no registered type.
+- **Precedence.** Read the last 16 bytes first (§3), then:
+  1. **Valid footer, CRC matches** → the trailer is the proof. A sidecar, if
+     present, is compared **byte for byte** with the payload; not equal is
+     *sidecar differs*, a label, and the sidecar is not used for anything
+     (vector 18). Byte comparison, not semantic: a writer emits canonical bytes
+     in both places and the label is a writer bug or a swapped file, either of
+     which the reader should say rather than resolve.
+  2. **Valid footer, CRC fails** → *corrupted proof*, whatever the sidecar
+     says (vector 72). The sidecar is a fallback for a trailer that is absent,
+     not a substitute for one that was found and is broken: somebody edited
+     the file, and showing the sidecar's proof as the file's would hide it.
+  3. **No valid footer, sidecar present** → the sidecar is the proof and the
+     canonical bytes are the **whole** received file (§4.1 step 1, `F' = F`),
+     including whatever a stale or displaced trailer left behind (vector 70).
+     The verdict is computed exactly as for an embedded proof, and a verifier
+     MUST NOT weaken it or add a label because the proof came from a sidecar
+     (vector 17): where the proof sat carries no evidence — `sig` over the
+     core and `media.hash` over the bytes carry all of it, and both are
+     recomputed in either case.
+  4. **Neither** → *no proof found*.
+- **Video.** Recomputing §5 content hashes stays optional and, when skipped,
+  declared (*segment content not recomputed*); a sidecar next to a demuxable
+  container is the case §5 has in mind.
+- **Footer flag bit 0** says a sidecar was written and is a hint: verifiers
+  MUST NOT check it (§3).
 
 ---
 
@@ -152,12 +197,23 @@ The asymmetry between containers is deliberate and follows from where each
 standard puts its own hash:
 
 - **Photos embed the C2PA manifest AFTER sealing**, because the JPEG hard binding
-  hashes to end-of-file; if the manifest were inside the canonical bytes, adding
-  it would invalidate the vcap signature it depends on. So it is excluded — and,
-  as a consequence, the C2PA manifest of a sealed photo can be added, replaced or
-  removed without touching the vcap verdict. It carries its own signature.
-- **Video embeds the manifest BEFORE sealing**, because BMFF hashing ignores the
-  trailing `free` box; the manifest is inside the canonical bytes and stays there.
+  (`c2pa.hash.data`) hashes every byte not excluded, EOI to end of file
+  included; if the manifest were inside the canonical bytes, adding it would
+  invalidate the vcap signature it depends on. So it is excluded — and, as a
+  consequence, the C2PA manifest of a sealed photo can be added, replaced or
+  removed without touching the vcap verdict, whichever came first (vectors 02
+  and 68). It carries its own signature, and once written after sealing its
+  hard binding covers the trailer: a trailer rewritten later breaks the
+  manifest, not the proof (`c2pa-interop-1.0.md` §3).
+- **Video embeds the manifest BEFORE sealing**: the manifest is inside the
+  canonical bytes and stays there (a manifest inserted afterwards is
+  *tampered*, vector 73), and the trailer appended after it is a `free` box,
+  which a C2PA claim generator keeps out of `c2pa.hash.bmff.v3` by putting
+  `/free` on its exclusion list — the one exclusion, with `/skip`, that a C2PA
+  validator does not even flag. Without that entry the trailer breaks the C2PA
+  binding, not ours. A C2PA *update* manifest, which C2PA requires to be the
+  last box of the file, cannot share a file with a trailer at all (vectors
+  69–70; `c2pa-interop-1.0.md` §3).
 
 Everything else in the file — EXIF, XMP, ICC, thumbnails, audio — is inside `C`
 and therefore covered. A pseudonymous capture (§6, `policy.pseudonymous`) MUST
@@ -923,7 +979,9 @@ who finds it out later stops trusting the rest:
   app, and why its failure is prominent.
 - **Anything about the C2PA manifest** of a sealed photo. It sits outside the
   canonical bytes (§4.1) and can change without affecting the vcap verdict; it
-  is verified by its own signature, separately.
+  is verified by its own signature, separately. What each format proves that
+  the other does not, how a proof maps onto C2PA assertions and what a
+  verifier says after a platform strips metadata: `c2pa-interop-1.0.md`.
 
 ---
 
@@ -942,7 +1000,16 @@ says.
 - [x] `REVIEW (BE)` signature encoding — resolved: P1363, low `s` emitted, both accepted; vector with high `s` and vector with DER
 - [x] `REVIEW (BE)` what is signed — resolved: core/attachment split (`reviews/01-crypto-review-draft-1.0.md`)
 - [x] `TODO (LEAD)` the vcap SEI UUID — resolved: derived from `"vcap/1.0/sei"`, no registration exists for `user_data_unregistered`; payload defined (`reviews/implementability-android.md`, M4, M5)
-- [ ] `REVIEW (mobile)` manifest ordering: after sealing for photos, before for video
+- [~] `REVIEW (mobile)` manifest ordering: after sealing for photos, before for
+      video — confirmed against C2PA 2.4 (`c2pa-interop-1.0.md` §3, vectors
+      68 and 73): `c2pa.hash.data` covers to end of file, `c2pa.hash.bmff.v3`
+      needs `/free` excluded; the on-device check with a real claim generator
+      waits for a signing certificate (R4)
+- [ ] `REVIEW (BE)` a C2PA update manifest appended to a sealed ISO-BMFF file
+      takes the position the footer needs (vectors 69–70). Forbidden for
+      writers; whether a future minor lets a reader step over a trailing C2PA
+      `uuid` box before seeking the footer is open, and would be a new reading
+      rule, not a change to this one
 - [ ] `REVIEW (mobile)` per-segment signing cost in StrongBox on a long clip
 - [~] `REVIEW (mobile)` NAL byte definition and audio DTS rule reproducible on both encoders — the DTS clock is now named (M8) and the timeline with it (edit lists, §5); H.264 and HEVC on Android are reproduced byte for byte by a second implementation written from this text (`tools/src/container.ts`, vectors 36–37), which is what "reproducible" was asking; iOS pending (S1)
 - [x] `REVIEW (mobile)` hashing two interleaved tracks during encoding — resolved: 8 KB and 0.5 ms per segment on a TEE device (M8)
@@ -959,7 +1026,9 @@ says.
       the segment chain at message level, the §8 video rule, JPEG fill bytes,
       the container-level video cases (36–39) and the §7 proof level (41–45:
       `tee`, `strongbox`, a chain expired since the capture, and a frozen
-      revocation snapshot on either side of the instant): **45** in `vectors/`,
+      revocation snapshot on either side of the instant): **45** in `vectors/`
+      when this item closed, **73** with the registry, anchor, timestamp,
+      integrity, iOS, C2PA co-existence and sidecar slices since,
       checked by the reference verifier in `tools/` (steps 4–5). The §7 vectors
       trust the anchors in `vectors/_trust/`, whose attestation root is a test
       root: they prove the level logic, not that an implementation can walk a

@@ -12,6 +12,12 @@ treat every edit as a breaking change until `vcap/1.0` is tagged.
 - `spec/vcap-proof-1.0.md` — the normative document. Sections marked `TODO` are
   the six format decisions still open (see the work order in
   `Doc/06-fase1-avvio.md` section 3).
+- `spec/watermark-layouts-1.0.md` — the payload layouts `watermark.layout`
+  names; normative for the bit layout and the decoder's failure answer.
+- `spec/c2pa-interop-1.0.md` — what vcap and C2PA each prove, the mapping onto
+  C2PA assertions, how the two bindings co-exist in one file, the sidecar's
+  rationale and what survives each transformation. Informative except where
+  marked, and every marked sentence has a vector.
 - `reviews/` — the review notes of the work order's steps 2 and 3. Findings are
   graded BLOCKING / SHOULD / NOTE; the draft is amended, the note stays as the
   record of why.

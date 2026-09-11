@@ -97,8 +97,19 @@ carry.
 
 ```
 cd tools && npm ci && npm test        # every vector against the reference verifier
-npm run generate                       # rewrite vectors/NN-* (signatures change: ECDSA is randomized)
+npm run generate                       # rewrite the vectors/NN-* it owns; byte-stable, see above
 ```
+
+**The sidecar vectors** (17, 18, 70, 71, 72) carry `input.<ext>.vcap` next to
+the input, and a verifier under test is handed both, as `tools/test/vectors.test.ts`
+does. They pin §3.1: the trailer wins when it is found and intact (18), a broken
+trailer is *corrupted* whatever the sidecar says (72), and a sidecar alone
+restores the full verdict over unchanged bytes (17) and nothing over changed
+ones (70, 71). **The C2PA co-existence vectors** (02, 03, 04, 68, 69, 73) carry
+no C2PA signature — a JUMBF-shaped APP11 or a `uuid` box with the C2PA extended
+type is all the vcap layer looks at — and pin §4.1's two orders, one per
+container, and the update-manifest case that fits neither
+(`spec/c2pa-interop-1.0.md` §3).
 
 An implementation passes conformance when, for every directory, it produces
 the same `outcome`, `labels`, `not_evaluated`, `core_hash` and `segments.verified`
@@ -112,3 +123,12 @@ Every attachment §6.2 defines now has vectors: `attestation`,
 
 - **Watermark-only match, cropped photo beyond the correction budget**:
   detector vectors, ML review.
+- **A remuxed or trimmed video with its proof in a sidecar**: the trailer is
+  gone, the NAL units and vcap SEIs survive, and §5 should read *verified clip*
+  over the whole received file. It needs a real remuxer's output and belongs
+  with the container vectors that come off a device (36–39, 48), not with the
+  generator.
+- **A JPEG carrying a C2PA manifest with a real claim signature** next to a
+  vcap trailer, validated by a C2PA validator as well as by ours. Both halves
+  of `spec/c2pa-interop-1.0.md` §3 are argued from the C2PA text; the C2PA
+  half is not executed here because no C2PA signing credential exists (R4).
