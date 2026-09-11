@@ -10,6 +10,22 @@ with it.
 
 ## Unreleased
 
+### Housekeeping: vector 51 is byte-stable, §11 catches up with the corpus
+
+- **Vector 51 regenerated identically from now on.** Its registry leaf is
+  about *another* key, and the generator minted that key with
+  `generateKeyPairSync` on every run — so `npm run generate` rewrote
+  `51/proof.json` and `51/input.jpg` each time while every other vector stayed
+  still, which is the diff noise RFC 6979 signing was adopted to remove. The
+  other key is now fixed test material, `TEST_OTHER_KEY_PKCS8_BASE64` in
+  `tools/src/testkey.ts`, public like the two keys beside it: it is nobody's
+  key and trusted by nobody, which is all the vector needs of it. The bytes of
+  51 change once, here; its verdict and labels do not, and the reference
+  verifier agrees with `expected.json` before and after.
+- §11 listed the proof-level, `timestamp` and `anchor` vectors as still to
+  come; they have existed since 41–45, 49–54, 55–58 and 59–63. The three
+  items are ticked with the vector numbers, and no rule changed.
+
 ### EBSI as an anchoring chain (§6.2)
 
 - §6.2 now names `ebsi` and `ebsi-pilot` as values of `anchor.chain`, for

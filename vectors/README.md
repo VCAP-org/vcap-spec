@@ -56,7 +56,9 @@ make an implementation pass.** Either the implementation is wrong or the spec
 is; fix that.
 
 The test key in `tools/src/testkey.ts` is public by design: anyone can
-regenerate the vectors. Base media in `_media/` (a 16×16 JPEG, its HEIC, a two-frame
+regenerate the vectors. Next to it, `TEST_OTHER_KEY_PKCS8_BASE64` is a key
+that is **nobody's** — not the signing key, not a trusted log — for the vectors
+that need somebody else's key (51, a registry leaf about another device). Base media in `_media/` (a 16×16 JPEG, its HEIC, a two-frame
 H.264 MP4) are the unsealed inputs.
 
 **Regeneration is byte-stable.** `npm run generate` signs with RFC 6979

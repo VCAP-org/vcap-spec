@@ -1,4 +1,4 @@
-import { createHash, createPrivateKey, generateKeyPairSync } from 'node:crypto'
+import { createHash, createPrivateKey } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { type Json, jcs } from './jcs.js'
@@ -9,7 +9,7 @@ import { type SegmentEntry, SEPARATOR, ZERO_LINK, linkOf, segmentMessage } from 
 // Deterministic ES256 (RFC 6979): regenerating an unchanged vector must not
 // change its bytes. See sign.ts.
 import { signChain, signEs256 } from './sign.js'
-import { TEST_KEY_PKCS8_BASE64 } from './testkey.js'
+import { TEST_KEY_PKCS8_BASE64, TEST_OTHER_KEY_PKCS8_BASE64 } from './testkey.js'
 import { TEST_LOG_KEY_PKCS8_BASE64 } from './testlogkey.js'
 import { type KeyStatusStatement, keyStatusMessage, leafHash, leafKeyId, nodeHash, treeHeadMessage } from './registry.js'
 import { type ChainRead } from './anchor.js'
@@ -30,6 +30,8 @@ const MEDIA = join(VECTORS, '_media')
 const trust = loadTrust(join(VECTORS, '_trust'))
 
 const privateKey = createPrivateKey({ key: Buffer.from(TEST_KEY_PKCS8_BASE64, 'base64'), format: 'der', type: 'pkcs8' })
+// Somebody else's key: another device, or a signer no verifier here trusts.
+const otherKey = createPrivateKey({ key: Buffer.from(TEST_OTHER_KEY_PKCS8_BASE64, 'base64'), format: 'der', type: 'pkcs8' })
 const spki = spkiOf(privateKey)
 const PUB = spki.toString('base64url')
 const KEY_ID = keyId(spki)
@@ -672,8 +674,7 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
   {
     // Another key's id and another key's public half: a leaf that is genuinely
     // in the log, for somebody else.
-    const other = createPrivateKey({ key: generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).privateKey.export({ type: 'pkcs8', format: 'der' }), format: 'der', type: 'pkcs8' })
-    const otherSpki = spkiOf(other)
+    const otherSpki = spkiOf(otherKey)
     const proof = registered({ keyId: keyId(otherSpki), pub: otherSpki.toString('base64') })
     file({ name: '51-jpeg-registry-other-key', ext: 'jpg', file: seal(baseJpeg, proof), proof,
       verifierClock: CAPTURE + day,
@@ -1000,9 +1001,7 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
   const integrityFor = (proof: Proof, o: { verdict?: string, source?: string, forge?: boolean, otherKey?: boolean } = {}): Proof => {
     const verdict = o.verdict ?? 'hardware'
     const message = Buffer.concat([coreHash(proof), Buffer.from(verdict, 'utf8')])
-    const key = o.otherKey
-      ? createPrivateKey({ key: generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).privateKey.export({ type: 'pkcs8', format: 'der' }), format: 'der', type: 'pkcs8' })
-      : logKey
+    const key = o.otherKey ? otherKey : logKey
     const signature = o.forge
       // A signature over another verdict: the bytes are real, the claim is not.
       ? signEs256(Buffer.concat([coreHash(proof), Buffer.from('basic', 'utf8')]), key)
