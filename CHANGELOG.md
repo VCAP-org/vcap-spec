@@ -10,6 +10,69 @@ with it.
 
 ## Unreleased
 
+### The position level: declared, corroborated, and a reserved third (§6.1, §6.2, §7.1, §8, §9, vectors 74-84)
+
+- **Two levels on two axes.** §7's proof level says how strong the origin
+  claim is; the new §7.1 says how much the coordinates in the core are
+  worth, as `location.level` in the verifier's output — `none`, `declared`,
+  `corroborated`, `authenticated` — and the two never mix: the position
+  level moves no ceiling and turns no verdict green or red (vectors 75, 79).
+  "Guaranteed" is not a value. Every proof that declares a position now
+  carries a label naming its level, so **every photo vector in the corpus
+  gains *location declared only*** — the same shape as the day *watermark
+  not evaluated* landed on thirteen of them: a level nobody named was not a
+  level.
+- **§6.1 `location`, additive.** The declared claim gains `alt_cm` (WGS 84
+  ellipsoid height, integer centimetres), `source` (`gnss`, `network`,
+  `manual`; extensible) and `at` (device clock at the fix, ms). `level` is
+  now defined as the level the device **claims**: a writer claims
+  `declared`, never `corroborated` (vector 82), and `authenticated` is
+  reserved for device-side `evidence[]` kinds a later minor defines (vector
+  81). A `location` without both coordinates declares nothing (vector 84).
+  Signed by the device means the device says so: the OS is the only thing
+  between the app and any coordinates it likes, which is why the level is
+  called *declared*.
+- **§6.2 `location_corroboration`, a new optional attachment (D12, spike
+  S4).** The registry relays an operator-side CAMARA check of the declared
+  position — `method` (`camara-location-verification`,
+  `camara-number-verification`, `camara-sim-swap`; extensible), `result`
+  (`match`, `no-match`, `unknown`; **not** extensible, it decides the level),
+  `radius_m` (required for a zone check), `at`, an opaque `operator_ref` —
+  signed with the log key over `"vcap/1.0/location" ‖ core_hash ‖ JCS(body)`.
+  **No MSISDN enters a proof, ever**, in any form. A valid `match` under a
+  trusted key reaches *corroborated*; the verifier MUST show it as *the
+  registry attests that the operator confirmed the zone, radius R* — never
+  "verified by the operator", because the operator's answer has no
+  transportable signature and what travels is our countersignature. Same
+  construction and same limit as `integrity`.
+- **Failures land on `declared`, each with its §8 label**: *location
+  corroboration not evaluated* (unknown method, no log key, nothing to
+  corroborate — evidence this verifier cannot read; vectors 78, 84), *not
+  verified* (a signature no trusted key made, which covers both an unknown
+  signer and a genuine statement about another proof — the same bytes, as for
+  `integrity`; vectors 76, 77), *evidence invalid* (a verified signature over
+  a `result` outside the enumeration; vector 80, schema-invalid too),
+  *location contradicted* (a verified `no-match`; vector 79). Plus *location
+  claimed above evidence* and *location evidence not evaluated* for the
+  claims a core can make that nothing here supports (81–83).
+- **`authenticated` is reserved and unreachable**: no evidence kind is
+  defined, no smartphone chipset exposes Galileo OSNMA as of September 2026,
+  and a v1.0 verifier says so with the two labels above rather than letting
+  *declared* stretch. Listed open in §11.
+- `threat-model.md` §5.7: the threats against the declared position — a
+  faked fix, a forged or transplanted corroboration, the **false accept with
+  the SIM in the corroborated cell and a fabricated file**, the **SIM/device
+  decoupling** (tethering, a moved SIM), a stale or coarse answer, a lying
+  registry, no phone number in a proof — each with what the verifier says.
+- Schema: `location` gains the three members, `location_corroboration` is
+  added with `additionalProperties: false`, `expected.schema.json` gains
+  `location`. `tools/src/location.ts` is the reference computation. An older
+  verifier lists `location_corroboration` as *not evaluated* (§9) and reads
+  the extended claim as it always did — the new members are inside the core
+  it already hashes, and it never looked inside `location` beyond the keys.
+- Vectors 36 and 47, which declare no position, now pin `location.level:
+  none` in `expected.json`. Corpus: **84** vectors.
+
 ### Housekeeping: vector 51 is byte-stable, §11 catches up with the corpus
 
 - **Vector 51 regenerated identically from now on.** Its registry leaf is

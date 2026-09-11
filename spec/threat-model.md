@@ -39,8 +39,12 @@ mitigated, and the verifier UI must say so.
   part of v1.)
 - **Who held the device.** A key binds to hardware, an app build and an
   organization, never to a person.
-- **Where it was**, beyond the level `location.level` declares (declared,
-  corroborated, authenticated).
+- **Where it was**, beyond the position level the verifier reaches
+  (`vcap-proof-1.0.md` §7.1): *declared* is the device's word about its own
+  coordinates; *corroborated* is the registry's word that an operator's
+  cell-level check of the **SIM** agreed with them, to a radius of kilometres;
+  *authenticated* is reserved and nothing reaches it yet. The word
+  "guaranteed" is not a level. §5.7 has the threats against each.
 - **That the device was not compromised below the attestation boundary.** A
   rooted device with a virtual camera can hand genuine hardware a fake frame.
   Attestation and integrity signals raise the cost; they do not make it
@@ -155,6 +159,25 @@ Boundaries, each enforced by code and tested:
   no attestation → refused.
 - A denial of service against enrolment stops new keys, not existing proofs.
 
+### 5.7 Against the declared position
+
+The position level (`vcap-proof-1.0.md` §7.1) is orthogonal to the verdict:
+none of these threats turns a verdict red or green, and each lands on a
+level and a label the verifier shows.
+
+| Threat | What the attacker does | Mitigation | Residual |
+|---|---|---|---|
+| Faked fix | a mock location provider (Android), a simulated location (iOS), a spoofed GNSS signal: the OS hands the app coordinates of the attacker's choosing and the device signs them | the level is *declared* and the verifier says so; `location.source` names the origin of the fix; a corroboration from the network side (below) does not depend on the device's fix | **accepted and named**: a signed position proves the device said it, nothing more. The mock-provider flag and the integrity verdict raise the cost on a stock device and do nothing on a rooted one |
+| Edited coordinates | changes `lat_udeg`/`lon_udeg` after sealing | the core is signed (§4.2) | none: red (vector 10) |
+| Forged corroboration | fabricates or relabels a `location_corroboration` | signed by the registry key over `"vcap/1.0/location" ‖ core_hash ‖ JCS(body)`; the result is inside the message; a signature no trusted key made is *not verified* and the level stays *declared* | none on the level; a forgery is indistinguishable from an untrusted signer and reads as absence |
+| Transplanted corroboration | lifts a genuine corroboration from another proof | `core_hash` is inside the signed message and covers the declared position | none: *not verified* (vector 77) |
+| **False accept, SIM in the cell** | an accomplice — or the attacker — holds the right SIM inside the corroborated cell while a fabricated or replayed file is sealed | none from the operator: the check is about the SIM's cell, one to two kilometres wide, at the time of the call. What catches the fabricated *file* is the rest of the chain: attestation, integrity, watermark, the segment chain | **accepted and named**: *corroborated* means the SIM was in that area, not that the scene was. This is why the level is not called *verified* and why the radius is shown |
+| **SIM/device decoupling** | the SIM the operator locates is not in the device that signed: tethering, a hotspot, a SIM moved to another handset, a data-only SIM in a router | `camara-number-verification` over the capturing device's **own** mobile data session binds the line to that session; `camara-sim-swap` flags a recent move; the registry's combination rule decides the `result`; a Wi-Fi-only device has no line and stays *declared* | **medium**: number verification binds the line to a data session, not to the camera; a phone tethering the capturing device passes it. The residual is stated in the verifier's wording — *the registry attests that the operator confirmed the zone* |
+| Stale or coarse answer | the operator's location is minutes old or the cell is large | `radius_m` and `at` are in the signed body; the registry asks with a small `maxAge`; a *partial* or *unknown* operator answer maps to `unknown`, which corroborates nothing | accepted: the radius is what a reader is shown, and *same area* is all the level claims |
+| Lying or compromised registry | the registry signs a `match` the operator never gave | the level is explicitly the registry's word, stated in those terms by every verifier; the attachment is optional and never a verdict; the log key that signs it is the same key whose tree heads mirrors watch | **accepted and named**: this is trust in us, and the design's job is to keep it out of the verdict and visible in the level |
+| Operator wrong or coerced | the network's location is wrong, or an insider at the operator answers falsely | none: a network-side check is worth the network behind it | accepted at the platform level, as for a QTSP (§5.4) |
+| Phone number in the proof | the MSISDN, or a hash of it, lands in the attachment for correlation | `operator_ref` is an opaque registry-side reference and the spec forbids anything derived from a number; the line-to-key mapping stays in the control plane behind access control; consent is collected in the app before the call and the operator's three-legged flow decides the rest | none by construction; enforced by the schema's `opaqueRef` pattern and by review |
+
 ## 6. Open items
 
 - **Spike S3**: the relay attack reproduced with Frida on a rooted device
@@ -166,8 +189,19 @@ Boundaries, each enforced by code and tested:
 - **Watermark red team** (phase 3): removal and forgery of the watermark are
   out of scope for this version; the watermark alone is never green.
 - **Per-capture keys** for unlinkability: cost and policy, later.
+- **Position, corroborated** (§5.7): the residual on SIM/device decoupling
+  stays *medium* until the registry's combination rule (number verification
+  over the capturing session, SIM swap, local signals) exists and is
+  measured; Location Verification is not offered by any Italian operator as
+  of September 2026 (D12, spike S4), so the *corroborated* level is
+  reachable in production only through the other two methods. The
+  *authenticated* level waits for a smartphone chipset with OSNMA.
 
 ## 7. Change log
 
 - 2026-09-08 — first draft, from the spec, the crypto review and what phase 1
   built so far.
+- 2026-09-11 — §5.7, threats against the declared position and the
+  `location_corroboration` attachment: the false accept with the SIM in the
+  cell and the SIM/device decoupling from spike S4 (D12), the registry as
+  the asserter, no phone number in a proof.
