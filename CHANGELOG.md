@@ -10,6 +10,21 @@ with it.
 
 ## Unreleased
 
+### Editorial: one label, one spelling (§8, watermark layouts document)
+
+Found while implementing `vcap-verifier` PR #31. `spec/watermark-layouts-1.0.md`
+quoted §8's watermark-not-recovered label as *no watermark recovered* — a
+paraphrase of the table §8 actually defines, not a second label. §8 of
+`spec/vcap-proof-1.0.md` is the normative label table; *watermark not
+recovered* is the wording used there, in `spec/c2pa-interop-1.0.md`, and in
+the "Clarifications for writers" entry above. `spec/watermark-layouts-1.0.md`
+is corrected to match.
+
+No vector, schema entry, or reference-verifier output uses either spelling —
+`tools/src/verify.ts` ships no watermark detector and never emits this label,
+so no `expected.json` carries it. Nothing here changes an oracle; this is a
+documentation-only, non-breaking fix.
+
 ### The position level: declared, corroborated, and a reserved third (§6.1, §6.2, §7.1, §8, §9, vectors 74-84)
 
 - **Two levels on two axes.** §7's proof level says how strong the origin
