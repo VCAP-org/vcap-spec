@@ -1040,10 +1040,10 @@ says.
       root: they prove the level logic, not that an implementation can walk a
       real Google chain — for which the real device chains in the two verifier
       repositories exist
-- [ ] `REVIEW (BE)` the remaining proof-level vectors: registry inclusion with
-      a signed tree head, an RFC 3161 token, an anchor with a recomputed root.
-      The reference verifier evaluates none of the three yet, which is why the
-      attested vectors top out at amber
+- [x] `REVIEW (BE)` the remaining proof-level vectors: registry inclusion with
+      a signed tree head (49–54), an RFC 3161 token (59–63), an anchor with a
+      recomputed root (55–58). The reference verifier evaluates all three, and
+      vector 54 is the corpus's green
 - [~] `REVIEW (mobile)` container-level video vectors: real MP4/MOV from each
       encoder, with `content_hash` recomputed from the NAL units and audio
       frames — Android H.264 and HEVC done (vectors 36–39, `kind: container`);
@@ -1052,8 +1052,11 @@ says.
       its labels: **yes** — *segment content not recomputed* (§5, §7), decided
       10 September 2026 (D10). Recomputation stays optional, declaring it does
       not
-- [ ] Vectors for the proof level (§7): attestation chains, registry entries,
-      revocation — after C6 exposes the material
-- [ ] Vectors for `timestamp` and `anchor` attachments — after C7/C8
+- [x] Vectors for the proof level (§7): attestation chains (41–45), registry
+      entries and the online revocation answer (49–54) — with test material in
+      `_chains/` and `_trust/`, which prove the logic and not a real Google
+      chain (see above)
+- [x] Vectors for `timestamp` and `anchor` attachments — 59–63 and 55–58,
+      with committed tokens in `_timestamps/` and the chain read as an input
 - [x] JSON Schema validates every vector, and rejects each malformed case:
       `schema/vcap-proof-1.0.schema.json`, run by `tools` in CI (step 6)
