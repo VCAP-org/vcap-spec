@@ -105,6 +105,69 @@ cd tools && npm ci && npm test        # every vector against the reference verif
 npm run generate                       # rewrite the vectors/NN-* it owns; byte-stable, see above
 ```
 
+## Corpus version and manifest
+
+The numbered corpus (`vectors/NN-*`) has its own version, in `vectors/VERSION`
+— separate from `vcap/1.0`, the proof format version. The format version says
+what a proof looks like; the corpus version says which exact vectors an
+implementation checked itself against, so a third party can claim "conformant
+with vcap-spec corpus 1.0.0" and mean something a consumer can check.
+
+`vectors/MANIFEST.json` is that check: for every `vectors/NN-*` directory, its
+`kind`, its `outcome`, and a SHA-256 over its files (name and length included,
+so a renamed or truncated file changes the hash even if some other file's
+bytes happen to collide); plus one hash per shared fixture directory
+(`_media`, `_trust`, `_chains`, `_timestamps`, `_watermark`) so a change to an
+input every vector depends on is as visible as a change to a vector itself. It
+is generated, never hand-edited:
+
+```
+npm run manifest         # (re)writes vectors/MANIFEST.json from vectors/ and vectors/VERSION
+npm run manifest:check   # exits 1 if the committed file is stale — CI runs this
+```
+
+**Bump policy**, the same additive-only rule as everywhere else in this
+repository: a vector's hash never changes once published (`AGENTS.md`), so
+`VERSION` only ever moves forward. Bump the minor version when vectors are
+added, the patch version for a manifest-only regeneration triggered by
+something outside `vectors/` (there is not expected to be one, since the
+manifest is a pure function of the directory and `VERSION`). A major bump
+would mean an existing vector's bytes moved — the one thing this corpus does
+not do — so seeing one asks the same question a breaking spec change does.
+
+`vectors/edge-cases/` (below) is not in the manifest and not part of the
+versioned corpus: it is regenerated on demand by its own tool, not hand-curated
+and reviewed vector by vector, and nothing outside this repository reads it.
+
+## The edge-case generator
+
+`tools/src/generate-edge-cases.ts` produces `vectors/edge-cases/` — vectors a
+review would not think to hand-pick one at a time, because they are the same
+question asked at every point along a boundary: every offset a trailer can be
+truncated at, every byte its magic can be flipped in, every field §6.1/§8
+require that a writer could drop, the JCS corners RFC 8785 pins to
+ECMAScript's own serialization (negative zero, a supplementary-plane
+character, key sort by UTF-16 code unit), and the JPEG fill-byte run next to a
+stripped JUMBF segment that exercises canonical.ts's marker walk one byte at a
+time. Every case is deterministic — most are exhaustive sweeps over an
+enumerated domain, so a seed changes nothing about them; the one case that
+flips a single payload bit at a random offset takes `--seed` and picks the
+same offset for the same seed. Every generated vector runs through the
+reference verifier before being written, exactly as `generate.ts` does for the
+numbered corpus, and the script aborts instead of writing a vector the
+verifier disagrees with:
+
+```
+npm run generate:edge-cases              # seed 1
+npm run generate:edge-cases -- --seed 7  # a different, still reproducible, draw
+```
+
+It does not exercise the watermark's BCH(255,131) correction radius: there is
+no watermark decoder anywhere in this repository (`tools/src/verify.ts` ships
+none, by design — see its file comment), so there is nothing here to hand a
+marred payload to. That boundary belongs to whichever component owns the
+decoder.
+
 **The sidecar vectors** (17, 18, 70, 71, 72) carry `input.<ext>.vcap` next to
 the input, and a verifier under test is handed both, as `tools/test/vectors.test.ts`
 does. They pin §3.1: the trailer wins when it is found and intact (18), a broken

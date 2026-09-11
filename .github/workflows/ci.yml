@@ -19,3 +19,7 @@ jobs:
       - run: npm test
       # Every vector's proof.json against the schema, and every expected.json against its own.
       - run: npm run validate
+      # The committed corpus manifest must match vectors/ exactly (C19).
+      - run: npm run manifest:check
+      # The edge-case generator must still agree with the reference verifier.
+      - run: npm run generate:edge-cases

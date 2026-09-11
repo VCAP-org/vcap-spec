@@ -1,0 +1,28 @@
+{
+  "v": "vcap/1.0",
+  "capture_id": "ABEiM0RVZneImaq7zN3u_w",
+  "media": {
+    "mime": "image/jpeg",
+    "w": 16,
+    "h": 16,
+    "hash": "OAbzVz4A9m1LqjF---miCdM2Bap6wRuTWbiuW41LzRA"
+  },
+  "device": {
+    "platform": "android",
+    "secure_hw": "tee",
+    "key_id": "4aF24UJH_AHu_CuygIW3PB-AMEWVoQy3iaeBh4yDSBM"
+  },
+  "watermark": {
+    "algo": "videoseal",
+    "layout": "photo-bch-v3",
+    "payload_bits": 128,
+    "ecc": "bch-255-131",
+    "strength": 8
+  },
+  "time": {
+    "device_clock": 1757332800000
+  },
+  "policy": {
+    "pseudonymous": false
+  }
+}

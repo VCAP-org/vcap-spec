@@ -11,7 +11,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "generate": "tsx src/generate.ts",
-    "validate": "tsx src/validate.ts"
+    "generate:edge-cases": "tsx src/generate-edge-cases.ts",
+    "validate": "tsx src/validate.ts",
+    "manifest": "tsx src/manifest.ts",
+    "manifest:check": "tsx src/manifest.ts --check"
   },
   "devDependencies": {
     "@noble/curves": "^2.4.0",
