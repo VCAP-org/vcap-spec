@@ -10,6 +10,47 @@ with it.
 
 ## Unreleased
 
+### C2PA interoperability, the sidecar, stripped metadata (§3.1, §4.1, new document, vectors 68-73)
+
+- `spec/c2pa-interop-1.0.md`, informative except where marked: what vcap and
+  C2PA each prove that the other does not; the proof as one custom assertion,
+  `com.gregoriogalante.vcap.proof`, a JSON box holding the payload bytes; the
+  field-by-field mapping (`media.hash` against `c2pa.hash.data` /
+  `c2pa.hash.boxes` / `c2pa.hash.bmff.v3`, the watermark against
+  `c2pa.soft-binding`, whose algorithm list we are not on); and a table of
+  what survives each transformation with the §8 verdict, with and without a
+  sidecar. Cited to C2PA 2.4 by clause. We do not sign C2PA claims (R4), and
+  the document says so first.
+- **Co-existence, analysed against the C2PA text.** JPEG: §4.1's exclusion
+  is symmetric — the proof is byte-identical whether the manifest was added
+  after sealing (02) or present at it (**68**) — and the C2PA hard binding
+  covers every byte to end of file, so once a manifest is written after the
+  trailer, **rewriting the trailer breaks the manifest, not the proof**;
+  attachments are a rewrite. ISO-BMFF: `c2pa.hash.bmff.v3` covers a trailing
+  `free` box unless `/free` is on the exclusion list, which C2PA treats as
+  ordinary; §4.1 said "BMFF hashing ignores the trailing `free` box", which
+  was true only under that condition, and now says so. A manifest inserted
+  into a sealed BMFF file is *tampered* (**73**). A C2PA **update** manifest
+  must be the last box of the file, the position the footer needs: appended
+  to a sealed file it hides the footer — *no proof found* (**69**), and
+  *tampered* with a sidecar because the whole file is then hashed (**70**).
+  Writers MUST NOT do either; a reader rule for stepping over such a box is
+  listed open in §11.
+- **§3.1 The sidecar**, normative, gathering what §3 said in one bullet and
+  what the reference verifier already did: content is the payload bytes and
+  nothing else; discovery is `<filename>.vcap` beside the file or a sidecar
+  the caller supplies, never a search and never a fetch; precedence is
+  trailer, then *corrupted* whatever the sidecar says (**72**), then the
+  sidecar over the **whole** file, then *no proof found*; and a verdict from a
+  sidecar carries no extra label and no less weight, because where a proof
+  sat is not evidence (17). A sidecar over changed bytes is *tampered* and
+  never "probably the same picture" (**71**, a stripped APP0).
+- No change to the wire format, the schema or any existing vector's verdict.
+  The reference verifier needed no change: every new vector is a consequence
+  of rules it already implemented, which is what the six vectors show.
+  `schema/README.md` now lists all six schema-invalid vectors (40 and 67
+  were missing).
+
 ### The watermark payload layouts are public (new document)
 
 - `spec/watermark-layouts-1.0.md` defines `photo-bch-v3` and `video-rep-v1`:

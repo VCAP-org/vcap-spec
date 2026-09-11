@@ -25,9 +25,10 @@ npm run validate -- path/to/proof.json [more.json …]     # exit 1 on the first
 
 Without arguments, `npm run validate` walks `vectors/`: every `expected.json`
 must be well formed, and every `proof.json` must be schema-valid exactly when
-its vector says so (`schema_valid`). Four vectors are schema-invalid on
+its vector says so (`schema_valid`). Six vectors are schema-invalid on
 purpose — DER signature (13), major 2 (16), missing `capture_id` (21), a float
-in the core (22) — and the generator refuses to write a vector whose review
+in the core (22), an unknown `secure_hw` (40), an `integrity.verdict` outside
+the enumeration (67) — and the generator refuses to write a vector whose review
 verdict and schema verdict disagree.
 
 Programmatic use: `validateProof(json)` in `tools/src/schema.ts` returns
