@@ -2,8 +2,9 @@
 
 Companion to `watermark-layouts-1.0.md`, which defines the payload layouts.
 This document says **what the watermark is worth**: where the payload comes
-back, where it stops coming back, with how much margin in between, and what
-comes back from content that was never marked at all.
+back, where it stops coming back, with how much margin in between, what
+comes back from content that was never marked at all, and what an adversary
+who is trying can remove or plant.
 
 Status: **informative**. Nothing here is normative and no implementation has to
 reproduce a number in it. It exists because `watermark-layouts-1.0.md` §
@@ -27,11 +28,13 @@ it are not readable by the person deciding whether to trust the verdict.
    statistics. The sections *Corpus, and how small it is* and *False positives:
    what a recovered payload implies* are not footnotes; read them before
    quoting anything.
-4. **The curve has two halves, and both are here.** The recovery tables are
-   *true-positive* measurements, on content known to carry a mark; *False
-   positives* is what the same detector does on content that was never marked.
+4. **The curve has three parts, and all three are here.** The recovery tables
+   are *true-positive* measurements, on content known to carry a mark; *False
+   positives* is what the same detector does on content that was never marked;
+   *Adversarial removal and forgery* is what happens when somebody is trying.
    A decoder that returned a payload for anything would score 3/3 on every row
-   above, so the first half cannot be read without the second.
+   above, so the first part cannot be read without the second — and the
+   successful attacks in the third are in the same tables as the failed ones.
 5. **What is still missing is listed,** in *Not measured, and not estimated*.
    Several questions a reader will reasonably have have no answer here, and the
    honest answer to those is that they were not measured, not a
@@ -368,6 +371,208 @@ per-file rate.
   and a party trying to manufacture a mark id is a threat-model question
   (`threat-model.md`).
 
+## Adversarial removal and forgery
+
+Every table above measures something nobody intended: degradation from a
+channel, or a payload read out of content nobody marked. This section is the
+third case, and the only one with an adversary in it — someone who wants the
+mark gone, or wants a mark that was never issued.
+
+**65 attacks** on the same corpus as the recovery tables, three images and one
+clip, run on the fp32 and the int8 builds. Each attack carries what the
+adversary has, and each is labelled by whether it *removed* a payload or made
+the detector emit a **chosen** one. Those are not the same finding and this
+document does not pool them: a removal makes a verdict *weaker*, which the
+proof format already allows for, while a forgery makes the system **assert**
+something false.
+
+| | |
+|---|---|
+| Model version | `videoseal-y256b-1`, builds fp32 and int8 (both reported) |
+| Corpus | the recovery tables' corpus: three images, one synthetic clip of 24 frames |
+| Layouts | `photo-bch-v3` at strength 1.5, `video-rep-v1` at strength 2.0 |
+| Container | JPEG q98 after every photo attack, crf 18 after every video attack, so the container does no attack's work |
+| Hardware and runtime | as *What was measured*: Apple M4, onnxruntime 1.28, CPU provider |
+| Video decoding policy | frames averaged and decoded once, which is the policy the video table above uses |
+
+| Outcome | fp32 | int8 |
+|---|---|---|
+| Attacks | 65 | 65 |
+| Survived — the attack failed | 40 | 37 |
+| Removed the payload | 13 | 17 |
+| Partial — worked on some of the three images, which on three images is a break point being crossed | 5 | 4 |
+| **Forged — the detector emitted a payload the adversary chose** | **7** | **7** |
+
+Both builds' runs reproduce exactly on a re-run, outcome labels included.
+
+**What the adversary has.** *A0* holds consumer tools only: rotate, crop, blur,
+denoise, recompress, re-cut a clip. *A1* adds these published layouts and one
+marked file. *A2* holds the **embedder** — which is not a hypothesis, because
+the model this document describes is an export of a publicly downloadable
+upstream checkpoint, so anyone willing to fetch it has A2. *A3* adds the
+unmarked original of the file attacked, which for a sealed capture does not
+exist outside the device; it is measured as a ceiling, not as a realistic
+adversary.
+
+**Quote the build you run.** Against geometric attacks the two builds differ by
+a whole break point, which the *Build precision* section above does not
+predict — there, quantization eats margin on rows already under stress and
+moves no break point. Both columns are below; the fp32 figure alone overstates
+what a verifier running int8 resists.
+
+### Removal by filtering does not work
+
+Gaussian blur to 2 px, a 3×3 and a 5×5 median, and posterising to 5 bits each
+cost **0.0 to 4.3 bit errors out of 256** and recover 3/3 on both builds. So
+does the standard blind removal available to A1: estimating the mark as the
+residual against a median-filtered copy and subtracting it leaves **0.0 bit
+errors** at gain 1.0 and at gain 1.5, on both builds. An adversary who knows
+what they are looking for and subtracts their best estimate of it removes
+nothing. The mark is not a fragile high-frequency dither, and that is a
+robustness result worth as much as the failures next to it.
+
+Two non-geometric attacks do remove the payload, and both cost visible damage:
+additive noise at σ = 12 (39.3 bit errors, 0/3, PSNR 29.5 dB) and JPEG q10
+(37.7, 0/3, 31.5 dB). Their neighbours hold — σ = 4 and JPEG q20 recover 3/3 —
+and at 29–31 dB the file looks like what it is. The A3 ceiling behaves as a
+ceiling: subtracting the exactly known mark delta returns the original and the
+mark is gone (129.3 errors), while subtracting *half* of it leaves the payload
+fully readable (0.3 errors), so even that adversary has to be exact.
+
+### Removal by geometry works, and it costs the attacker nothing
+
+| Attack | fp32 errors / recovered | int8 errors / recovered |
+|---|---|---|
+| rotate 5° | 0.0 / 3/3 | 1.3 / 3/3 |
+| rotate 8° | 1.3 / 3/3 | **19.7 / 1/3** |
+| rotate 10° | 2.3 / 3/3 | **30.3 / 0/3** |
+| rotate 12° | **22.0 / 1/3** | 50.3 / 0/3 |
+| rotate 15° | **63.0 / 0/3** | 66.7 / 0/3 |
+| crop 25 % | 2.7 / 3/3 | 6.0 / 3/3 |
+| crop 35 % | **22.3 / 1/3** | **61.7 / 0/3** |
+| crop 50 % | **129.7 / 0/3** | 121.7 / 0/3 |
+| rotate 90°, horizontal flip, 8 px shift, rescale 50 % and 125 % | 0.0 / 3/3 | 0.0–0.3 / 3/3 |
+
+On fp32 the payload survives rotation to 10°, is at its break point at 12° and
+is **gone at 15°**; on **int8 it is at its break point at 8° and gone at 10°**.
+Centre crop likewise: fp32 survives 25 %, breaks at 35 % and is gone at 50 %;
+int8 is already **gone at 35 %**. `psnr_db` is not quoted for these rows —
+where pixels move there is no correspondence to compare, and a low figure would
+say the image moved, not that it degraded.
+
+**Why it breaks there.** The detector resizes whatever it is given to a fixed
+256 px working view and the mark was embedded on that same grid. A uniform
+rescale produces an identical working view and costs nothing; an 8 px shift on
+a multi-megapixel image is a fraction of one cell of that grid and also costs
+nothing; 90° and a flip map the grid onto itself up to a permutation of axes
+and recover with 0.0 errors. A crop changes *which* region is squashed onto the
+working view and a rotation turns the grid relative to it, and **neither layout
+in `watermark-layouts-1.0.md` carries a synchronisation pattern**, so nothing
+resynchronises before decoding. What fails is registration, not signal
+strength — which is also why int8's narrower margin matters here and not on the
+compression rows: a recompressed frame is still registered and merely weaker,
+a rotated one produces a different answer rather than a degraded one.
+
+**Straightening and reframing are not damage.** Unlike the thumbnail row that
+breaks the photo chain above, a picture rotated 15° or cropped to half its area
+is a normal edit, not a degraded file, so the attacker pays nothing a viewer
+would notice. This document therefore does not support describing the watermark
+as surviving ordinary *editing*; what it survives is ordinary
+*re-compression*.
+
+### Forgery is cheap, because the embedder is public
+
+| Attack | A | bit errors | PSNR dB | planted | outcome |
+|---|---|---|---|---|---|
+| embed a chosen `capture_id` in unmarked content | A2 | 142.0 | 42.5 | 3/3 | **forged** |
+| overwrite an existing mark, same strength | A2 | 142.0 | 42.0 | 3/3 | **forged** |
+| overwrite an existing mark, 2× strength | A2 | 149.0 | 36.6 | 3/3 | **forged** |
+| collude: average 2 differently marked copies | A2 | 69.7 | 45.0 | 0/3 | removed |
+| collude: average 3 differently marked copies | A2 | 62.0 | 44.5 | 0/3 | removed |
+| transplant the exact mark delta onto another image | A3 | 107.7 | 42.5 | 0/3 | removed |
+| transplant a high-pass estimate onto another image | A1 | 124.7 | 41.7 | 0/3 | removed |
+
+Identical outcomes on int8; the three forgeries succeed 3/3 on both builds.
+`psnr_db` is the planted file against the content the adversary started from;
+no perceptual study was run, so "invisible" is an inference from 42 dB and not
+a measurement of its own.
+
+Writing a chosen `capture_id` into content that was never captured succeeds
+3/3, and overwriting a real one with the attacker's succeeds 3/3 at the *same*
+strength, leaving no readable trace of the original. There is no key in a
+watermark: **the embedder is not a secret and the mark is not a signature.**
+
+Two routes are closed, and only one of them usefully. Collusion — averaging two
+or three copies marked with different ids — removes all of them at 45 dB, which
+is a working invisible removal, but it needs A2, and an A2 adversary would
+overwrite rather than erase. Transplanting a mark field onto another image
+fails with the exact delta (A3) and with a blind estimate (A1), because the
+mark is attenuated per pixel by a perceptual mask derived from the content and
+does not detach from the image it was made for. That is a genuine defence
+against A1, and it is pointless against A2, which does the same thing better.
+
+An adversary with **no** model reaches a *legal* `mark_id` by random search
+alone: 15 passes in 4 000 detector calls on fp32, 18 in 4 000 on int8. That is
+the same event the previous section measures as a rate, read as a cost, and it
+buys a legal id rather than a chosen one — a specific 24-bit value costs 2²⁴
+times more.
+
+### The severe result needs no model at all
+
+One genuine marked frame spliced into 23 frames of an unrelated scene makes the
+clip report the genuine `mark_id` at **agreement 0.996** on fp32 and **0.93**
+on int8. For comparison, the video table above reads 1.00 as sealed and
+0.90 (int8: 0.87) on its worst chain that still recovers, and the false ids of
+the previous section sit at 0.55–0.63. Four genuine frames in 20 foreign ones read 1.00 on both
+builds.
+
+**Why, measured rather than asserted.** Mean absolute message logit on a marked
+frame is **11.321**, and on an unmarked foreign frame **0.131** (int8: 11.118
+against 0.375). An unmarked frame does not vote against the mark, it
+**abstains**, so averaging 24 frames of which one is marked leaves the sign of
+every bit set by that single frame. The dilution rows are the softer version of
+the same mechanism and point the same way: diluting inside the *same* scene
+costs more (0.844 agreement at 1 marked frame of 24 on fp32, and a failure on
+int8) than splicing a *different* scene in (0.996), because same-scene frames
+produce correlated non-zero logits that partly disagree while unrelated content
+produces near-nothing.
+
+This is a property of **averaging per-frame logits**, which is the decoding
+policy the video table above uses. Decoding frames individually and reporting
+how many carried the id would turn "the clip reports `0x5a1234` at agreement
+0.996" into "1 of 8 sampled frames carries `0x5a1234`", and *How many frames a
+verifier has to read* above found that every chain which recovers already
+recovers at N = 1, so per-frame decoding costs no recovery. That is a verifier
+policy and not a format change, and no document requires it today;
+`threat-model.md` carries it as an open item.
+
+### What this licenses, and what it does not
+
+- A recovered mark is **not** evidence that the file is the capture. The
+  supportable statement is that *a frame of that capture appears in this file*.
+  The splice rows produce a clip of unrelated footage reporting a genuine
+  `mark_id` at the agreement of a clean recovery, with no model and one genuine
+  frame.
+- **`agreement` is not a forgery detector.** The previous section identified it
+  as the only thing separating a false id from a real one, and that remains
+  true of *noise*: it reads 0.55–0.63 on ids the detector invented. It reads
+  0.996 on a splice. It discriminates noise from signal, not honest from
+  hostile, and a verifier's wording should say which of the two it does.
+- **The watermark carries no authorship.** The embedder is a public download,
+  so a mark says something was marked, never *by whom*. Nothing about a
+  recovered payload attributes it to any issuer.
+- **The watermark is not a defence against re-framing**, and a cropped or
+  straightened copy of a genuine capture is, to the watermark, indistinguishable
+  from anything else.
+- Nothing here reaches past the proof format's rule, and every result is
+  bounded by it. A file whose mark was stripped has a *weaker* verdict, never a
+  greener one; a file whose mark was forged is *origin traced* and never
+  *authentic*, because authenticity needs an ECDSA signature over the file
+  bytes from an attested hardware key, which nothing in this section touches.
+  These measurements are the reason that rule is not a formality.
+- Nothing here is a rate. A break point located at 12° is located on three
+  images, and the adversary models are the ones listed, not every adversary.
+
 ## Not measured, and not estimated
 
 Each of these is a question a reader will have. None of them has a number here,
@@ -413,13 +618,27 @@ and a number that was not measured is not published in its place.
 - **Key-frame-aligned frame sampling.** The measured clips carry one intra
   frame each, so this policy could not be distinguished from "the first N
   frames" and was not measured rather than half-measured.
-- **Geometric attacks beyond the two chains that include a centre crop.**
-  Rotation, perspective, and heavy cropping were not swept, and the correction
-  radius of BCH(255,131) was not probed at its boundary — there is no watermark
-  decoder in this repository to hand a marred payload to.
-- **Deliberate removal or forgery of a mark by a motivated adversary.** That is
-  a threat-model question, not a robustness curve; see `threat-model.md`. These
-  measurements describe an unaware channel, not an attacker.
+- **Perspective, and geometry in combination with anything else.** Rotation
+  and centre crop are now swept in *Adversarial removal and forgery* above, on
+  three images; perspective warps were not, and **each row there is one
+  attack**. A rotation of 8° with a JPEG q20 recompression — each harmless on
+  its own — was not measured, and the geometric break points suggest that
+  combination is where a careful adversary would start.
+- **Adaptive, gradient-based attacks on the detector — the largest gap here.**
+  The model is differentiable and publicly downloadable, so a gradient search
+  for the smallest perturbation that flips a payload to a chosen value is the
+  strongest attack available to an adversary. It has no number in this
+  document. *Adversarial removal and forgery* above measures random search
+  only, which bounds the cost from above and nothing more.
+- **A real photograph of a real screen.** No camera and no second device were
+  available, so the analogue path — display, re-photograph, re-encode — was not
+  measured and was not approximated by anything this document would quote.
+- **What an adversary does to *moving* footage.** The clip corpus is 24
+  identical frames, so the splice result in particular would behave differently
+  on real footage, where the foreign frames are not one still image.
+- **The red team on the fp16 and distilled builds.** fp32 and int8 were
+  attacked. What the threat model accepts, and what it leaves open, is in
+  `threat-model.md` § 5.8.
 
 ## Reproducing
 
