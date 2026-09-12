@@ -177,7 +177,9 @@ are about compatibility and not about model quality.
 5. **Strength is a capture-time parameter, not a version.**
 6. **Every published model ships its robustness curve.** A model change without
    one is not publishable: a verifier's confidence language depends on the
-   numbers.
+   numbers. The curve of the currently published model, with its corpus, its
+   break points and the list of what was not measured, is
+   `watermark-robustness-1.0.md`.
 7. **A change on the embed side alone is still a new model version, once
    anything is published.** The weights can be identical and the detector
    byte-identical while the graphs a device runs change digest — folding a

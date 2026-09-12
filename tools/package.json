@@ -14,7 +14,9 @@
     "generate:edge-cases": "tsx src/generate-edge-cases.ts",
     "validate": "tsx src/validate.ts",
     "manifest": "tsx src/manifest.ts",
-    "manifest:check": "tsx src/manifest.ts --check"
+    "manifest:check": "tsx src/manifest.ts --check",
+    "conformance:report": "tsx src/conformance-report.ts",
+    "conformance:check": "tsx src/conformance-report.ts --check"
   },
   "devDependencies": {
     "@noble/curves": "^2.4.0",

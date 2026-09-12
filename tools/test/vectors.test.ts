@@ -1,67 +1,29 @@
 import { describe, expect, it } from 'vitest'
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
-import { join } from 'node:path'
-import { createHash } from 'node:crypto'
-import { verifyFile, verifySegments } from '../src/verify.js'
-import { coreBytes } from '../src/core.js'
-import { validateExpected, validateProof } from '../src/schema.js'
-import { loadTrust } from '../src/trust.js'
+import { corpus, runVector, trust } from '../src/conformance.js'
 
 // Every committed vector, checked against the reference verifier. A new
 // implementation runs the same loop with its own verifier: same inputs, same
-// expected.json, no other oracle.
-const VECTORS = join(import.meta.dirname, '..', '..', 'vectors')
-const dirs = readdirSync(VECTORS).filter((d) => /^\d\d-/.test(d)).sort()
-// The anchors a verifier is assumed to hold: a verdict is only ever green
-// against a named set of them, so the corpus ships them next to the vectors.
-const trust = loadTrust(join(VECTORS, '_trust'))
+// expected.json, no other oracle. The loop itself lives in src/conformance.ts
+// so that this suite and the published conformance report run the same code —
+// a report produced by a second, slightly different loop would be a claim
+// about something other than what CI runs.
+const c = corpus()
+const anchors = trust()
 
-const pick = (actual: object, expected: Record<string, unknown>): object =>
-  Object.fromEntries(Object.keys(expected).filter((k) => k !== 'kind' && k !== 'debug').map((k) => [k, (actual as Record<string, unknown>)[k]]))
-
-describe('conformance vectors', () => {
-  it('exist in the expected number', () => {
-    expect(dirs.length).toBeGreaterThanOrEqual(30)
+describe(`conformance vectors (corpus ${c.version})`, () => {
+  // Not a floor. A floor lets a suite shrink silently, and a suite that
+  // enumerated zero vectors would be the greenest build in the repository:
+  // `corpus()` throws on an empty directory, and this pins the count to the
+  // manifest so a corpus that is not the corpus claimed fails here.
+  it(`runs exactly the ${c.declaredCount} vectors the manifest declares`, () => {
+    expect(c.names.length).toBe(c.declaredCount)
   })
 
-  for (const dir of dirs) {
-    it(dir, () => {
-      const path = join(VECTORS, dir)
-      const expected = JSON.parse(readFileSync(join(path, 'expected.json'), 'utf8'))
-      expect(validateExpected(expected).errors).toEqual([])
-      // `verifier_clock` is an input the vector declares, not a field a
-      // verifier produces: it is destructured out with the other inputs.
-      const { kind, debug: _debug, schema_valid: schemaValid, verifier_clock: verifierClock, key_status: keyStatus, chain_read: chainRead, ...want } = expected
-
-      if (kind === 'file' || kind === 'container') {
-        // A container vector is a file vector plus the §5 recomputation: same
-        // inputs, one more question asked of them.
-        const input = readdirSync(path).find((f) => f.startsWith('input.') && !f.endsWith('.vcap')) as string
-        const sidecarPath = join(path, `${input}.vcap`)
-        const verdict = verifyFile({
-          file: readFileSync(join(path, input)),
-          sidecar: existsSync(sidecarPath) ? readFileSync(sidecarPath) : undefined,
-          recomputeSegments: kind === 'container',
-          // The anchors the corpus ships, the clock the vector pins, and the
-          // log's answer it declares the verifier fetched.
-          trust,
-          clock: verifierClock ? new Date(verifierClock) : undefined,
-          keyStatus,
-          chainRead
-        })
-        expect(pick(verdict, want)).toEqual(want)
-        const proofPath = join(path, 'proof.json')
-        if (existsSync(proofPath)) expect(validateProof(JSON.parse(readFileSync(proofPath, 'utf8'))).valid).toBe(schemaValid)
-      } else if (kind === 'segments') {
-        const verdict = verifySegments(JSON.parse(readFileSync(join(path, 'segments.json'), 'utf8')))
-        expect(pick(verdict, want)).toEqual(want)
-      } else if (kind === 'jcs') {
-        const bytes = coreBytes(JSON.parse(readFileSync(join(path, 'core.json'), 'utf8')))
-        expect(bytes.toString('hex')).toBe(want.core_bytes_hex)
-        expect(createHash('sha256').update(bytes).digest('hex')).toBe(want.core_hash)
-      } else {
-        throw new Error(`unknown vector kind ${kind}`)
-      }
+  for (const name of c.names) {
+    it(name, () => {
+      const result = runVector(name, anchors)
+      expect(result.detail ?? '').toBe('')
+      expect(result.pass).toBe(true)
     })
   }
 })

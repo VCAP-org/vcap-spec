@@ -14,6 +14,11 @@ treat every edit as a breaking change until `vcap/1.0` is tagged.
   `Doc/06-fase1-avvio.md` section 3).
 - `spec/watermark-layouts-1.0.md` — the payload layouts `watermark.layout`
   names; normative for the bit layout and the decoder's failure answer.
+- `spec/watermark-robustness-1.0.md` — the measured curve of the published
+  model: where the payload comes back, where it stops, what quantization
+  costs, what a browser pays per frame, and an explicit list of what was not
+  measured (the false-positive rate above all). Informative. Every number
+  carries its corpus; a number without its conditions does not go in.
 - `spec/c2pa-interop-1.0.md` — what vcap and C2PA each prove, the mapping onto
   C2PA assertions, how the two bindings co-exist in one file, the sidecar's
   rationale and what survives each transformation. Informative except where
@@ -21,7 +26,8 @@ treat every edit as a breaking change until `vcap/1.0` is tagged.
 - `reviews/` — the review notes of the work order's steps 2 and 3. Findings are
   graded BLOCKING / SHOULD / NOTE; the draft is amended, the note stays as the
   record of why.
-- `schema/` — JSON Schema plus a validator runnable from CI.
+- `schema/` — JSON Schema plus a validator runnable from CI, including the
+  shape of a published conformance report.
 - `vectors/` — one directory per case, each with the input, the proof and the
   expected verdict in `expected.json`. Format and rules in `vectors/README.md`.
 - `tools/` — the reference verifier and the vector generator. The verifier is
