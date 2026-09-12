@@ -1,21 +1,33 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { validateExpected, validateProof } from './schema.js'
+import { validateConformanceReport, validateExpected, validateProof } from './schema.js'
 
 /**
  * CLI. With arguments: validates each given proof JSON file against the
  * schema, exit 1 on the first invalid one — what an implementation repository
- * calls in CI. Without arguments: walks vectors/, validates every expected.json,
- * and checks that each proof.json is schema-valid exactly when its vector says
- * so (`schema_valid`).
+ * calls in CI. With `--report` first, the remaining files are validated as
+ * conformance reports instead (vectors/CONFORMANCE.md), which is how a third
+ * party checks its own claim before publishing it. Without arguments: walks
+ * vectors/, validates every expected.json, checks that each proof.json is
+ * schema-valid exactly when its vector says so (`schema_valid`), and validates
+ * this repository's own committed conformance report.
  */
 const VECTORS = join(import.meta.dirname, '..', '..', 'vectors')
 const read = (path: string): unknown => JSON.parse(readFileSync(path, 'utf8'))
 
-const files = process.argv.slice(2)
+const args = process.argv.slice(2)
+const asReports = args[0] === '--report'
+const files = asReports ? args.slice(1) : args
 let failures = 0
 
-if (files.length > 0) {
+if (asReports) {
+  if (files.length === 0) { console.error('[vcap] --report needs at least one report file'); process.exit(1) }
+  for (const file of files) {
+    const result = validateConformanceReport(read(file))
+    console.log(`${result.valid ? 'ok  ' : 'FAIL'} ${file}${result.valid ? '' : `\n     ${result.errors.join('\n     ')}`}`)
+    if (!result.valid) failures++
+  }
+} else if (files.length > 0) {
   for (const file of files) {
     const result = validateProof(read(file))
     console.log(`${result.valid ? 'ok  ' : 'FAIL'} ${file}${result.valid ? '' : `\n     ${result.errors.join('\n     ')}`}`)
@@ -41,6 +53,13 @@ if (files.length > 0) {
     } else {
       console.log(`ok   ${dir}: schema ${result.valid ? 'valid' : 'invalid'} as expected`)
     }
+  }
+  // This repository's own claim, in the format every implementation publishes.
+  const reportPath = join(VECTORS, 'conformance-report.json')
+  if (existsSync(reportPath)) {
+    const result = validateConformanceReport(read(reportPath))
+    console.log(`${result.valid ? 'ok  ' : 'FAIL'} conformance-report.json${result.valid ? '' : `\n     ${result.errors.join('\n     ')}`}`)
+    if (!result.valid) failures++
   }
 }
 

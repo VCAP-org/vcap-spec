@@ -21,5 +21,11 @@ jobs:
       - run: npm run validate
       # The committed corpus manifest must match vectors/ exactly (C19).
       - run: npm run manifest:check
+      # The published conformance claim, re-earned: it names the corpus version
+      # and the manifest hash, and it exits 1 if the run covered fewer vectors
+      # than the manifest declares — zero included, which is the way a
+      # conformance suite most often goes green without checking anything.
+      - name: conformance report (corpus version, vector count, failures)
+        run: npm run conformance:check
       # The edge-case generator must still agree with the reference verifier.
       - run: npm run generate:edge-cases

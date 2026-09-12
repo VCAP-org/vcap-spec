@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/VCAP-org/vcap-spec/schema/conformance-report.schema.json",
+  "title": "vcap conformance report",
+  "description": "What an implementation publishes to claim it passes a vcap-spec vector corpus. The claim is checkable only if it names the corpus (version and manifest hash) and how many vectors it actually ran: `vectors_run` must equal `vectors_declared`, and a report with `vectors_run: 0` is a failed run whatever `failed` says. See vectors/CONFORMANCE.md.",
+  "type": "object",
+  "required": [
+    "implementation",
+    "corpus_version",
+    "manifest_sha256",
+    "vectors_declared",
+    "vectors_run",
+    "passed",
+    "failed"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "implementation": {
+      "description": "What was measured, precisely enough to be re-run by someone else: name, and where the verifier lives.",
+      "type": "string",
+      "minLength": 1
+    },
+    "implementation_version": {
+      "description": "Version or commit of the implementation the report is about.",
+      "type": "string"
+    },
+    "corpus_version": {
+      "description": "vectors/VERSION of the corpus the run used, e.g. \"1.0.0\".",
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "manifest_sha256": {
+      "description": "SHA-256 of vectors/MANIFEST.json as committed. The version names a release; this names the bytes.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "vectors_declared": {
+      "description": "vector_count from that manifest.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "vectors_run": {
+      "description": "How many vectors the run actually executed. Zero is a failure, never a pass, and a value below vectors_declared is a partial run that must be reported as such rather than as conformance.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "passed": { "type": "integer", "minimum": 0 },
+    "failed": {
+      "description": "One entry per vector whose verdict did not match expected.json. Published, not omitted: a report that only lists successes is not a measurement.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "detail": { "type": "string" }
+        }
+      }
+    },
+    "not_run": {
+      "description": "Vectors the implementation deliberately did not run, each with the reason. A runner that cannot exercise a vector kind says so here instead of lowering vectors_declared.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "by_kind": {
+      "description": "Count of vectors run per vector kind (file, container, segments, jcs).",
+      "type": "object",
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    },
+    "by_expected_outcome": {
+      "description": "Count of vectors per expected outcome, so a reader sees what the corpus is made of and not only how much of it passed.",
+      "type": "object",
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    }
+  }
+}
