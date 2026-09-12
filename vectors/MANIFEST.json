@@ -1,6 +1,6 @@
 {
-  "corpus_version": "1.0.0",
-  "vector_count": 84,
+  "corpus_version": "1.1.0",
+  "vector_count": 85,
   "vectors": [
     {
       "name": "01-jpeg-sealed",
@@ -587,6 +587,13 @@
       "kind": "file",
       "outcome": "authentic",
       "sha256": "b194cc6b012290a82032f5cab5b216eab7e6b51ae90f0b73f77bc728ba0baa40",
+      "files": 4
+    },
+    {
+      "name": "85-mp4-container-ios-sealed",
+      "kind": "container",
+      "outcome": "authentic",
+      "sha256": "75723b1c4de4c749c8b0553c05fec137a4c81fb4bd2b3c0f9bae5ec43e749bf9",
       "files": 4
     }
   ],

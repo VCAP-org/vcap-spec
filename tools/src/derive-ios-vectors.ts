@@ -1,16 +1,16 @@
 /**
- * Builds the two iOS vectors from what an iPhone actually produced, during the
- * S1 spike (`vcap-sdk-ios`, 10 September 2026, iPhone 11 Pro, iOS 18.6.2).
+ * Builds the three iOS vectors from what an iPhone actually produced, during
+ * the S1 spike (`vcap-sdk-ios`, iPhone 11 Pro, iOS 18.6.2).
  *
  *   npx tsx src/derive-ios-vectors.ts <dir with the spike's device artifacts>
  *
- * Why a script and not two directories dropped into `vectors/`: same reason as
- * `derive-container-vectors.ts`. One of these files carries a signature made by
- * a Secure Enclave, so `npm run generate` cannot produce it and never will —
- * this is the audit trail instead. Point it at the artifacts and it writes the
- * same two vectors again.
+ * Why a script and not three directories dropped into `vectors/`: same reason
+ * as `derive-container-vectors.ts`. Two of these files carry a signature made
+ * by a Secure Enclave, so `npm run generate` cannot produce them and never
+ * will — this is the audit trail instead. Point it at the artifacts and it
+ * writes the same three vectors again.
  *
- * The two are not the same kind of evidence, and the difference is the point:
+ * The three are not the same kind of evidence, and the difference is the point:
  *
  *   47  the device sealed it. Real key, real signature, nothing here re-signs
  *       anything — the file is copied byte for byte.
@@ -19,6 +19,14 @@
  *       here with the repository's public test key. What the vector exercises
  *       is §5 recomputation against a file written by `AVAssetWriter`; the
  *       signature layer is covered by 25-31 and by 36-39.
+ *   85  both halves at once, and the reason this file is worth 4.8 MB: the
+ *       container is Apple's *and* every segment signature is the Secure
+ *       Enclave's. Copied byte for byte, like 47.
+ *
+ * `expected.json` is not written here. Expected verdicts are decided in review
+ * from the spec and committed by hand (`vectors/README.md`); this script
+ * rebuilds the inputs those verdicts are about, and prints what the reference
+ * verifier makes of them so a drift is loud.
  */
 import { createPrivateKey, KeyObject } from 'node:crypto'
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -37,8 +45,12 @@ const VECTORS = join(import.meta.dirname, '..', '..', 'vectors')
 const source = process.argv[2]
 if (!source) throw new Error("usage: derive-ios-vectors.ts <dir with the spike's device artifacts>")
 
-const DEVICE = 'An iPhone 11 Pro (`iPhone12,3`, iOS 18.6.2) during the S1 spike, 10 September 2026' +
+/** One phone for all three vectors; only the day differs. */
+const device = (day: string): string =>
+  `An iPhone 11 Pro (\`iPhone12,3\`, iOS 18.6.2) during the S1 spike, ${day} 2026` +
   ' (`vcap-sdk-ios`, `docs/s1-videotoolbox-spike.md`).'
+
+const DEVICE = device('10 September')
 
 const write = (name: string, input: Buffer, proof: Proof, notes: string): void => {
   const dir = join(VECTORS, name)
@@ -129,6 +141,41 @@ HEVC, no audio track, 1280×720, three one-second GOPs, \`hvc1\`. Each vcap SEI 
 **The chain here is synthesized.** The spike inserted SEIs and never sealed a video, so the proof carries the repository's test key, and \`sig\`/\`segments\` prove nothing about iOS. What is the device's is the container and every \`content_hash\` recomputed from it. Vector 47 is the one with a real signature on it.
 
 ${DEVICE}`)
+}
+
+// ---- 85: a video the device muxed *and* sealed -----------------------------
+// Copied, not rebuilt: every one of the eleven segment signatures is the
+// Secure Enclave's, and so is the core signature over them.
+{
+  const name = '85-mp4-container-ios-sealed'
+  const file = readFileSync(join(source, 's1-camera-sealed-720p.mp4'))
+  const trailer = parseTrailer(file)
+  if (trailer.kind !== 'ok') throw new Error(`the sealed video has no readable trailer: ${trailer.kind}`)
+  const proof = JSON.parse(trailer.payload.toString('utf8')) as Proof
+
+  // The device wrote both the SEIs and the proof, so nothing here forces them
+  // to agree. Assert it with the second, dumber reader: a capture id that
+  // drifted between the two would still verify against itself.
+  const captureId = Buffer.from(proof.capture_id as string, 'base64url')
+  const segments = containerSegments(file.subarray(0, trailer.mediaEnd))
+  if (segments.length !== 11) throw new Error(`expected 11 segments, read ${segments.length}`)
+  assertSeiCaptureId(file.subarray(0, trailer.mediaEnd), captureId, segments.length)
+
+  mkdirSync(join(VECTORS, name), { recursive: true })
+  copyFileSync(join(source, 's1-camera-sealed-720p.mp4'), join(VECTORS, name, 'input.mp4'))
+  write(name, file, proof,
+    `Vector 48 is a container Apple wrote under a chain this repository synthesized; vector 47 is a real Secure Enclave signature over a photo. This is both halves in one file: an \`AVAssetWriter\` MP4 in which **every one of the eleven segment signatures, and the core signature over them, came out of a Secure Enclave**, and every \`content_hash\` is recomputed from the container the same device muxed. Until this vector the corpus could not say whether a writer's §5 boundaries and a reader's survive the same encoder — 48 proved the reader against Apple's bytes, 36-39 proved writer and reader together against Android's.
+
+What only this file has:
+
+- **Five one-frame segments.** VideoToolbox answers a forced keyframe with **two** IDRs 33 ms apart, so the eleven GOPs run 28, 1, 30, 1, 30, 1, 29, 1, 30, 1, 29 frames. §5's "a segment may be one frame" was written from a single observed pair on Android hardware; here it is half the chain. A writer that coalesces the pair, or a reader that treats a one-frame GOP as a parse error, disagrees with this file five times.
+- **Apple writing ISO MP4, not QuickTime.** \`ftyp\` is \`mp42\` with \`isom mp41 mp42\` compatible, and the codec is \`avc1\` H.264 — the \`qt  \`/\`hvc1\` pairing of 48 was one of two things \`AVAssetWriter\` emits, and a reader tuned to that one meets this file as a different muxer. \`stco\` and a movie timescale of 600 are Apple's either way; \`sdtp\` is present and \`wide\` is not.
+- **An identity edit list on a video-only track.** One \`elst\` entry, \`media_time = 0\`, duration 3679 — no audio to delay the video behind, and still an edit. Vector 36 punishes ignoring an edit, 48 punishes reading a shift into an identity, and this one says the identity is not an artefact of QuickTime.
+- **Eleven segments, and a declared watermark on a \`container\` vector.** The longest chain in the corpus recomputed from a container, against three everywhere else, so an off-by-one in the chain walk has somewhere to show. \`watermark\` names \`video-rep-v1\` with \`mark_id\` 9627292 because the frames really were marked on the device; no verifier here ships a detector, so the label is *watermark not evaluated* and not *no watermark* — the first \`container\` vector where those two differ.
+
+The frames are a static, out-of-focus surface: this is a fixture, and what it proves is about bytes, not about what the camera was pointed at.
+
+${device('12 September')}`)
 }
 
 /**
