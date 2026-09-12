@@ -10,6 +10,29 @@ with it.
 
 ## Unreleased
 
+### The other half of the curve: false positives on unmarked content
+
+No spec or vector change: `vectors/NN-*`, its expected verdicts and the corpus
+manifest are untouched. Documentation only, and nothing normative moves.
+
+- **`spec/watermark-robustness-1.0.md`** (informative) gains *False positives:
+  what a recovered payload implies* — 4 329 decodes of 481 unmarked frames
+  (only 49 of them natural photographic content, the rest synthetic), on the
+  fp32 and int8 builds: `photo-bch-v3` produced **0** ids, `video-rep-v1`
+  produced one per 289 decodes (0.35 %), which is the false-pass rate of its
+  CRC-8 and not a property of the model. The detection logit separates nothing
+  usable — below a coin flip on the photo layout — so **no detection threshold
+  is published** and the layouts' integrity checks are the only check. The
+  per-decode rate becomes ≈ 3 % per file at 8 sampled frames, and `agreement`
+  separates false ids from real ones as an observation, not a threshold.
+- The *Not measured* list keeps that absence first, reduced to what is still
+  true: no false-positive rate on **real photographic content at volume**, no
+  per-file rate, no swept `agreement` threshold, and fp16 and the distilled
+  build unmeasured.
+- **`spec/watermark-layouts-1.0.md`**: one informative sentence under
+  *`mark_id` is a lookup hint* pointing at that number. The layout, its bit
+  layout and its failure answer are unchanged.
+
 ### A checkable conformance claim, and the watermark's published curve (C10)
 
 No spec or vector change: `vectors/NN-*` and its expected verdicts are

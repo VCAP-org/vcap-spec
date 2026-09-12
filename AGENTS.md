@@ -16,8 +16,10 @@ treat every edit as a breaking change until `vcap/1.0` is tagged.
   names; normative for the bit layout and the decoder's failure answer.
 - `spec/watermark-robustness-1.0.md` — the measured curve of the published
   model: where the payload comes back, where it stops, what quantization
-  costs, what a browser pays per frame, and an explicit list of what was not
-  measured (the false-positive rate above all). Informative. Every number
+  costs, what a browser pays per frame, what the detector returns from content
+  that was never marked, and an explicit list of what was not measured (a
+  false-positive rate on real photographic content at volume above all).
+  Informative. Every number
   carries its corpus; a number without its conditions does not go in.
 - `spec/c2pa-interop-1.0.md` — what vcap and C2PA each prove, the mapping onto
   C2PA assertions, how the two bindings co-exist in one file, the sidecar's
