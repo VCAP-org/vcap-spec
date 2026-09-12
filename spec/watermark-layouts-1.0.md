@@ -154,6 +154,13 @@ These are design constraints, not caveats:
 - **`mark_id` is issued per tenant and per window**, never as a global counter,
   so the candidate set stays small in the case that matters.
 
+Collisions between issued ids are not the only reason the hint is weak. Content
+that was never marked also produces one: measured at about one decode in 289,
+which is the false-pass rate of the CRC-8 above and not a property of any
+model (`watermark-robustness-1.0.md`, *False positives*). That is a robustness
+observation, informative like the document it comes from; it changes nothing in
+this layout, and the rules above already assumed it.
+
 Widening the id would move the problem, not solve it: the channel is what
 limits it to 24 bits, and the proof already carries a 128-bit id. A future model
 that carries more bits reliably is a **new layout**, not a change to this one.

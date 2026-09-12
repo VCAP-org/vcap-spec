@@ -2,7 +2,8 @@
 
 Companion to `watermark-layouts-1.0.md`, which defines the payload layouts.
 This document says **what the watermark is worth**: where the payload comes
-back, where it stops coming back, and with how much margin in between.
+back, where it stops coming back, with how much margin in between, and what
+comes back from content that was never marked at all.
 
 Status: **informative**. Nothing here is normative and no implementation has to
 reproduce a number in it. It exists because `watermark-layouts-1.0.md` §
@@ -21,13 +22,20 @@ it are not readable by the person deciding whether to trust the verdict.
    weight. A curve that stopped at the last row that worked would be an
    advertisement.
 3. **Every number carries the corpus it came from,** and the corpora here are
-   small — three images, one clip. They are measurements, not statistics. The
-   section *Corpus, and how small it is* is not a footnote; read it before
+   small — three images and one clip for the recovery curve, 481 frames of
+   which 49 natural for the false-positive section. They are measurements, not
+   statistics. The sections *Corpus, and how small it is* and *False positives:
+   what a recovered payload implies* are not footnotes; read them before
    quoting anything.
-4. **What is missing is listed,** in *Not measured, and not estimated*. Several
-   questions a reader will reasonably have — the false-positive rate above all
-   — have no answer here, and the honest answer to those is that they were not
-   measured, not a plausible-sounding figure.
+4. **The curve has two halves, and both are here.** The recovery tables are
+   *true-positive* measurements, on content known to carry a mark; *False
+   positives* is what the same detector does on content that was never marked.
+   A decoder that returned a payload for anything would score 3/3 on every row
+   above, so the first half cannot be read without the second.
+5. **What is still missing is listed,** in *Not measured, and not estimated*.
+   Several questions a reader will reasonably have have no answer here, and the
+   honest answer to those is that they were not measured, not a
+   plausible-sounding figure.
 
 ## What was measured
 
@@ -214,21 +222,179 @@ and ≈ 0.2 s for fp16 on WebGPU where that is available. Those clip figures are
 **arithmetic**, per-frame latency multiplied by the frame count, with no
 batching — not a measured end-to-end run.
 
+## False positives: what a recovered payload implies
+
+Every table above is a true-positive measurement, on content known to carry a
+mark. This section is the complement, and it is the measurement this document
+used to list first among its absences: what the detector does on content that
+was never marked.
+
+**Corpus and conditions, first.** 481 frames from eleven sources, each run down
+the same nine photo chains as the photo table above — **4 329 decodes**, read
+under both layouts from the same 256 soft bits, so the photo and video trial
+counts are equal by construction and not independent of one another. Of the 481
+frames, **49 are natural photographic content** (one still and one ten-second
+scene, from the pinned asset set the curve above marks) and 432 are synthetic:
+flat gradients from this repository's own container vectors, and a stripe
+pattern from an internal capture spike. That is content with little texture for
+a detector to misread, which is the easy direction for a false positive, so
+these rates are better read as a floor than as a ceiling. A frame is admitted
+as unmarked **by provenance** — because its source never met the embedder,
+never because the detector was quiet on it; historic demo material that was
+available was excluded for that reason, its origin no longer being arguable,
+and screening it found frames carrying one and the same real mark. Neighbouring
+frames of one scene are near-identical detector inputs, so the decodes are
+**correlated**: the 15 passes below are 7 distinct ids. Same machine and
+runtime as the rest of this document (Apple M4, onnxruntime 1.28, CPU
+provider), fp32 and int8 builds, against a reference of 24 of the same frames
+marked at capture strength (24/24 recovered). Nothing here has been through a
+sharing service and nothing here is ordinary phone footage of the world.
+
+### The detection logit is not a usable gate
+
+The detector emits a detection logit alongside the 256 message bits. A verifier
+could reach for it as a gate before trusting a payload; on this corpus it does
+not work.
+
+| fp32 | min | p50 | p95 | max |
+|---|---|---|---|---|
+| unmarked, 4 329 decodes | 0.052 | 0.134 | 0.146 | 0.181 |
+| marked `photo-bch-v3` (strength 1.5), 24 frames | 0.007 | 0.082 | 0.170 | 0.177 |
+| marked `video-rep-v1` (strength 2.0), 24 frames | 0.127 | 0.203 | 0.266 | 0.297 |
+
+- **On the photo layout it points the wrong way.** A frame marked at photo
+  strength scores *lower* than an unmarked one: AUC 0.208 on fp32 and 0.129 on
+  int8, where 0.5 is a coin flip. A gate of the form "logit above X" would
+  reject the marks it is there to find.
+- **On the video layout there is signal, measured where it is easiest.** AUC
+  0.931 (int8: 0.903), best cut 0.149 separating 0.875 of marked frames from
+  0.030 of unmarked ones — but that is on *clean* frames marked at full
+  strength. Every row of the tables above is harder than that case, and none of
+  them was measured against this logit.
+- The two marked distributions sit on **opposite sides** of the unmarked one,
+  which is what a quantity tracking mark *energy* rather than mark *presence*
+  looks like. Pooling the two layouts gives AUC 0.569, and that pooled figure
+  is the one not to quote.
+
+**Consequence.** For the model this document describes there is **no detection
+threshold to publish**, and this document publishes none: the detector cannot
+be asked "is this content marked?". The layouts' integrity checks are not the
+last check before a verifier speaks — on this evidence they are the only one.
+
+### `photo-bch-v3`: 0 ids from 4 329 unmarked decodes
+
+Zero on the fp32 build and zero on the int8 build. The 95 % upper bound this
+corpus supports is **0.09 %**, which is as far as 4 329 decodes can go; the
+code puts the real figure below what any corpus of this size could resolve. A
+(252,128) shortened BCH(255,131) with t = 18 admits a word with no structure in
+it with probability **7.2 × 10⁻¹¹**, about one in fourteen billion. That figure
+rests on the detector's bit decisions on unmarked content being balanced, and
+this measurement is what shows the assumption held rather than assuming it:
+median exactly 0.500 ones out of 256 over the 4 329 decodes, mean 0.502 (int8:
+0.500 / 0.498).
+
+A pass would then still have to yield one of the capture ids **actually
+issued** — the id that comes out is a uniform 128-bit value, so 2⁻¹²⁸ on top of
+the above. On this corpus and by the code behind it, **a recovered
+`capture_id` is not something that happens by accident.**
+
+### `video-rep-v1`: 15 ids from the same 4 329 decodes
+
+**0.35 %, one unmarked frame in 289** (95 % CI 0.21–0.57 %, 7 distinct ids).
+The int8 build measured 12 in 4 329 = 0.28 % (CI 0.16–0.48 %): the intervals
+overlap and quantization moves neither figure.
+
+**That rate is the CRC and not the model.** Eight bits of checksum over a
+24-bit id admit one word in 256 — 0.39 %, minus the reserved id — the
+measured bit decisions are balanced as above, and the measurement lands on the
+analytic figure. Nothing about the detector is being characterised here: a
+check with one byte of redundancy passes at about that rate on any unstructured
+word.
+
+And every pass is a **plausible** `mark_id` by construction, because every
+non-reserved 24-bit value is legal. There is no filter between "CRC passed" and
+"resolve this id against the registry", which is what makes this the case that
+matters rather than a curiosity.
+
+The clip-level measurement — 8 unmarked clips down the 7 video chains, frames
+averaged and decoded once as a verifier decodes a clip — saw **0 passes in 56**.
+That is consistent with 1/256 (0.2 expected) and too small to say more: the
+upper bound 56 trials support is 6.4 %. Averaging frames of one unmarked scene
+does not decorrelate anything, so **1/256 is the figure to carry for clips
+too**, and 0/56 is not evidence of anything better.
+
+Where the passes fall across the nine chains carries no readable structure: 1.9
+passes per chain is what a flat 1/256 predicts, the fp32 and int8 counts
+scatter around it in different places, and repeated ids across consecutive
+frames of one synthetic clip account for much of the rest. On this corpus no
+chain is safer than another.
+
+### `agreement` separates the false ids from the real ones, statistically
+
+The 15 false ids came out at agreement **0.59–0.63** (int8: 0.55–0.63). Every
+chain in the video table above that recovers sits at **0.87–1.00**, the worst
+chain that still works at 0.90, and the layout's correction floor is near 0.80.
+
+That gap is why `video-rep-v1` returns an agreement figure at all, and why a
+verifier reporting a `mark_id` without it has discarded the only discriminator
+there is. It is an **observation on a small corpus, not a threshold**: it was
+not swept for a cut, the layout does not require one, and this document does
+not turn it into a rule.
+
+### The rate is per decode, not per file
+
+All of the above counts one decode of one frame. How many decodes a verifier
+runs on one file is a policy the verifier sets, and running more multiplies the
+exposure: at the **8 evenly spaced frames** suggested above, the chance that at
+least one frame of an unmarked clip yields a `mark_id` is
+1 − (255/256)⁸ ≈ **3 %**. For anyone sampling frames, that is the number that
+matters, and it is arithmetic on the per-decode rate rather than a measured
+per-file rate.
+
+### What this licenses, and what it does not
+
+- A `capture_id` recovered under `photo-bch-v3` is, on this evidence, **not
+  noise**: 0 in 4 329 measured, ~10⁻¹⁰ by the code, and 2⁻¹²⁸ before it names
+  anything issued.
+- A `mark_id` recovered under `video-rep-v1`, on its own, is **weak evidence**.
+  It is a lookup hint returning a candidate set — which is what
+  `watermark-layouts-1.0.md` already requires — now with a number behind the
+  rule rather than a design intuition.
+- Neither result softens the proof format's rule, and it outranks both: a
+  watermark without a valid signature is *origin traced*, never *authentic*.
+- Nothing here supports a claim about **real photographic content at volume**:
+  90 % of this corpus is synthetic and the one natural scene is ten seconds
+  long. Nor about an **adversary** — this is unmarked content nobody shaped,
+  and a party trying to manufacture a mark id is a threat-model question
+  (`threat-model.md`).
+
 ## Not measured, and not estimated
 
 Each of these is a question a reader will have. None of them has a number here,
 and a number that was not measured is not published in its place.
 
-- **False-positive rate — the most important absence.** The detector emits a
-  detection logit alongside the 256 message bits. **No measurement exists of
-  what it does on unmarked content**: how often unmarked footage yields a
-  payload that passes BCH or the CRC, and on what volume of content that was
-  checked. Every number in this document is a *true-positive* measurement on
-  content known to carry a mark. Until the complementary measurement exists,
-  no claim can be made about what a recovered `mark_id` implies on its own,
-  and the layouts' own rule stands in for it: a `mark_id` is a lookup hint that
-  returns a candidate set, never an identifier
-  (`watermark-layouts-1.0.md`, *`mark_id` is a lookup hint*).
+- **A false-positive rate on real photographic content, at volume — the most
+  important absence.** *False positives* above measures unmarked content, but
+  **432 of its 481 frames are synthetic** and the natural half is 49 frames
+  from a single still and a single ten-second scene. A few thousand frames of
+  ordinary phone footage would turn 0.35 % into a rate of its own rather than
+  an agreement with an analytic figure, and would say whether texture, faces,
+  foliage or sensor noise push the detector's bit decisions off balance —
+  which is the assumption the `photo-bch-v3` figure rests on. That corpus does
+  not exist here, and nothing was fetched to stand in for it: a corpus whose
+  contents are unknown cannot support a claim about unmarked content.
+- **A per-*file* false-positive rate.** The measured rates are per decode. The
+  ≈ 3 % arrived at for 8 sampled frames is arithmetic on top of them, not a
+  measurement, and no frame-sampling policy has been measured against unmarked
+  clips.
+- **Whether `agreement` can be made a rule.** The separation between the false
+  ids (0.55–0.63) and every row that recovers (0.87–1.00) was not swept for a
+  threshold, and doing that on a corpus 90 % synthetic would produce a number
+  that does not travel.
+- **The false-positive behaviour of the fp16 and distilled builds.** fp32 and
+  int8 were measured and agree; the argument that the rate is the code rather
+  than the model predicts the others land in the same place, and for them the
+  prediction is untested.
 - **Anything on a phone.** Every latency here was measured on one desktop
   machine. No device was available, and desktop figures are not extrapolated
   into device figures.
