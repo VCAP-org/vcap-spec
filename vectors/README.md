@@ -86,17 +86,19 @@ directories it declares, printing the ones it left alone. It used to delete
 every numbered directory before rewriting, which for these was not a rewrite
 but a loss. Two scripts rebuild them instead, each pointed at the artifacts a
 device produced: `tools/src/derive-container-vectors.ts` for 36-39 (Android) and
-`tools/src/derive-ios-vectors.ts` for 47-48 (iOS). That is what keeps the edited
-cases (38, 39) auditable rather than asserted.
+`tools/src/derive-ios-vectors.ts` for 47-48 and 85 (iOS). That is what keeps the
+edited cases (38, 39) auditable rather than asserted.
 
 They are not all the same weight of evidence, and each `NOTES.md` says which it
-is. 36-39 and 47 carry a **real device signature**: an implementation that only
-ever meets this repository's test key never learns whether it can read a real
-one, and 47 is the only proof here made by a Secure Enclave. In 48 the
-**container** is the device's and every `content_hash` is recomputed from it,
-but the chain over them is synthesized with the test key — the S1 spike inserted
-vcap SEIs and never sealed a video, so there was no iOS video signature to
-carry.
+is. 36-39, 47 and 85 carry a **real device signature**: an implementation that
+only ever meets this repository's test key never learns whether it can read a
+real one, and 47 and 85 are the proofs here made by a Secure Enclave — 85 is
+the only one where a Secure Enclave signed a **segment chain** and not just a
+core. In 48 the **container** is the device's and every `content_hash` is
+recomputed from it, but the chain over them is synthesized with the test key —
+the S1 spike inserted vcap SEIs and had not yet sealed a video, so at the time
+there was no iOS video signature to carry. 85 is that file, two days later:
+same phone, `AVAssetWriter` again, and the chain its own.
 
 ## Running them
 
@@ -211,8 +213,8 @@ corroboration of a `location` with no coordinates).
 - **A remuxed or trimmed video with its proof in a sidecar**: the trailer is
   gone, the NAL units and vcap SEIs survive, and §5 should read *verified clip*
   over the whole received file. It needs a real remuxer's output and belongs
-  with the container vectors that come off a device (36–39, 48), not with the
-  generator.
+  with the container vectors that come off a device (36–39, 48, 85), not with
+  the generator.
 - **A JPEG carrying a C2PA manifest with a real claim signature** next to a
   vcap trailer, validated by a C2PA validator as well as by ours. Both halves
   of `spec/c2pa-interop-1.0.md` §3 are argued from the C2PA text; the C2PA

@@ -10,6 +10,38 @@ with it.
 
 ## Unreleased
 
+### Corpus 1.1.0: an iOS video whose segment chain a Secure Enclave signed
+
+Additive. Nothing normative moves — no schema, no layout, no §7/§8 vocabulary,
+and no existing vector's bytes: every `sha256` in `MANIFEST.json` that was
+there before is unchanged, which is why this is a **minor** bump and not a
+major one.
+
+- **`vectors/85-mp4-container-ios-sealed`** (`container`, `authentic`, 11 of 11
+  segments recomputed from the file). The corpus's first video sealed
+  end-to-end on an iPhone: `AVAssetWriter` wrote the MP4, and the Secure
+  Enclave signed every one of the eleven segment messages of §5 as well as the
+  core. Vector 48 had the Apple container under a synthesized chain and 47 had
+  a real Secure Enclave signature over a photo; this is the first file where
+  the writer's §5 boundaries and a reader's are checked against each other on
+  the same encoder.
+  - **Five one-frame segments.** VideoToolbox answers a forced keyframe with
+    two IDRs 33 ms apart, so the GOPs run 28, 1, 30, 1, 30, 1, 29, 1, 30, 1,
+    29 frames. §5's "a segment may be one frame" had one observed pair behind
+    it; here it is half the chain.
+  - **Apple writing ISO MP4**: `ftyp` `mp42`, `avc1` H.264, against 48's
+    `qt  `/`hvc1` — the other of the two shapes `AVAssetWriter` emits.
+  - First `container` vector whose proof declares a `watermark`
+    (`video-rep-v1`), so it carries *watermark not evaluated* where 36-39 and
+    48 carry *no watermark*.
+- **`vectors/VERSION`** moves `1.0.0` → `1.1.0` and `MANIFEST.json` declares
+  **85** vectors. A runner that pins the count — as `vectors/CONFORMANCE.md`
+  requires it to, rather than flooring it — goes **red** against this corpus
+  until it updates, which is the intended behaviour and not a regression.
+- `tools/src/derive-ios-vectors.ts` rebuilds the new vector from the device
+  artifact, as it does 47 and 48; `npm run generate` cannot make it and lists
+  it among the directories it leaves alone.
+
 ### The red team: the attacks that worked, next to the ones that did not
 
 No spec or vector change: `vectors/NN-*`, its expected verdicts and the corpus
