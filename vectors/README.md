@@ -126,6 +126,13 @@ npm run manifest         # (re)writes vectors/MANIFEST.json from vectors/ and ve
 npm run manifest:check   # exits 1 if the committed file is stale — CI runs this
 ```
 
+`vectors/CONFORMANCE.md` says what the sentence "conformant with corpus
+1.0.0" has to contain to be checkable — corpus version, manifest hash, and
+how many vectors actually ran — and why a suite that ran zero vectors must be
+red. `vectors/conformance-report.json` is this repository's own claim in that
+format, regenerated and checked by CI (`npm run conformance:report` /
+`conformance:check`).
+
 **Bump policy**, the same additive-only rule as everywhere else in this
 repository: a vector's hash never changes once published (`AGENTS.md`), so
 `VERSION` only ever moves forward. Bump the minor version when vectors are

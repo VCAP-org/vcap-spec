@@ -16,11 +16,14 @@ format only ever grows by addition (spec §9); every change lands through
 
 ```
 spec/      the specification document (normative), the watermark payload
-           layouts (normative), the C2PA interoperability and sidecar companion
+           layouts (normative), the measured watermark robustness curve
+           (informative: where the mark holds, where it breaks, what was not
+           measured), the C2PA interoperability and sidecar companion
            (informative, with the writer rules it pins) and the public threat model
 reviews/   review notes on the draft (crypto, implementability), numbered; the spec absorbs them, they stay as record
 schema/    JSON Schema of the proof + validator
-vectors/   conformance vectors: sealed files, broken signatures, edge cases (see vectors/README.md)
+vectors/   conformance vectors: sealed files, broken signatures, edge cases (see vectors/README.md),
+           the versioned corpus manifest and how to claim conformance against it (vectors/CONFORMANCE.md)
 tools/     reference tooling (Node 22, TypeScript): JCS, trailer, canonical bytes, core signature,
            segment chain, the vector generator and the reference verifier CI runs over vectors/
 ```

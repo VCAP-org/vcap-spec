@@ -10,6 +10,34 @@ with it.
 
 ## Unreleased
 
+### A checkable conformance claim, and the watermark's published curve (C10)
+
+No spec or vector change: `vectors/NN-*` and its expected verdicts are
+untouched.
+
+- **`vectors/CONFORMANCE.md`** and **`schema/conformance-report.schema.json`**:
+  what a claim of conformance has to name (corpus version, manifest hash,
+  vectors actually run) and the rule that a run of zero vectors is a failure
+  and never a pass. `npm run validate -- --report <file>` checks a report,
+  including the two arithmetic rules the schema cannot express.
+  `vectors/conformance-report.json` is this repository's own claim, written by
+  `npm run conformance:report` and gated in CI by `conformance:check`, which
+  exits 1 when the run covered fewer vectors than the manifest declares.
+- **`tools/src/conformance.ts`**: the per-vector loop, now shared by the
+  reference suite and the report so the published claim is about the code CI
+  runs; `corpus()` throws on a missing or empty corpus. The suite pins the
+  vector count to `MANIFEST.json` instead of flooring it at 30.
+- **`spec/watermark-robustness-1.0.md`** (informative): the measured curve of
+  the published model — the photo chains and the video chains with their
+  recipes, the two break points (a 480 px JPEG-q30 thumbnail; a clip past
+  crf 36), what int8 quantization costs in margin, how many frames a verifier
+  has to read, and what a detector call costs in a browser. It publishes its
+  corpus size next to every table (three images, one synthetic clip) and lists
+  what was **not** measured rather than estimating it — the detector's
+  false-positive rate on unmarked content first among them. Satisfies
+  `watermark-layouts-1.0.md` versioning rule 6, which had no published curve
+  behind it.
+
 ### Corpus version, manifest and edge-case generator (C19, tooling only)
 
 No spec or vector change: `vectors/NN-*` and its expected verdicts are
