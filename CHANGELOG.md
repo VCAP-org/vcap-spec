@@ -10,6 +10,43 @@ with it.
 
 ## Unreleased
 
+### The red team: the attacks that worked, next to the ones that did not
+
+No spec or vector change: `vectors/NN-*`, its expected verdicts and the corpus
+manifest are untouched. Documentation only, and nothing normative moves.
+
+- **`spec/watermark-robustness-1.0.md`** (informative) gains *Adversarial
+  removal and forgery* — 65 deliberate attacks on three images and one clip,
+  fp32 and int8, each with its adversary model, split between attacks that
+  *removed* a payload and attacks that made the detector emit a **chosen** one.
+  Removal by filtering failed everywhere, including the blind high-pass
+  subtraction aimed at the mark (0.0 bit errors). Removal by **geometry**
+  works and costs the attacker nothing: gone at 15° of rotation and a 50 %
+  centre crop on fp32, and already at **10° and 35 % on the int8 build a
+  browser verifier ships**, because nothing resynchronises the mark to the
+  detector's fixed working grid. **Forgery is cheap**: the model is a public
+  download, so a chosen `capture_id` is planted or overwritten 3/3 at 42 dB.
+  The worst row needs no model — one genuine frame spliced into 23 foreign
+  ones makes the clip report the real `mark_id` at agreement **0.996**,
+  because an unmarked frame abstains rather than dissents (mean absolute
+  message logit 11.3 against 0.131) — from which it follows that
+  **`agreement` is not a forgery detector**, correcting a reading the
+  false-positive section left open.
+- The *Not measured* list now leads with **adaptive, gradient-based attacks**
+  — the model is differentiable and public, and this is the largest gap — then
+  a real photograph of a real screen, an adversary against moving footage,
+  combined attacks, and the fp16 and distilled builds.
+- **`spec/threat-model.md`**: new **§5.8**, threats against the watermark.
+  *Watermark removal by re-framing* and *watermark forgery with the public
+  model* move out of *Open items* into **accepted and named** — removal only
+  weakens a verdict, and forgery is exactly why the watermark alone is never
+  green. *Splicing one marked frame into foreign footage* is **open**, with a
+  mitigation that is a **verification policy and not a format change**: decode
+  the sampled frames individually and report how many carried the id, instead
+  of decoding once over the averaged logits. §2 gains the matching
+  non-claim: a mark says a frame of that capture appears in the file, and
+  carries no authorship.
+
 ### The other half of the curve: false positives on unmarked content
 
 No spec or vector change: `vectors/NN-*`, its expected verdicts and the corpus
