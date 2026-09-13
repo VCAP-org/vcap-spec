@@ -193,6 +193,23 @@ the same `outcome`, `labels`, `not_evaluated`, `core_hash`, `segments.verified`
 and, where present, `level`, `validated_at` and `location` as `expected.json`,
 and the same `core_bytes_hex` for `jcs` vectors.
 
+## Errata
+
+A vector's bytes never change once it is published, `NOTES.md` included — its
+digest is in `MANIFEST.json`, and five runners pin that manifest. So a note that
+turns out to be wrong is corrected here, not in place.
+
+- **85 · `85-mp4-container-ios-sealed`** — its note explains the five one-frame
+  segments as VideoToolbox answering a forced keyframe with two IDRs. That is
+  not what happened. The writer that produced this file forced a keyframe **and**
+  left the encoder's own `MaxKeyFrameInterval` set on the same session, so the
+  encoder's timer emitted a second keyframe one frame later, unaware that one had
+  just been forced out of band. Measured against a four-minute recording: 229
+  duplicated keyframes over 240 s, 465 segments where one-second groups predict
+  about 236. The vector stays exactly as it is — a file shaped like this exists,
+  and a reader has to handle it — but the cause belongs to that writer's
+  configuration, not to Apple's encoder.
+
 ## Not here yet, and why
 
 Every attachment §6.2 defines now has vectors: `attestation`,
