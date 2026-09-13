@@ -10,6 +10,44 @@ with it.
 
 ## Unreleased
 
+### Erratum: the duplicate key frame in vector 85 is ours, not VideoToolbox's
+
+No spec, schema or vector change: `vectors/85-mp4-container-ios-sealed/` and
+every `sha256` in `MANIFEST.json` are untouched. A vector's bytes never move
+once published (`vectors/README.md`, *Corpus version and manifest*) — that
+rule covers `NOTES.md` too, since it is one of the four files the vector's
+hash is taken over, so the correction below lives here instead of there.
+
+The "Corpus 1.1.0" entry two sections down, and `vectors/85-mp4-container-ios-sealed/NOTES.md`
+itself, read the five one-frame segments as **VideoToolbox** answering a
+forced keyframe with a second IDR 33 ms later. A four-minute recording taken
+13 September 2026 on the same iPhone 11 Pro shows this was the wrong read:
+it is not the encoder improvising, it is `VideoSealingSession` asking for two
+things that conflict. The session forces a keyframe at the marking boundary
+*and* sets `MaxKeyFrameInterval` (30 frames) and `MaxKeyFrameIntervalDuration`
+(1 s) on the same encoder session; the encoder's own interval timer has no way
+to know a keyframe was just forced out of band, so it fires its own keyframe
+one frame later, on schedule. Over 240 s this happens 229 times out of ~236
+expected boundaries — 465 segments where a clean one-forced-keyframe-per-GOP
+writer would produce ~236 — not five times in eleven segments, which is what a
+30-second clip happens to show. Measured in
+`vcap-sdk-ios`, `docs/gop-boundary-statistics.md` (13 September 2026 section).
+
+The vector is not weaker for it. A one-frame segment born from a
+misconfigured writer is still a segment a reader has to parse, and this file
+still proves that a real Secure Enclave chain survives it. What was wrong was
+the *why*, not the *what*: nothing about `outcome`, `segments.verified`, or
+any byte a verifier checks depended on the attribution. §5's "a segment may
+be one frame" stands regardless of which side of the API call produced the
+short one.
+
+Two things worth carrying forward, neither of them a vector or a schema
+change: writer implementers should not set both a forced-keyframe call and a
+`MaxKeyFrameInterval`/`MaxKeyFrameIntervalDuration` pair on the same
+`AVAssetWriterInput` unless they intend the duplicate; and a reader that
+budgets proof size from segment count should expect roughly double what a
+naive GOP-per-minute estimate gives on a file produced this way.
+
 ### Corpus 1.1.0: an iOS video whose segment chain a Secure Enclave signed
 
 Additive. Nothing normative moves — no schema, no layout, no §7/§8 vocabulary,
@@ -25,10 +63,11 @@ major one.
   a real Secure Enclave signature over a photo; this is the first file where
   the writer's §5 boundaries and a reader's are checked against each other on
   the same encoder.
-  - **Five one-frame segments.** VideoToolbox answers a forced keyframe with
-    two IDRs 33 ms apart, so the GOPs run 28, 1, 30, 1, 30, 1, 29, 1, 30, 1,
-    29 frames. §5's "a segment may be one frame" had one observed pair behind
-    it; here it is half the chain.
+  - **Five one-frame segments,** the GOPs running 28, 1, 30, 1, 30, 1, 29, 1,
+    30, 1, 29 frames. §5's "a segment may be one frame" had one observed pair
+    behind it; here it is half the chain. *(Corrected above, "Erratum": this
+    is `VideoSealingSession`'s own encoder configuration, not VideoToolbox
+    improvising.)*
   - **Apple writing ISO MP4**: `ftyp` `mp42`, `avc1` H.264, against 48's
     `qt  `/`hvc1` — the other of the two shapes `AVAssetWriter` emits.
   - First `container` vector whose proof declares a `watermark`
