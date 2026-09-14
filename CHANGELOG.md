@@ -10,6 +10,34 @@ with it.
 
 ## Unreleased
 
+### §5 says how far a NAL unit reaches
+
+No schema or vector change: every byte in `vectors/` and every `sha256` in
+`MANIFEST.json` is untouched, and no verifier changes its answer on the corpus.
+§5 said the segment hash covers "raw NAL bytes — no Annex-B start code, no
+AVCC/HVCC length prefix" and left the other end of the unit to the reader.
+Two implementations read it differently and nothing in the corpus could tell
+them apart: the Android writer trimmed trailing zero bytes off each unit, the
+TypeScript verifiers hashed the length prefix's whole extent, and **not one NAL
+unit in any of the seven container vectors ends in a zero byte**, so the
+disagreement was invisible until a real recording arrived. It is not rare in
+the field — an H.264 encoder pads slices to the level's minimum size whenever
+a scene is too cheap to code, and 81 of the 89 NAL units of a moto g75
+recording of a near-static screen end in one to fifteen zeros — and every such
+recording verified `tampered` against its own signature.
+
+§5 now states the extent: a NAL unit is exactly the bytes the container stores
+for it, trailing zeros and the leading zero of a four-byte start code included,
+and a writer that hashes before muxing MUST hash the bytes it hands the muxer.
+An older verifier is unaffected: both TypeScript readers already did this, and
+the rule the text now carries is the one the corpus was generated under.
+
+**Still owed: a vector.** `mp4-container-nal-trailing-zeros` — a sealed
+recording whose slices carry cabac padding — is the vector this sentence needs,
+and adding it is a corpus minor bump (`VERSION`, `MANIFEST.json`) plus the
+pinned counts in `vcap-verifier` and `vcap-sdk-android`. Written down here
+rather than done quietly, because a normative rule with no vector is a comment.
+
 ### Erratum: the duplicate key frame in vector 85 is ours, not VideoToolbox's
 
 No spec, schema or vector change: `vectors/85-mp4-container-ios-sealed/` and
