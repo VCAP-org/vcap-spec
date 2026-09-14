@@ -10,6 +10,29 @@ with it.
 
 ## Unreleased
 
+### §3 says a writer may replace a trailer, and under what
+
+No schema or vector change: every byte in `vectors/` and every `sha256` in
+`MANIFEST.json` is untouched, and no verifier changes its answer on the corpus.
+§3 said writers MUST refuse to seal a file that already carries a trailer, and
+said nothing about *replacing* the one it has. That silence was load-bearing in
+the wrong direction: the §6.2 attachments are obtained after the device seals,
+so putting a timestamp token or an anchor back into the file somebody exports
+is the ordinary case, not an exotic one, and the only guidance an implementer
+had was a rule about appending. An implementer who read it as a prohibition
+shipped proofs that permanently say *no trusted time*; one who read it as
+permission to append shipped *nested proof*.
+
+The new bullet permits the edit and fences it: media bytes unchanged, core and
+`sig` byte-identical, the old trailer dropped rather than wrapped, and a
+corrupted trailer never rewritten. Readers are unaffected — a replaced trailer
+is byte-indistinguishable from one a writer would have produced at sealing time
+had the attachments existed then, which is why no vector can separate the two
+and none is added. The failure modes the rule keeps a writer away from are
+already covered by the corpus from the reading side: vector 09 for the nested
+case, 06 for the corrupted one, 10 for a core that no longer matches its
+signature.
+
 ### §5 says how far a NAL unit reaches
 
 No schema or vector change: every byte in `vectors/` and every `sha256` in
