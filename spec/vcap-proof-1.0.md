@@ -102,6 +102,35 @@ by seeking from the end, never by scanning.
   the outer proof as authoritative. Writers MUST refuse to seal a file that
   already carries a trailer. Otherwise a genuine hardware-sealed original can be
   wrapped in a weaker proof that hides it.
+- **Replacing the trailer.** A §6.2 attachment is produced *after* the device
+  seals — a TSA mints a token, a batcher mines an anchor — so the evidence a
+  capture earns arrives minutes later and somewhere else. A writer MAY
+  therefore replace the trailer of a sealed file, under all of:
+  1. the bytes before the box header are **unchanged**, byte for byte, so
+     `media.hash` still covers what it covered (§4.1);
+  2. the new payload's **core (§6.1) and `sig` are byte-identical** to the
+     ones being replaced, so the device's signature still covers the same core
+     hash — this is what makes the edit performable by a party that cannot
+     sign, and it is the only thing that does;
+  3. the old trailer is **dropped, not wrapped**: appending a second one is
+     the *nested proof* case above, and the result would read worse than the
+     file that went in;
+  4. the trailer being replaced is **intact**. A writer MUST NOT replace a
+     trailer whose CRC does not match: *corrupted proof* is the verdict that
+     file has earned, and rewriting it would launder somebody's edit into a
+     clean proof.
+
+  `flags` and `minor` are carried over from the trailer being replaced. Nothing
+  is required of readers: a replaced trailer is indistinguishable from the
+  trailer a writer would have written had the attachments existed at sealing
+  time, which is the point. A copy of the file that was exported before the
+  replacement stays exactly as valid as it was — it simply carries less
+  evidence, which §8 already reports as labels and never as an error.
+
+  What this rule forbids is what a reader could not otherwise catch: an edit
+  that moves the media bytes, or one that keeps a signature over a core it no
+  longer describes. Both reach the verifier as *tampered* on the existing
+  vectors; the rule exists so a writer is not the one discovering that.
 - **`flags` are a dispatch hint and never a source of truth.** Bit 0: a sidecar
   exists. Bit 1: segments present (video). Bit 2: pseudonymous capture. Bits
   3–15 reserved, MUST be written as zero. Writers MUST derive bits 1 and 2 from
