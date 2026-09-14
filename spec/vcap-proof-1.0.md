@@ -315,6 +315,25 @@ sig(n)          = ECDSA-P256-SHA256( message(n) ), P1363, low s (§4.2)
   cover the bytes that contain it. Every other SEI — registered or not — is
   content and is covered. Excluding by NAL type, as an earlier draft did, would
   have left unsigned bytes inside "verified" segments.
+- **A NAL unit is exactly the bytes the container stores for it.** In a
+  length-prefixed sample it is the `lengthSizeMinusOne + 1`-byte prefix's whole
+  extent; in an Annex-B stream it is everything from the end of a three-byte
+  start-code prefix `00 00 01` to the beginning of the next one, or to the end
+  of the sample. **Trailing zero bytes are inside the unit**, and so is the
+  leading zero of a four-byte start code, which falls at the end of the unit
+  before it. This is a framing rule, not a bitstream one: `trailing_zero_8bits`
+  and `cabac_zero_word` are different things to an H.264 parser and the same
+  thing here, because a verifier reading a received file has a length prefix
+  and no way to tell which zeros an encoder meant. Trimming them would leave
+  bytes physically inside a signed segment covered by nothing, which is what §5
+  exists to prevent; it would also make the hash depend on a bitstream reading
+  that two implementations perform differently. A writer that hashes before
+  muxing therefore **MUST** hash the bytes it hands the muxer, delimited this
+  way — and MUST check that against a file it produced, not against the
+  platform's documentation. Two implementations disagreed exactly here: an
+  encoder pads slices with zeros whenever a scene is too cheap to code, one
+  side trimmed them and the other did not, and every recording of a static
+  scene verified *tampered* while every recording of a busy one passed.
 - **Audio is content.** Segment hashes cover the audio frames of the segment's
   time range, so a clip cannot keep verified frames over a replaced soundtrack.
   Audio frames do not align to IDRs: the rule above (by DTS, half-open interval,
