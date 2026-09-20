@@ -196,7 +196,7 @@ accepted and named here; the third is open.
 |---|---|---|---|
 | **Watermark removal by re-framing** | rotates a sealed photo past ~12°, or crops past ~35 % of the frame — ~8° and ~35 % on the int8 build a browser verifier runs — and the payload no longer decodes | **none from the watermark**: neither layout carries a synchronisation pattern, nothing realigns the mark to the detector's working grid, and straightening or reframing costs the attacker nothing a viewer would read as damage. Filtering-based removal, by contrast, failed on every attempt measured | **accepted and named**: removal makes a verdict *weaker*, never greener. A file whose pixels were rewritten has no valid signature either, so it is already *no proof found* or *tampered*; what is lost is the lookup hint. Break points are measured on three images and are not a rate |
 | **Watermark forgery with the public model** | the model is an export of a publicly downloadable upstream checkpoint, so anyone can embed a chosen `capture_id` into content that was never captured, or overwrite an existing one at the same strength — 3/3 in the measurement, at 42 dB | **none in the watermark**: it carries no key and is not a signature, and the mark carries no authorship because anyone can mark. What stops the forged file being believed is the ECDSA **signature** over the file bytes from an attested hardware key, which the adversary cannot produce | **accepted and named**: this is why a watermark alone is never green. A forged mark reaches *origin traced* and never *authentic* — the invariant is load-bearing here, not decorative |
-| **Splicing one marked frame into foreign footage** | extracts a single frame from any sealed clip in circulation and splices it into 23 frames of unrelated content; the clip reports that `mark_id` at agreement 0.996 (int8: 0.93), which is the agreement of a clean recovery. No model needed | **a verifier should not decode a clip from frame-averaged logits alone.** An unmarked frame abstains rather than dissents (mean absolute message logit 11.3 marked against 0.131 unmarked), so one marked frame sets every bit. Decoding frames **individually** and reporting how many carried the id turns the claim into "1 of 8 sampled frames carries this id", which is what happened; the robustness curve found that every chain which recovers already recovers at N = 1, so this costs no recovery. `agreement` does not catch this and must not be presented as if it did | **open**: the mitigation is a verification policy, not a format change, and no document requires it yet. See § 6 |
+| **Splicing one marked frame into foreign footage** | extracts a single frame from any sealed clip in circulation and splices it into 23 frames of unrelated content; the clip reports that `mark_id` at agreement 0.996 (int8: 0.93), which is the agreement of a clean recovery. No model needed | **a verifier does not decode a clip from frame-averaged logits alone**, and since 20 September 2026 `vcap-proof-1.0.md` §8 requires the count: a verifier reporting a clip recovery MUST say how many of the sampled frames carried the id, and MUST NOT present a confidence figure as if it answered that question. An unmarked frame abstains rather than dissents (mean absolute message logit 11.3 marked against 0.131 unmarked), so one marked frame sets every bit. Decoding frames **individually** and reporting how many carried the id turns the claim into "1 of 8 sampled frames carries this id", which is what happened; the robustness curve found that every chain which recovers already recovers at N = 1, so this costs no recovery. `agreement` does not catch this and must not be presented as if it did | **closed as a policy, and named**: the requirement is in §8, the platform's detector decodes each sampled frame and reports `frames_with_id`, and the reference verifier carries the count into the sentence a reader sees. What remains accepted is the underlying fact — one marked frame is one marked frame — which no format can change: the claim is *a frame of that capture appears in this file*, and the count is how much of it does |
 
 Two wordings follow from the above and hold wherever a verifier speaks about a
 watermark: a recovered mark means *a frame of that capture appears in this
@@ -243,15 +243,6 @@ like, and it is the true one.
   hash): today optional; the verdict says when it is absent.
 - **Mirrors and gossip** (C10, C11): split-view resistance depends on them.
 - **External audit** (D7): commissioned during phase 1, findings folded here.
-- **Per-frame clip decoding** (§ 5.8): the splice result — one genuine marked
-  frame in 23 foreign ones reporting the real `mark_id` at agreement 0.996 —
-  has a mitigation that no document requires yet. Decode the sampled frames
-  **individually** and report **how many carried the id**, instead of decoding
-  once over the averaged logits; the count is the claim, and a 1-of-8 result
-  must not be rendered as a recovery. This is a verification policy and a
-  verifier wording change, **not** a format change: no vector, no schema field
-  and no bit layout moves. Removal and forgery themselves are no longer open —
-  they are measured, and accepted and named in § 5.8.
 - **Per-capture keys** for unlinkability: cost and policy, later.
 - **Position, corroborated** (§5.7): the residual on SIM/device decoupling
   stays *medium* until the registry's combination rule (number verification
@@ -263,6 +254,11 @@ like, and it is the true one.
 
 ## 7. Change log
 
+- 2026-09-20 — §5.8's splice item closes as a policy: §8 now **requires** a
+  verifier reporting a clip recovery to say how many sampled frames carried
+  the id, the platform's detector decodes each frame and reports the count,
+  and the reference verifier puts it in the sentence. The underlying fact
+  stays accepted and named — one marked frame is one marked frame.
 - 2026-09-20 — §5.9, threats against the stored original, written when C9
   shipped: the two storage modes as different risks, key substitution as the
   first entry because it is the one no cryptography answers, custody moved to

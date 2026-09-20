@@ -9,6 +9,22 @@ change names its sections, vectors and fallback for an older verifier.
 
 ## Unreleased
 
+### Require the frame count when a clip's watermark is reported
+
+§8 gains one requirement and no field: a verifier that decodes several frames
+of a clip and reports one answer MUST report how many of the sampled frames
+decoded to that id, and MUST NOT present a confidence figure as if it answered
+that question. The reason is measured in `watermark-robustness-1.0.md` — an
+unmarked frame abstains rather than dissents, so a decode averaged over frames
+is set by any single marked one, and one genuine frame spliced into unrelated
+footage reports the real id at the agreement of a clean recovery.
+
+Not a format change: no proof field, no schema, no bit layout and no numbered
+vector moves, and a verifier whose detector does not count says nothing about
+frames rather than inventing a number. The threat model's open splice item
+closes as a policy; what stays accepted and named is that one marked frame is
+one marked frame.
+
 ### Separate encrypted-vault object draft and offline decoder
 
 Add `spec/vcap-vault-1.md`, a closed manifest schema and streaming Node/WebCrypto
