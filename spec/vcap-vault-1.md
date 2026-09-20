@@ -1,9 +1,14 @@
 # VCAP encrypted vault object — version 1
 
-**Status: storage-protocol draft, with an offline reference decoder and test
-vectors.** The app and platform do not upload or serve this format yet. This
-is a separate envelope for preserving a sealed file, not a change to
-`vcap/1.0`, its signature inputs, or its verification path.
+**Status: in use, with an offline reference decoder and test vectors.** As of
+20 September 2026 the platform stores objects in this format and the Android
+app writes them: version 1.0.12 is on Play's internal track and the server it
+talks to is deployed. By the rule that freezes a format at first publication,
+**changes are additive from here on** — an object sealed today is in somebody
+else's hands, under a key that is theirs and not ours, and there is no
+re-encrypting it later. This is a separate envelope for preserving a sealed
+file, not a change to `vcap/1.0`, its signature inputs, or its verification
+path.
 
 This document specifies encrypted storage (mode A). It does not define
 service-readable originals (mode B), public lookup, custodian passphrase
