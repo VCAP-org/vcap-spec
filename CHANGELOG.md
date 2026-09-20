@@ -9,6 +9,17 @@ change names its sections, vectors and fallback for an older verifier.
 
 ## Unreleased
 
+### `vcap-vault/1` is in use, and additive from here
+
+The envelope's status block said the app and platform did not upload or serve
+this format yet. On 20 September 2026 both do: the platform stores objects in
+it and Android 1.0.12 (versionCode 13), which writes them, is on Play's
+internal track against a deployed server. The publication condition of the
+additive-only rule is therefore met for this envelope as well — an object
+sealed today sits in somebody else's hands under a key that is theirs, and no
+change we make later can re-encrypt it. No field, bit layout or vector moves
+with this entry; only the claim about where the format is.
+
 ### Require the frame count when a clip's watermark is reported
 
 §8 gains one requirement and no field: a verifier that decodes several frames
