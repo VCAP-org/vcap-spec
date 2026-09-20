@@ -69,7 +69,7 @@ mitigated, and the verifier UI must say so.
 | Log signing key | KMS in production | anyone but the data plane's signing path |
 | Registry: key → organization → operator | control plane only | the data plane, the log, the public |
 | Revocation list (Google) and App Attest roots | fetched / pinned by the data plane | — |
-| Media and proofs | the device, then the customer's systems or the vault | us, unless the customer chooses the vault |
+| Media and proofs | the device, then the customer's systems or the vault | us, unless the customer chooses the vault — made precise in §5.9, which says what that choice does and does not take away |
 | Challenges | data plane, single-use, hashed | replay from anyone |
 
 Boundaries, each enforced by code and tested:
@@ -155,7 +155,7 @@ Boundaries, each enforced by code and tested:
 | Personal data in the public log | leaves carry key identifiers, level, digests, log time — nothing else; the registry mapping stays in the control plane | none by construction, enforced by the plane boundary |
 | Personal data leaking through the plane boundary | allowlist per endpoint, both sides; second net over values; tests assert names and VAT never cross | low |
 | EXIF in the signed file | signed as content; pseudonymous mode must strip **before** sealing | implementation duty of the SDKs |
-| Server learning what is in a capture | the data plane sees hashes and keys; the vault (C9) is envelope-encrypted client-side | none in phase 1; C9 decides for stored media |
+| Server learning what is in a capture | the data plane sees hashes and keys; a stored original is client-side encrypted in mode A and readable by the service in mode B | none for a capture that is not stored; §5.9 for one that is |
 
 ### 5.6 Availability and failure behaviour
 
@@ -203,6 +203,38 @@ watermark: a recovered mark means *a frame of that capture appears in this
 file*, never *this file is that capture*; and the mark survives ordinary
 re-compression, not ordinary editing.
 
+### 5.9 Against the stored original
+
+Storing originals is optional, per organization, and orthogonal to every
+verdict: nothing in this section can turn a green into anything, because a
+verdict is reached from the file and its proof alone. What it can do is expose
+the *content* a capture holds, which the rest of this document never addresses.
+
+Two shapes exist (`vcap-vault-1.md`). In **mode A** the phone encrypts under
+the organization's public key before uploading and the service holds ciphertext
+it cannot open. In **mode B** the original reaches the service readable. They
+are not variants of one risk and must never be presented together: the second
+is an exposure a customer accepts deliberately, with a DPIA behind it.
+
+| Threat | What the attacker does | Mitigation | Residual |
+|---|---|---|---|
+| **A database or bucket read by somebody who should not** | a dump, a stray backup, a dishonest operator: everything the service holds | mode A: the object is HPKE-encrypted to a key that never reaches this platform; the custodian blobs are inert without a passphrase we never see | **none for the content in mode A** — whoever takes everything we have opens nothing. In mode B, everything: that is what the mode means |
+| **A legal order served on us** | compels us to hand over what we hold | the same: in mode A what we hold is unreadable | **named, with its condition**: it holds for the objects, not for the proofs. Those are in the clear and keep saying when, which device, which organization |
+| **We substitute the organization's public key** | we serve a phone a key of ours, and from that moment everything it uploads is readable by us | **none cryptographic, and no client-side scheme survives a hostile vendor who controls the client.** What limits the damage is exposure: the key is a leaf on the append-only log with a signed statement (`"vcap/1.0/vault-key"`), the fingerprint is comparable in two places — the organization's console and the phone — and the phone **pins** the key it accepted and refuses a change | **accepted and named, and it is the first line of this section for a reason**: these are detectors, and they work only if somebody looks. With Play App Signing the binary a user installs is signed by Google, so we cannot even demonstrate byte for byte which build runs on a phone |
+| **A custodian is compromised** | takes the private key from the person who holds it | the blob is AES-256-GCM under PBKDF2-HMAC-SHA256 at 600 000 iterations, and at least two custodians exist so one lost passphrase is not the end of the archive | **the customer's, and deliberately**: whoever holds the organization's private key holds the organization's archive. The surface moved from our data centre to two laptops, which is the point of the decision and not a flaw in it — but it is a surface the customer has to know it took on. PBKDF2 is weaker against a GPU than Argon2id; the choice is stated where the blobs are created |
+| **Somebody who already decrypted** | opens a file and forwards it | none | accepted: there is no DRM here and no promise of control after opening |
+| **Metadata about what is stored** | watches sizes, times and counts | none, and none intended: the service must know how big an object is to store it | **accepted and named**: for every object we see the organization, a pseudonymous device, the capture id, the instant, the size and the key epoch — plus the proof, which we already had. Volume and rhythm say things about an activity. The vault is not an anonymous channel and does not pretend to be |
+| **A truncated, reordered or substituted upload** | sends parts out of order, stops halfway, or sends bytes that do not match the digest it declared | the digest is recomputed by the service before anything is stored; parts are fixed-size and sequential; an encrypted object's manifest must name this capture and a key the organization published | none: the object is never attached, and the reservation is swept |
+| **A capture that was never meant to leave** | pseudonymous captures, which carry no device identity by construction | refused in three places: the app's queue, the transport and the platform | none: the mode exists so that no later setting, ours included, can undo it |
+| **Reading an original from the console** | an employee with console access opens somebody's file | mode B: authorization is `manage` — narrower than reading a case — and every retrieval writes an append-only trail entry naming who, what and when | **accepted and named**: an administrator can read. The control is traceability, not impossibility, and an authorization nobody can review afterwards is a promise rather than a control |
+| **Deletion that did not happen** | the service claims to have deleted an object and keeps it | a signed receipt states what was deleted, how big, when it arrived, when it went and why | **named**: the receipt proves this installation deleted its copy and that the statement is unaltered. It cannot prove no copy exists anywhere else — nobody can sign that — and backups age out on their own schedule |
+| **A compromised phone below the attestation boundary** | a rooted device with a virtual camera encrypts a fabricated scene perfectly well | the same as for sealing (§2): none | accepted, and identical to the sealing case |
+
+The line in §3 that reads *“us, unless the customer chooses the vault”* is made
+precise by this section: choosing mode A does not take our future access away,
+it makes it **observable**. That is a weaker sentence than a brochure would
+like, and it is the true one.
+
 ## 6. Open items
 
 - **Spike S3**: the relay attack reproduced with Frida on a rooted device
@@ -231,6 +263,10 @@ re-compression, not ordinary editing.
 
 ## 7. Change log
 
+- 2026-09-20 — §5.9, threats against the stored original, written when C9
+  shipped: the two storage modes as different risks, key substitution as the
+  first entry because it is the one no cryptography answers, custody moved to
+  the customer, metadata, and what a deletion receipt can and cannot prove.
 - 2026-09-08 — first draft, from the spec, the crypto review and what phase 1
   built so far.
 - 2026-09-12 — §5.8, threats against the watermark, from the 65-attack red
