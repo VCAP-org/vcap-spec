@@ -9,6 +9,15 @@ change names its sections, vectors and fallback for an older verifier.
 
 ## Unreleased
 
+### Separate encrypted-vault object draft and offline decoder
+
+Add `spec/vcap-vault-1.md`, a closed manifest schema and streaming Node/WebCrypto
+reference decoder. P-256 HPKE wraps a fresh DEK; 1 MiB AES-GCM segments bind the
+header, index and final marker. Public test bytes come from an independent
+encoder, with rejection tests for substitution, corruption and truncation.
+No proof fields, signature inputs or numbered conformance vectors change.
+The app/platform do not upload this format yet; decryption is not a verdict.
+
 ### Clarify the reserved retention reference and record the publication freeze
 
 Informative clarification in §6.1 and the existing absence table in §8:

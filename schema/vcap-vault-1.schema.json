@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vcap.dev/schema/vcap-vault-1.schema.json",
+  "title": "VCAP encrypted vault manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "object_id",
+    "capture_id",
+    "org_key_id",
+    "nonce_prefix",
+    "plaintext_bytes",
+    "chunk_bytes",
+    "wrapped_key",
+    "ciphertext_sha256"
+  ],
+  "properties": {
+    "version": {
+      "const": "vcap-vault/1"
+    },
+    "object_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "capture_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{22}$"
+    },
+    "org_key_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "nonce_prefix": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{11}$"
+    },
+    "plaintext_bytes": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 500000000
+    },
+    "chunk_bytes": {
+      "const": 1048576
+    },
+    "wrapped_key": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enc",
+        "ciphertext"
+      ],
+      "properties": {
+        "enc": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{87}$"
+        },
+        "ciphertext": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{64}$"
+        }
+      }
+    },
+    "ciphertext_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

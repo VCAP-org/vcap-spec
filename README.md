@@ -93,3 +93,12 @@ worth what it can be implemented into, and the conformance vectors are meant to
 live inside other people's test suites. The copyright holder is "the vcap
 authors" until decision D1 names the legal entity.
 
+
+
+## Encrypted vault exports
+
+The separate [vault object draft](spec/vcap-vault-1.md) and
+[offline reference decoder](tools/src/vault/decrypt.ts) define recoverable
+exports with the organization's private key. They do not change `vcap/1.0`
+or enable uploads from the app. The small interoperability vector is public
+test data; its private key and deterministic encoder are never for real files.

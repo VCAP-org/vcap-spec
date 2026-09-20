@@ -1,0 +1,14 @@
+{
+  "version": "vcap-vault/1",
+  "object_id": "10101010101010101010101010101010",
+  "capture_id": "ICAgICAgICAgICAgICAgIA",
+  "org_key_id": "e1a176e14247fc01eefc2bb28085b73c1f80304595a10cb789a781878c834813",
+  "nonce_prefix": "MDAwMDAwMDA",
+  "plaintext_bytes": 35,
+  "chunk_bytes": 1048576,
+  "wrapped_key": {
+    "enc": "BHzyexiNA09-ilI4AwS1GsPAiWnid_IbNaYLSPxHZpl4B3dVENuO0EApPZrGn3Qw27p9reY86YIpngS3nSJ4c9E",
+    "ciphertext": "Bt5NSCRHxFyGpJHH4fhf6vUgiyuhNHy6LZ-YxLkB7SB-inVN5R5acQyK-rufH_RG"
+  },
+  "ciphertext_sha256": "3e4e2f0899915cc479d0fdb906cc33fd5592a6781c85c20e2b53dd6b12da3682"
+}
