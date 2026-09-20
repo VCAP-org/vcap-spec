@@ -1103,6 +1103,25 @@ there is nothing to show but the label. Neither outcome weakens a signature:
 §8 already says an absent field is a weaker verdict, not an error, and a
 watermark is not part of what `sig` covers.
 
+**For a clip, *watermark matched* says how much of it carried the mark.** A
+verifier that decodes several frames and reports one answer MUST report the
+number of sampled frames whose payload decoded to that id, next to the number
+sampled — "3 of 8" — and MUST NOT present a confidence figure as if it
+answered that question.
+
+The reason is measured, not theoretical (`watermark-robustness-1.0.md`): an
+unmarked frame **abstains** rather than dissenting — mean absolute message
+logit 11.3 marked against 0.131 unmarked — so a decode taken over averaged
+frames is set by any single marked one. One genuine frame spliced into
+unrelated footage reports the real id at the agreement of a clean recovery.
+The count is what separates the two, and the robustness curve says it costs
+nothing: every chain that recovers at all already recovers at one frame.
+
+A verifier whose detector does not report the count says nothing about frames
+rather than inventing one; the recovery is still *watermark matched*, and what
+it means is unchanged — **a frame of that capture appears in this file**, never
+that the file is that capture.
+
 **A mark id is not an identifier.** For `video-rep-v1` the payload is
 `watermark.mark_id`, a 24-bit value the proof binds to the 128-bit
 `capture_id`; it is short because a re-encoded clip cannot carry more, not
