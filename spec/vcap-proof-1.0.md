@@ -581,6 +581,17 @@ Field table — type, required, verified against:
 | `location` | no | `location_corroboration` and the level rules (§7.1) |
 | `policy.pseudonymous` | no | consistency: no device identifiers present |
 
+**Retention reference (informative).** `policy.retention_ref` is reserved and
+has no operational meaning in v1.0. Its schema slot is retained for compatibility;
+current writers leave it absent. A signed value authenticates only what the
+writer declared: it is not evidence that an original was uploaded, retained,
+encrypted or deleted, and it is not a URL or an authority to retrieve one.
+Vault capabilities, the person's choice to expose an original, retention
+settings and deletion receipts belong to the separate storage protocol.
+Neither the presence nor the absence of this field changes a proof verdict
+or requires a storage service on the verification path (§8). Existing proofs
+containing a schema-valid value remain readable under the same rules.
+
 ### 6.2 The signature and the attachments
 
 | Key | Added by | Self-authenticated by | Bound to the core by |
@@ -1068,7 +1079,7 @@ verdict and never an error, and it carries the absent label or its own
 | `location_corroboration` present, unknown `method`, no log key held, or no position to corroborate | *location corroboration not evaluated* | evidence this verifier cannot read |
 | `location.evidence` non-empty | *location evidence not evaluated* | device-side kinds arrive with a later minor; this version weighs none |
 | `location.level` claimed above the level reached | *location claimed above evidence* | the claim is the device's; the level is the evidence's |
-| `policy.retention_ref` | nothing shown | no vault involved |
+| `policy.retention_ref` | nothing shown | reserved; no storage or retention claim (§6.1) |
 
 **A declared watermark that does not come back.** `watermark` is the writer
 saying a mark was embedded; it is not a promise that a reader will find it, and

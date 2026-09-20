@@ -1,14 +1,24 @@
 # Changelog
 
-`vcap/1.0` is a **draft**: the six format decisions are settled, the wire
-contract is not binding yet. The additive-only rule of §9 starts at the first
-publication — the first store build, or the first SDK handed to an integrator —
-not at the `v1.0` tag, which is a working tag with a pre-release. Until then a
-breaking change is allowed and is marked **BREAKING** here. Every entry names
-the section it touches, the vectors it adds and what an older verifier does
-with it.
+`vcap/1.0` is **frozen**. The first Android store distribution is now live
+(Google Play internal testing, September 2026), so the publication condition
+for the additive-only rule of §9 has been met. The `v1.0` tag was originally
+a working tag with a pre-release; entries below describing the earlier draft
+remain historical. No existing proof may be made unreadable. Every format
+change names its sections, vectors and fallback for an older verifier.
 
 ## Unreleased
+
+### Clarify the reserved retention reference and record the publication freeze
+
+Informative clarification in §6.1 and the existing absence table in §8:
+`policy.retention_ref` does not attest storage, encryption, retention, deletion
+or retrieval rights. The separate vault protocol does not give this reserved
+field a new meaning. No field, schema, signature input or verifier behavior
+changes; the numbered corpus and its manifest remain byte-identical. Readers
+continue to accept schema-valid values without deriving a storage claim.
+The status above now records that the first store publication has happened;
+the old draft permission is no longer an implementation instruction.
 
 ### §3 says a writer may replace a trailer, and under what
 
