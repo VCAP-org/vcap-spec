@@ -46,7 +46,9 @@ describe('offline vault reference format', () => {
     const plaintext = Buffer.alloc(length, 0xa7)
     const path = await files(fixture(plaintext))
     await decrypt(path)
-    expect(await readFile(join(path, 'output.bin'))).toEqual(plaintext)
+    // Compare every byte natively: deep object traversal of multi-MiB Buffers
+    // can exceed the CI timeout even when decryption takes milliseconds.
+    expect((await readFile(join(path, 'output.bin'))).equals(plaintext)).toBe(true)
   })
 
   it('accepts a PKCS#8 PEM export as well as DER', async () => {
