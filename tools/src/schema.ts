@@ -16,6 +16,7 @@ const compile = (file: string) => ajv.compile(JSON.parse(readFileSync(join(SCHEM
 const proofValidator = compile('vcap-proof-1.0.schema.json')
 const expectedValidator = compile('expected.schema.json')
 const reportValidator = compile('conformance-report.schema.json')
+const vaultValidator = compile('vcap-vault-1.schema.json')
 
 export interface SchemaResult { valid: boolean, errors: string[] }
 
@@ -46,3 +47,8 @@ export const validateConformanceReport = (report: unknown): SchemaResult => {
   if (r.passed + r.failed.length !== r.vectors_run) errors.push('/passed passed plus failed do not add up to vectors_run')
   return { valid: errors.length === 0, errors }
 }
+
+
+/** Structural storage envelope; authentication belongs to the offline decoder. */
+export const validateVault = (value: unknown): SchemaResult =>
+  ({ valid: vaultValidator(value) as boolean, errors: describe(vaultValidator.errors) })

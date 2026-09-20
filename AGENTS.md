@@ -25,6 +25,10 @@ treat every edit as a breaking change until `vcap/1.0` is tagged.
   C2PA assertions, how the two bindings co-exist in one file, the sidecar's
   rationale and what survives each transformation. Informative except where
   marked, and every marked sentence has a vector.
+- `spec/vcap-vault-1.md` — separate encrypted storage envelope draft, not a
+  proof-format revision. Offline decoder in `tools/src/vault/`; public test-only
+  keys and deterministic interoperability vectors in `tools/test/vault-vectors/`.
+  Decryption never establishes a proof verdict.
 - `reviews/` — the review notes of the work order's steps 2 and 3. Findings are
   graded BLOCKING / SHOULD / NOTE; the draft is amended, the note stays as the
   record of why.
