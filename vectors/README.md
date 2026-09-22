@@ -15,10 +15,14 @@ minted by `tools/src/make-timestamp-tokens.ts` — committed for the reason the
 attestation chains are, and the generator refuses a token whose imprint is not
 the core hash it just built.
 
-Two directories are not vectors: `_media/` holds the unsealed inputs, and
-`_trust/` holds the anchors a verifier is assumed to hold while checking this
-corpus (its README says what the substituted attestation root does and does not
-prove). `_chains/` holds the committed attestation chains — see below.
+The underscore directories are not vectors: `_media/` holds the unsealed
+inputs, `_trust/` holds the anchors a verifier is assumed to hold while
+checking this corpus (its README says what the substituted attestation root
+does and does not prove), `_chains/` holds the committed attestation chains
+(see below), and `_watermark/` holds the payload-layout fixtures — the worked
+encoder cases and the `video-rep-v1` agreement floor, which is decoder
+behaviour no numbered vector can exercise because this repository ships no
+detector (`_watermark/README.md`).
 
 `expected.json` for `file` and `segments` vectors carries the fields a verifier
 must reproduce: `outcome` (`authentic`, `verified_clip`, `tampered`,

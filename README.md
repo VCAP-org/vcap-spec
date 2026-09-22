@@ -8,9 +8,13 @@ bridge, a web capture SDK and four verifiers must agree byte for byte.
 
 ## Status
 
-Phase 1. **`vcap/1.0` is frozen** — tag `v1.0`, 9 September 2026. From here the
-format only ever grows by addition (spec §9); every change lands through
-`CHANGELOG.md` with its vectors and the fallback for an older verifier.
+Phase 1. **`vcap/1.0` is not frozen, and there is no public version of it yet**
+(22 September 2026): the `v1.0` tag and its pre-release were removed, and an
+internal testing track is not a publication. A breaking change is allowed and
+is recorded as breaking in `CHANGELOG.md`, which is the authority on the
+format's status. The additive-only rule of spec §9 binds at the first build,
+SDK or sealed file that reaches somebody else — until then nothing sealed is in
+anybody else's hands, so no change has to carry a fallback for older files.
 
 ## Layout
 
@@ -20,7 +24,8 @@ spec/      the specification document (normative), the watermark payload
            (informative: where the mark holds, where it breaks, what was not
            measured), the C2PA interoperability and sidecar companion
            (informative, with the writer rules it pins) and the public threat model
-reviews/   review notes on the draft (crypto, implementability), numbered; the spec absorbs them, they stay as record
+reviews/   review notes on the draft (crypto, implementability); the spec absorbs them and cites
+           their measurements, they stay as the record of why
 schema/    JSON Schema of the proof + validator
 vectors/   conformance vectors: sealed files, broken signatures, edge cases (see vectors/README.md),
            the versioned corpus manifest and how to claim conformance against it (vectors/CONFORMANCE.md)

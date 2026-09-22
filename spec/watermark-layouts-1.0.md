@@ -67,8 +67,14 @@ bit, and a position decodes wrong only once 4 of its 8 copies flip. Interleaving
 this way is what makes repetition beat a block code on a channel that fails in
 bursts.
 
-A clip is decoded **once, on the logits averaged over frames**, not frame by
-frame and then voted.
+Within one frame, the 8 copies of a bit are decoded **once, on that frame's
+logits**, not voted after a per-copy hard decision. Across frames of a clip it
+is the opposite: a verifier decodes the sampled frames **individually** and
+reports how many of them carried the id (`vcap-proof-1.0.md` §8), because an
+unmarked frame abstains rather than dissents, so a decode taken on logits
+averaged over frames is set by any single marked one — one genuine frame
+spliced into foreign footage reports the real id at the agreement of a clean
+recovery (`watermark-robustness-1.0.md`).
 
 ### Deriving a `mark_id`
 
