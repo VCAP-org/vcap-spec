@@ -96,6 +96,10 @@ be read and re-implemented rather than imported.
   (`README.md`, *the edge-case generator*). What the watermark is worth, where
   it holds and where it breaks, is measured separately and published in
   `spec/watermark-robustness-1.0.md`. Passing the corpus says nothing about it.
+  A decoder still has fixtures to answer to, outside the numbered corpus and
+  outside this claim: `vectors/_watermark/layouts.json` for the payload
+  arithmetic and `vectors/_watermark/agreement-floor.json` for the 0.85 floor
+  a `video-rep-v1` decoder must not report an id below.
 - **Not a claim about a newer corpus.** The corpus grows by addition, so
   passing 1.0.0 says nothing about 1.1.0's added vectors and everything about
   1.0.0's. State the version you ran.

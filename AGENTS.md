@@ -1,7 +1,10 @@
 # Agent instructions — vcap-spec
 
-Normative format specification. Changes here propagate to every implementation:
-treat every edit as a breaking change until `vcap/1.0` is tagged.
+Normative format specification. Changes here propagate to every implementation,
+so treat every edit as a breaking change and record it as one in `CHANGELOG.md`.
+`vcap/1.0` is **not frozen** and has no public version: there is no `v1.0` tag,
+and the additive-only rule of §9 binds at the first build, SDK or sealed file
+that reaches somebody else, not at a tag. `CHANGELOG.md` is the authority.
 
 ## What lives here
 
@@ -9,9 +12,9 @@ treat every edit as a breaking change until `vcap/1.0` is tagged.
   what they do not, and the residual risk of each threat. Public. Every
   mitigation it names points at a spec section or a component; every accepted
   risk must be something the verifier UI says.
-- `spec/vcap-proof-1.0.md` — the normative document. Sections marked `TODO` are
-  the six format decisions still open (see the work order in
-  `Doc/06-fase1-avvio.md` section 3).
+- `spec/vcap-proof-1.0.md` — the normative document. The six format decisions
+  are settled; §11 lists the follow-ups that remain, each of them evidence to
+  collect or a value in a field §9 declares extensible.
 - `spec/watermark-layouts-1.0.md` — the payload layouts `watermark.layout`
   names; normative for the bit layout and the decoder's failure answer.
 - `spec/watermark-robustness-1.0.md` — the measured curve of the published
@@ -50,8 +53,10 @@ treat every edit as a breaking change until `vcap/1.0` is tagged.
 - Canonicalization (JCS) and the canonical-bytes rule are the two places where
   independent implementations diverge first: they need a vector per container
   format (JPEG, HEIC, MP4, MOV).
-- After the freeze: additive changes only, minor version bump, and a changelog
-  entry saying what a v1.0 verifier does when it meets the new field.
+- Once the format reaches somebody else (first build, first SDK, first sealed
+  file out of our hands): additive changes only, minor version bump, and a
+  changelog entry saying what a v1.0 verifier does when it meets the new field.
+  Before that a breaking change is allowed, and `CHANGELOG.md` says it broke.
 
 ## Product invariants
 

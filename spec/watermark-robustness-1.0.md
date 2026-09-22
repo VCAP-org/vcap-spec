@@ -221,7 +221,9 @@ Three findings worth carrying out of that table:
 
 A photo is 1–2 calls: 0.2–0.9 s on this desktop with the shipped int8 build. A
 clip at 8 frames is ≈ 1.8 s (int8, multi-threaded WASM), ≈ 3.7 s single-threaded,
-and ≈ 0.2 s for fp16 on WebGPU where that is available. Those clip figures are
+and ≈ 0.2 s for fp16 on WebGPU where that is available — a figure of what the
+graph costs, not an option a browser verifier has today: only the int8 build is
+published for browsers. Those clip figures are
 **arithmetic**, per-frame latency multiplied by the frame count, with no
 batching — not a measured end-to-end run.
 
@@ -584,9 +586,12 @@ policy the video table above uses. Decoding frames individually and reporting
 how many carried the id would turn "the clip reports `0x5a1234` at agreement
 0.996" into "1 of 8 sampled frames carries `0x5a1234`", and *How many frames a
 verifier has to read* above found that every chain which recovers already
-recovers at N = 1, so per-frame decoding costs no recovery. That is a verifier
-policy and not a format change, and no document requires it today;
-`threat-model.md` carries it as an open item.
+recovers at N = 1, so per-frame decoding costs no recovery. That is what the
+format now **requires**: since 20 September 2026 `vcap-proof-1.0.md` §8 says a
+verifier reporting one answer for a clip must say how many of the sampled
+frames decoded to that id, and must not present a confidence figure as if it
+answered that question. `threat-model.md` §5.8 closed its splice item on that
+requirement.
 
 ### What this licenses, and what it does not
 

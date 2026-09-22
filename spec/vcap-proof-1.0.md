@@ -1,18 +1,21 @@
 # vcap proof format, version 1.0
 
 **Status: `vcap/1.0` DRAFT — the six format decisions are settled, the wire
-contract is not yet binding.** Tag `v1.0` (9 September 2026) is a working tag
-and its GitHub release is a pre-release. Written 8 September 2026 as step 1 of
+contract is not yet binding.** There is no `v1.0` tag and no public release:
+both were removed on 22 September 2026, because nothing advertises a version
+that does not exist yet. Written 8 September 2026 as step 1 of
 the work order in `Doc/06-fase1-avvio.md` §3, amended the same day after the
 cryptographic review (step 2, `reviews/01-crypto-review-draft-1.0.md`) and on
 9 September after the implementability review on real hardware (step 3,
 `reviews/implementability-android.md`).
 
 **When the format freezes.** The additive-only rule of §9 starts at the first
-publication: the first build on a store, or the first SDK handed to an
-integrator. Until then a breaking change is allowed, because the only sealed
+publication: the first build, SDK or sealed file that reaches somebody else.
+An internal testing track is not one (22 September 2026, `CHANGELOG.md`).
+Until then a breaking change is allowed, because the only sealed
 files in existence are test vectors and our own devices' output, and we can
-re-seal both. After it, never — the constraint does not come from our
+re-seal both — so a change need not carry a fallback for older files either.
+After it, never — the constraint does not come from our
 discipline but from the files we cannot re-sign, in hands that are not ours.
 Every breaking change taken while this notice stands is recorded in
 `CHANGELOG.md` as such, and the in-file version string stays `vcap/1.0`: a
@@ -466,8 +469,8 @@ this one.
 ## 6. Proof structure
 
 The proof has two layers. The **core** is signed by the device at capture and
-never changes afterwards. **Attachments** are added later (by the sync path,
-when there is one), each verifiable on its own and each bound to `core_hash`.
+never changes afterwards. **Attachments** are added later, by whatever sends
+the capture onwards, each verifiable on its own and each bound to `core_hash`.
 
 ```
 {
@@ -488,7 +491,7 @@ when there is one), each verifiable on its own and each bound to `core_hash`.
   "sig":      { "alg": "ES256", "value": "base64url r||s", "pub": "base64url SPKI" },
 
   // ---- attachments: each self-authenticating, bound to core_hash (§6.2) ----
-  "segments":    [ { "gop": 0, "range": [start, end], "hash", "prev", "sig" } ],
+  "segments":    [ { "gop": 0, "hash", "prev", "sig" } ],   // "range" is deprecated: writers MUST NOT emit it (§5)
   "attestation": [ "base64url DER leaf", "...", "base64url DER root" ],   // omitted on web
   "registry":    { "log_id", "leaf_index", "leaf": { ... }, "inclusion_path": [ ... ],
                    "tree_head": { "tree_size", "timestamp", "root_hash", "signature" } },
@@ -1185,8 +1188,8 @@ side by side with it.
   not be unverifiable by an older verifier.
 - **Unknown major**: *unsupported format version*, with the version shown.
 - **From the first publication, additive only** — see the status notice at the
-  top: the rule binds from the first store build or the first SDK handed to an
-  integrator, not from the `v1.0` tag, and while the format is a draft a
+  top: the rule binds from the first build, SDK or sealed file that reaches
+  somebody else, and not from any tag, and while the format is a draft a
   breaking change is allowed and recorded as one in `CHANGELOG.md`. What the
   rule permits once it binds: new optional keys, and new values only in
   fields documented as extensible (`watermark.layout`, `location.evidence[].kind`,
@@ -1293,7 +1296,8 @@ says.
       revocation snapshot on either side of the instant): **45** in `vectors/`
       when this item closed, **73** with the registry, anchor, timestamp,
       integrity, iOS, C2PA co-existence and sidecar slices since,
-      **84** with the position level (74–84),
+      **84** with the position level (74–84) and **85** with the iOS sealed
+      clip, which is the corpus today,
       checked by the reference verifier in `tools/` (steps 4–5). The §7 vectors
       trust the anchors in `vectors/_trust/`, whose attestation root is a test
       root: they prove the level logic, not that an implementation can walk a

@@ -3,10 +3,13 @@
 **Status: in use, with an offline reference decoder and test vectors.** As of
 20 September 2026 the platform stores objects in this format and the Android
 app writes them: version 1.0.12 is on Play's internal track and the server it
-talks to is deployed. By the rule that freezes a format at first publication,
-**changes are additive from here on** — an object sealed today is in somebody
-else's hands, under a key that is theirs and not ours, and there is no
-re-encrypting it later. This is a separate envelope for preserving a sealed
+talks to is deployed. That is **not** a publication, and this envelope is not
+frozen: an internal testing track reaches nobody outside, every object written
+so far is the owner's own and can be re-made, and the decision of 22 September
+2026 (`CHANGELOG.md`) applies here as it does to the proof format. The
+additive-only rule binds at the first object sealed under a key that is
+somebody else's, because that one cannot be re-encrypted; an earlier revision
+of this notice declared it already bound. This is a separate envelope for preserving a sealed
 file, not a change to `vcap/1.0`, its signature inputs, or its verification
 path.
 
@@ -166,7 +169,7 @@ wrong keys, altered identifiers/metadata, invalid encapsulated points, corrupted
 wrappers/tags, swapped segments, truncation, extra bytes, recomputed unkeyed
 digests, missing final markers, output preservation and partial-file cleanup.
 The deterministic encoder and its keys/nonces must **never** encrypt real data.
-These vectors are separate from the frozen proof conformance corpus; adding a
+These vectors are separate from the numbered proof conformance corpus; adding a
 storage format does not change any existing proof vector or verdict.
 
 This is not an external cryptographic audit. Native phone interoperability,
