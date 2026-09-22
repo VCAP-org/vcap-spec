@@ -20,9 +20,10 @@ inputs, `_trust/` holds the anchors a verifier is assumed to hold while
 checking this corpus (its README says what the substituted attestation root
 does and does not prove), `_chains/` holds the committed attestation chains
 (see below), and `_watermark/` holds the payload-layout fixtures — the worked
-encoder cases and the `video-rep-v1` agreement floor, which is decoder
-behaviour no numbered vector can exercise because this repository ships no
-detector (`_watermark/README.md`).
+encoder cases, the `video-rep-v1` agreement floor and what a clip reports once
+its sampled frames are decoded, which is decoder behaviour no numbered vector
+can exercise because this repository ships no detector
+(`_watermark/README.md`).
 
 `expected.json` for `file` and `segments` vectors carries the fields a verifier
 must reproduce: `outcome` (`authentic`, `verified_clip`, `tampered`,

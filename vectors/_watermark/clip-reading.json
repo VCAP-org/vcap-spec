@@ -1,0 +1,110 @@
+{
+  "layout": "video-rep-v1",
+  "floor": 0.85,
+  "rule": "A clip reports the id of the decode taken over the sampled frames' averaged logits, the agreement figure of that same decode, and the number of sampled frames whose own decode passed the CRC and yielded that id. The agreement floor gates the reported id; it does not gate a frame being counted, and the reported figure is never recomputed over a subset of frames.",
+  "spec": "spec/vcap-proof-1.0.md section 8, For a clip; spec/watermark-layouts-1.0.md, The agreement floor",
+  "cases": [
+    {
+      "name": "a wholly marked clip on the build the browser ships",
+      "clip": { "agreement": 0.863, "crc_passes": true, "mark_id": 5902900 },
+      "frames": [
+        { "agreement": 0.848, "crc_passes": true, "mark_id": 5902900 },
+        { "agreement": 0.848, "crc_passes": true, "mark_id": 5902900 },
+        { "agreement": 0.848, "crc_passes": true, "mark_id": 5902900 },
+        { "agreement": 0.848, "crc_passes": true, "mark_id": 5902900 },
+        { "agreement": 0.848, "crc_passes": true, "mark_id": 5902900 },
+        { "agreement": 0.848, "crc_passes": true, "mark_id": 5902900 },
+        { "agreement": 0.848, "crc_passes": true, "mark_id": 5902900 },
+        { "agreement": 0.848, "crc_passes": true, "mark_id": 5902900 }
+      ],
+      "reported": { "mark_id": 5902900, "frames_with_id": 8, "sampled": 8, "agreement": 0.863 },
+      "origin": "synthetic corpus, crf 36 at 640 px, int8: 39 flipped bits from one frame, 35 from eight averaged (vcap-ml, reports/frames-to-recover.md)",
+      "note": "The case that decides it. Every frame is under the floor and the aggregate clears it, so a floor applied per frame would report 0 of 8 for a clip that is marked throughout — below the 1 of 8 of the splice two rows down, which is the one comparison the count exists to make."
+    },
+    {
+      "name": "one genuine frame spliced into foreign footage",
+      "clip": { "agreement": 0.996, "crc_passes": true, "mark_id": 5902900 },
+      "frames": [
+        { "agreement": 0.996, "crc_passes": true, "mark_id": 5902900 },
+        { "agreement": 0.61, "crc_passes": false, "mark_id": null },
+        { "agreement": 0.6, "crc_passes": false, "mark_id": null },
+        { "agreement": 0.59, "crc_passes": false, "mark_id": null },
+        { "agreement": 0.62, "crc_passes": false, "mark_id": null },
+        { "agreement": 0.6, "crc_passes": false, "mark_id": null },
+        { "agreement": 0.58, "crc_passes": false, "mark_id": null },
+        { "agreement": 0.61, "crc_passes": false, "mark_id": null }
+      ],
+      "reported": { "mark_id": 5902900, "frames_with_id": 1, "sampled": 8, "agreement": 0.996 },
+      "origin": "synthetic corpus, one genuine frame among foreign ones",
+      "note": "An unmarked frame abstains rather than dissenting, so the aggregate is set by the one marked frame and reads like a clean recovery. The figure is honest and answers the wrong question; the count is what separates this clip from the one above."
+    },
+    {
+      "name": "the frames that carried the id are not the clip's figure",
+      "clip": { "agreement": 0.863, "crc_passes": true, "mark_id": 5902900 },
+      "frames": [
+        { "agreement": 0.99, "crc_passes": true, "mark_id": 5902900 },
+        { "agreement": 0.99, "crc_passes": true, "mark_id": 5902900 },
+        { "agreement": 0.64, "crc_passes": false, "mark_id": null },
+        { "agreement": 0.63, "crc_passes": false, "mark_id": null },
+        { "agreement": 0.66, "crc_passes": false, "mark_id": null },
+        { "agreement": 0.62, "crc_passes": false, "mark_id": null },
+        { "agreement": 0.65, "crc_passes": false, "mark_id": null },
+        { "agreement": 0.63, "crc_passes": false, "mark_id": null }
+      ],
+      "reported": { "mark_id": 5902900, "frames_with_id": 2, "sampled": 8, "agreement": 0.863 },
+      "origin": "constructed from the two populations above",
+      "note": "The mean over the carrying frames is 0.99 and the clip's own decode is 0.863. Reporting the mean would show a clip that is mostly foreign footage as the most confident recovery in this file, because the mean is conditioned on the selection the count already reports."
+    },
+    {
+      "name": "the clip resolves and no frame resolves alone",
+      "clip": { "agreement": 0.9, "crc_passes": true, "mark_id": 5902900 },
+      "frames": [
+        { "agreement": 0.83, "crc_passes": false, "mark_id": null },
+        { "agreement": 0.84, "crc_passes": false, "mark_id": null },
+        { "agreement": 0.82, "crc_passes": false, "mark_id": null },
+        { "agreement": 0.85, "crc_passes": false, "mark_id": null },
+        { "agreement": 0.83, "crc_passes": false, "mark_id": null },
+        { "agreement": 0.84, "crc_passes": false, "mark_id": null },
+        { "agreement": 0.81, "crc_passes": false, "mark_id": null },
+        { "agreement": 0.86, "crc_passes": false, "mark_id": null }
+      ],
+      "reported": { "mark_id": 5902900, "frames_with_id": 0, "sampled": 8, "agreement": 0.9 },
+      "origin": "constructed: every frame ties a position four copies to four and loses the CRC",
+      "note": "0 of 8 is an answer and not a missing one — the id stands on the aggregate, which is what averaging is for. The figure stays the aggregate's here too: a verifier with nothing to average over the carrying frames must not silently fall back to it under a field that means something else in every other row."
+    },
+    {
+      "name": "a sampled frame carrying another id",
+      "clip": { "agreement": 0.9, "crc_passes": true, "mark_id": 5902900 },
+      "frames": [
+        { "agreement": 0.92, "crc_passes": true, "mark_id": 5902900 },
+        { "agreement": 0.91, "crc_passes": true, "mark_id": 5902900 },
+        { "agreement": 0.9, "crc_passes": true, "mark_id": 5902900 },
+        { "agreement": 0.93, "crc_passes": true, "mark_id": 3735928 },
+        { "agreement": 0.78, "crc_passes": true, "mark_id": 3735928 },
+        { "agreement": 0.64, "crc_passes": false, "mark_id": null },
+        { "agreement": 0.63, "crc_passes": false, "mark_id": null },
+        { "agreement": 0.66, "crc_passes": false, "mark_id": null }
+      ],
+      "reported": { "mark_id": 5902900, "frames_with_id": 3, "sampled": 8, "agreement": 0.9 },
+      "origin": "constructed: a clip carrying frames of two captures, one of them above the floor and one under it",
+      "note": "A frame that decodes to another id carries nothing for this one and is not evidence against the file: section 8's invalidating row reads the clip's decode, never one sampled frame's. Two frames and two reasons — one resolved another id, one is under the floor and resolved nothing at all — and the count treats them the same way."
+    },
+    {
+      "name": "the clip's own decode is refused",
+      "clip": { "agreement": 0.84, "crc_passes": true, "mark_id": 5902900 },
+      "frames": [
+        { "agreement": 0.86, "crc_passes": true, "mark_id": 5902900 },
+        { "agreement": 0.84, "crc_passes": true, "mark_id": 5902900 },
+        { "agreement": 0.83, "crc_passes": false, "mark_id": null },
+        { "agreement": 0.82, "crc_passes": false, "mark_id": null },
+        { "agreement": 0.81, "crc_passes": false, "mark_id": null },
+        { "agreement": 0.8, "crc_passes": false, "mark_id": null },
+        { "agreement": 0.79, "crc_passes": false, "mark_id": null },
+        { "agreement": 0.78, "crc_passes": false, "mark_id": null }
+      ],
+      "reported": { "mark_id": null, "frames_with_id": null, "sampled": 8, "agreement": 0.84 },
+      "origin": "the constant itself, one step under the floor",
+      "note": "No id, so nothing to count against: the count is absent and not 0, because 0 would read as a clip whose frames disagreed rather than as a clip that gave no id. A frame that cleared the floor on its own does not rescue it — a verifier that promoted one frame's id to the clip's answer would report an id the aggregate refused."
+    }
+  ]
+}

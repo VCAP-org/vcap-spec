@@ -1,5 +1,5 @@
 {
-  "corpus_version": "1.2.0",
+  "corpus_version": "1.3.0",
   "vector_count": 85,
   "vectors": [
     {
@@ -602,6 +602,6 @@
     "_trust": "15884a7b974f5fac6a6e479674d5a6760b9ef2caad6b51b0cc62d9346c5dbeac",
     "_chains": "14c74c018f4022f397fc7bef3659922a68044fe9c62ffc2e2334a70508ffca82",
     "_timestamps": "9d215df2fc7b14490a40aca6dce7a24fa03c67a12cc54a120a1a19c662f9ffa0",
-    "_watermark": "82385c6c5b1a2e8b38ac14241708d9491f40526681d3ff90eae0fd5c65776d52"
+    "_watermark": "2c3cfc31ee9d74b0d4a270e1832e2f3e7579a4b4f0b9f3281562d6fba2f7d15c"
   }
 }

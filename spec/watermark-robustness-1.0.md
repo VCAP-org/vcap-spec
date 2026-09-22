@@ -664,6 +664,16 @@ frames decoded to that id, and must not present a confidence figure as if it
 answered that question. `threat-model.md` §5.8 closed its splice item on that
 requirement.
 
+**"Costs no recovery" is about the id and not about the count.** Every chain
+that recovers still recovers at N = 1, but *recovering* and *being reportable*
+part company on the shipped int8 build: its worst surviving chain reads 39
+flipped bits from one frame (agreement 0.848) against 35 from eight averaged
+(0.863), so the single frame is under the floor and the clip is not. The id
+therefore comes from the aggregate, and §8 counts a frame by whether its own
+decode yields **that** id — the floor gates the id, not the count, or a clip
+marked throughout on this chain would report *0 of 8* and rank below the splice
+that reports 1 of 8 (`vcap-proof-1.0.md` §8, *Which sampled frames count*).
+
 ### What this licenses, and what it does not
 
 - A recovered mark is **not** evidence that the file is the capture. The

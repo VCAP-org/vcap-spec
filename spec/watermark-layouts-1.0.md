@@ -195,6 +195,36 @@ per flip count no pattern returned a wrong id at any flip count. The figures,
 their method and what they leave on the shipped browser build are in
 `watermark-robustness-1.0.md`, *What may be reported*.
 
+**The floor gates a reported id, not the count of frames that carried it.**
+§8 of `vcap-proof-1.0.md` makes a verifier that decodes several sampled frames
+report how many of them decoded to the id it reports. A sampled frame counts
+when its **own** decode passes the CRC and yields **that** id; its own
+agreement is not tested against the floor.
+
+The floor is a rule about naming an id, and the count names none — the id is
+the aggregate decode's, and it cleared the floor before anything was counted.
+What the floor buys is the one discriminator the layout has against a checksum
+that admits one word in 256 with every 24-bit value legal. A counted frame is
+not free that way: it has to produce the id the clip already resolved, so a
+chance CRC pass is counted only when it also lands on that one value in 2²⁴.
+The equality test supplies what the floor was there to supply, and applying
+the floor a second time costs true counts and buys nothing.
+
+It costs them measurably. On the build a browser ships, the hardest chain that
+still recovers reads **39** flipped bits of 256 from a single frame (agreement
+0.848, under the floor) and **35** from eight averaged (0.863, reportable) —
+`vcap-ml`, `reports/frames-to-recover.md`. Under a per-frame floor a wholly
+marked clip of that chain reports **0 of 8**, while one genuine frame spliced
+into foreign footage reports **1 of 8** at the agreement of a clean recovery.
+The count would rank the marked recording *below* the splice, which is the one
+comparison it exists to make.
+
+Nothing below the floor is named to a reader by this. A below-floor frame is
+never the source of an id — it can only agree with one — and a sampled frame
+that decodes to some other id is counted as carrying nothing, not read as
+evidence against the file: §8's invalidating row reads the clip's decode and
+never one frame's.
+
 The floor belongs to **this** layout and travels with it. `photo-bch-v3` gets
 none: BCH(255,131) with t=18 admits a wrong codeword at about 10⁻¹⁰ by the
 code and 0 in 4 329 measured, so there is nothing for a floor to catch, and a
@@ -202,7 +232,10 @@ number invented for it would be a rule with no measurement under it. A future
 repetition layout states its own floor from its own curve.
 
 Vectors: `vectors/_watermark/agreement-floor.json`, which pins the constant and
-the decision for the measured cases above.
+the decision for the measured cases above, and
+`vectors/_watermark/clip-reading.json`, which pins what a clip reports — the
+id, the count and the figure beside them — for the cases where the two
+readings of a clip disagree.
 
 ## Strength
 

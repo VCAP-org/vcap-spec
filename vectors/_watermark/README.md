@@ -21,5 +21,15 @@ and, for each case, whether a `video-rep-v1` decoder may report an id. The
 cases carry their origin: most are measured — the synthetic robustness chains,
 the device campaign that produced the rule, the unmarked false positives — and
 the two at the boundary are the constant itself, because an inclusive floor is
-a thing two implementations can disagree about. Checked by
-`tools/test/watermark-layouts.test.ts`.
+a thing two implementations can disagree about.
+
+`clip-reading.json` is hand-written for the same reason and pins the level
+above it: what a **clip** reports once its sampled frames have been decoded
+both ways — the id, the count of frames that carried it, and the agreement
+figure beside them (`spec/vcap-proof-1.0.md` §8, *For a clip*). Its cases are
+the ones where the aggregate decode and the per-frame decodes disagree, which
+is where two implementations of ours already did: whether the floor also
+refuses a frame that is only being counted, and which decode owns the reported
+figure. A case whose readings agree discriminates nothing and is not here.
+
+Both files are checked by `tools/test/watermark-layouts.test.ts`.

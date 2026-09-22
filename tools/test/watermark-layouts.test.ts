@@ -15,6 +15,7 @@ import { createHash } from 'node:crypto'
 const WATERMARK = join(import.meta.dirname, '..', '..', 'vectors', '_watermark')
 const layouts = JSON.parse(readFileSync(join(WATERMARK, 'layouts.json'), 'utf8'))
 const floorVectors = JSON.parse(readFileSync(join(WATERMARK, 'agreement-floor.json'), 'utf8'))
+const clipVectors = JSON.parse(readFileSync(join(WATERMARK, 'clip-reading.json'), 'utf8'))
 
 const crc8 = (id: number): number => {
   let crc = 0
@@ -89,6 +90,53 @@ describe('video-rep-v1 agreement floor', () => {
     // which the code's own correction radius (~0.80, what it can recover
     // rather than what may be reported) clears by only 0.011.
     expect(FLOOR).toBeGreaterThan(0.80)
+  })
+})
+
+/**
+ * `vcap-proof-1.0.md` §8 *For a clip*, which is three answers and not one: the
+ * id, the count of sampled frames that carried it, and the agreement figure
+ * shown beside them. The two readings of a clip disagree by construction —
+ * averaging is what lets a mark survive a chain no single frame survives, and
+ * decoding frames separately is the only thing that sees a splice — so which
+ * reading owns which answer is the whole content of these cases.
+ */
+interface Decode { agreement: number, crc_passes: boolean, mark_id: number | null }
+
+/** The clip's one id: the aggregate decode, under the layout's floor. */
+const clipId = (clip: Decode): number | null =>
+  clip.crc_passes && clip.agreement >= FLOOR ? clip.mark_id : null
+
+/**
+ * The count. A frame carries the id when its own decode checks out and lands
+ * on that id — the floor is not applied a second time, because the count names
+ * no id and equality against an already-floored one is the discriminator the
+ * floor would otherwise supply.
+ */
+const framesWithId = (clip: Decode, frames: Decode[]): number | null =>
+  clipId(clip) === null ? null : frames.filter((f) => f.crc_passes && f.mark_id === clipId(clip)).length
+
+describe('video-rep-v1 clip reading', () => {
+  it('pins the layout and the floor the aggregate is judged by', () => {
+    expect(clipVectors.floor).toBe(FLOOR)
+    expect(clipVectors.layout).toBe('video-rep-v1')
+  })
+
+  for (const c of clipVectors.cases as Array<{ name: string, clip: Decode, frames: Decode[], reported: { mark_id: number | null, frames_with_id: number | null, sampled: number, agreement: number } }>) {
+    it(`${c.name}: ${c.reported.frames_with_id ?? 'no'} of ${c.reported.sampled} at ${c.reported.agreement}`, () => {
+      expect(c.frames).toHaveLength(c.reported.sampled)
+      expect(clipId(c.clip)).toBe(c.reported.mark_id)
+      expect(framesWithId(c.clip, c.frames)).toBe(c.reported.frames_with_id)
+      // The figure is the aggregate's own, never recomputed over the frames
+      // that carried the id: it is the number the floor was applied to, and a
+      // mean over a self-selected subset rises as fewer frames qualify.
+      expect(c.reported.agreement).toBe(c.clip.agreement)
+    })
+  }
+
+  it('ranks a marked clip above a splice, which is what the count is for', () => {
+    const named = (name: string) => (clipVectors.cases as Array<{ name: string, reported: { frames_with_id: number | null } }>).find((c) => c.name.includes(name))!
+    expect(named('wholly marked').reported.frames_with_id).toBeGreaterThan(named('spliced').reported.frames_with_id!)
   })
 })
 
