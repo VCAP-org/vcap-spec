@@ -1,11 +1,30 @@
 # Changelog
 
-`vcap/1.0` is **frozen**. The first Android store distribution is now live
-(Google Play internal testing, September 2026), so the publication condition
-for the additive-only rule of §9 has been met. The `v1.0` tag was originally
-a working tag with a pre-release; entries below describing the earlier draft
-remain historical. No existing proof may be made unreadable. Every format
-change names its sections, vectors and fallback for an older verifier.
+`vcap/1.0` is **not frozen**, and there is no official public version of this
+specification yet.
+
+An earlier revision of this file declared the format frozen, reading the
+Android build on Google Play's internal testing track as the "first store
+distribution" that closes the additive-only rule of §9. The owner has decided
+otherwise (22 September 2026): an internal testing track is not a publication,
+nothing here is final until the result is one they are satisfied with, and the
+`v1.0` tag and its pre-release have been removed so that nothing advertises a
+version that does not exist yet.
+
+There is also **no backward-compatibility burden**, and that is a decision and
+not an oversight (22 September 2026). Nothing sealed so far is in anybody
+else's hands: the owner is the only user, and files sealed during development
+can simply be deleted and re-made. So a format change does not have to carry a
+fallback for older files, and adding one "to be safe" would be complexity paid
+for a population of files that does not exist. When that stops being true —
+the first build, SDK or file that reaches somebody else — the additive-only
+rule of §9 binds again, and this paragraph is what has to be deleted first.
+
+The string `"v": "vcap/1.0"` nevertheless stays as it is, for cost and not for
+compatibility: it appears in the schema, the conformance vectors, the test
+corpus, five implementations and two public repositories, and it is already
+neutral with respect to the brand — which was the only reason anyone would
+have wanted to change it.
 
 ## Unreleased
 
