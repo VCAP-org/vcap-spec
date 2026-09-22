@@ -86,7 +86,8 @@ describe('video-rep-v1 agreement floor', () => {
     // crf 36): a floor above it would refuse a chain the curve says works.
     expect(FLOOR).toBeLessThanOrEqual(0.87)
     // And its lower bound is the highest wrong id observed on a device (0.789),
-    // which the layout's own 0.80 correction floor clears by only 0.011.
+    // which the code's own correction radius (~0.80, what it can recover
+    // rather than what may be reported) clears by only 0.011.
     expect(FLOOR).toBeGreaterThan(0.80)
   })
 })

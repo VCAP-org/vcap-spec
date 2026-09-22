@@ -30,10 +30,17 @@ for the worse of them.
 
 A photo leaves the device as JPEG and comes back re-encoded and resized with a
 handful of bits flipped. A video is re-encoded by a messaging app at a fraction
-of the bitrate, and about a fifth of the bits flip — past what any block code
-of this size can correct. So the photo carries the whole capture id under a
-block code, and the video carries a short id many times over and lets the
+of the bitrate and comes back with bit errors in the tens — past what any block
+code of this size can correct. So the photo carries the whole capture id under
+a block code, and the video carries a short id many times over and lets the
 proof tie it back to the capture id.
+
+How far that gets the video channel is a smaller number than the repetition
+code alone suggests, and the two must not be confused: the code recovers an id
+through roughly 51 random flips of 256, but *The agreement floor* below allows
+one to be **reported** only through **38 of 256, a 14.8 % bit error rate**.
+Measured budget and margins in `watermark-robustness-1.0.md`, *What may be
+reported*.
 
 ## `photo-bch-v3`
 
@@ -135,7 +142,7 @@ are known, and they overlap:
 | a **wrong** `mark_id` off genuinely marked content (2 of 38 device recordings) | 0.738, 0.789 |
 | a **correct** `mark_id` off the same campaign, at its worst | 0.727 |
 | every synthetic chain that recovers at all | 0.87–1.00 |
-| the layout's own self-test correction floor | ≈ 0.80 |
+| the code's correction radius — what it recovers, not what may be reported | ≈ 0.80 |
 
 The device figures are a campaign of 38 recordings on one phone, four scenes,
 recorded in `vcap-ml` and summarised in `watermark-robustness-1.0.md`,
@@ -144,7 +151,7 @@ resolved an id the pixels were never given, at 0.738 and at 0.789.
 
 0.85 is the value that sits above every wrong id observed anywhere (0.789) and
 below every chain measured to recover (0.87), with margin on both sides. The
-margin is the point. The layout's own correction floor, ≈ 0.80, would also
+margin is the point. The code's own correction radius, ≈ 0.80, would also
 exclude both wrong ids — by 0.011, while the same campaign found two recordings
 of the *same scene* a minute apart differing by as much as 0.20. A threshold
 whose margin is a twentieth of the spread of the measurement is a number that
@@ -175,6 +182,18 @@ The third row is never a contradiction. A proof declaring a different
 block can no more make a file *tampered* than a failed CRC can
 (`vcap-proof-1.0.md` §8, *Invalidating*). Before this rule those two wrong ids
 would have been read as evidence against the files that carried them.
+
+**What the floor leaves.** Since agreement is `1 − flips/256` while every
+position's majority holds, the rule caps the error budget arithmetically at
+**38 flipped bits of 256** (0.8516, reportable) against 39 (0.8477, refused) —
+against the ≈ 51 the code can still correct. Inside that ceiling recovery is
+probable and not certain, because a position whose eight copies split 4–4 ties
+and loses the CRC: about three patterns in four resolve the id at 38 flips, and
+the rest answer *no id*. An implementation should expect that shape, and should
+expect its failures at the edge to be **refusals**: over a 20 000-pattern sweep
+per flip count no pattern returned a wrong id at any flip count. The figures,
+their method and what they leave on the shipped browser build are in
+`watermark-robustness-1.0.md`, *What may be reported*.
 
 The floor belongs to **this** layout and travels with it. `photo-bch-v3` gets
 none: BCH(255,131) with t=18 admits a wrong codeword at about 10⁻¹⁰ by the

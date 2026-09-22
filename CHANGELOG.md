@@ -80,6 +80,35 @@ wrong ids, the correct one at 0.727 that the floor refuses, and the worst
 synthetic chain that must keep resolving. Corpus 1.1.0 → **1.2.0** (a fixture
 added; the 85 numbered vectors are byte-identical).
 
+### What the 0.85 floor leaves, measured: 38 flipped bits of 256
+
+Documentation only — no normative statement changes, no field, bit layout or
+vector moves. `watermark-robustness-1.0.md` advertised the video channel on the
+repetition code's **correction radius**, ≈ 51 flipped bits of 256 and roughly
+0.80 agreement, which the floor of the entry above now forbids reporting. The
+number a reader of a verdict actually meets is the **reportable budget: 38 bits
+of 256, a 14.8 % bit error rate** — agreement is `1 − flips/256` while every
+position's majority holds, so 38 is 0.8516 and reportable and 39 is 0.8477 and
+refused. Five points of bit error rate separated the two, and the larger one
+was a promise the format does not keep.
+
+Both documents now say which is which. `watermark-robustness-1.0.md` gains
+*What may be reported* with the measurement and its method (`vcap-ml` #17:
+both ends asserted over 512 random flip patterns per run, the curve swept over
+20 000 per flip count), and `watermark-layouts-1.0.md` states the budget beside
+the floor that causes it.
+
+Two findings come with it. Recovery inside the ceiling is **probabilistic** —
+about three patterns in four at 38 flips, 99.8 % at 12 — because a position
+whose eight copies split 4–4 ties and loses the CRC; and every failure there is
+a **refusal**, never a wrong id, with no wrong id observed at any flip count in
+the sweep. And the margin is thin where it counts: on `detector_int8`, the only
+build published for browsers, the hardest chain that still recovers spends 34
+of the 38 bits, and at single-frame aggregation that same chain sits at 0.848,
+under the floor, so a verifier reading one frame of it may report no id at all.
+Six of the thirty-eight device recordings of *A device campaign* sit at
+0.727–0.816 and are unreportable.
+
 ### `vcap-vault/1` is in use, and additive from here
 
 The envelope's status block said the app and platform did not upload or serve
