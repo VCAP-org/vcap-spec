@@ -132,16 +132,76 @@ shows instead of a verdict.
 | destroyed | 45 | 360 | 133 / 0.58 | no | 144 / 0.60 | no |
 
 **Where it breaks.** Recovery holds to crf 36 at 640 px and is **gone** at
-crf 40 at 480 px, on every build. The layout's own self-test places the
-correction floor near 51 flipped positions out of 256 — roughly 0.80 agreement
-— and the crf 40 row is at 93 errors and 0.67: not marginal, well past it.
-Between the two lies the one row where the margin is visibly thin, crf 36 at
-0.87–0.90 agreement, and a real clip that is harder than this synthetic one in
-any respect will be worse there.
+crf 40 at 480 px, on every build. The crf 40 row is at 93 errors and 0.67,
+which is not marginal: it is far past both the flip count the code can correct
+and the much smaller one a decoder is allowed to report. Between the two lies
+the one row where the margin is visibly thin, crf 36 at 0.87–0.90 agreement,
+and a real clip that is harder than this synthetic one in any respect will be
+worse there.
 
-`agreement` below the correction floor is the number a verifier shows when it
-has nothing else: it means *some structure was found and it did not decode*,
-and it must not be rendered as a partial match or a percentage of confidence.
+`agreement` below the floor is the number a verifier shows when it has nothing
+else: it means *some structure was found and it did not decode*, and it must
+not be rendered as a partial match or a percentage of confidence.
+
+### What may be reported: 38 flipped bits of 256, not 51
+
+Two different numbers have been quoted for this channel, and until now this
+document quoted the wrong one of them.
+
+| | Bits of 256 | Bit error rate | Agreement |
+|---|---|---|---|
+| **correction radius** — where the repetition code stops recovering the id at all, under random flips | ≈ 51 | 19.9 % | ≈ 0.80 |
+| **reportable budget** — where `watermark-layouts-1.0.md` stops allowing a recovered id to be reported | **38** | **14.8 %** | **0.8516** |
+
+The correction radius is what the code can fix. The reportable budget is what a
+verifier may say out loud, and it is the only one of the two a reader of a
+verdict ever meets. The gap between them, five points of bit error rate, is the
+difference between what this document used to promise for video and what the
+format now permits.
+
+**The budget is arithmetic, not a chosen figure.** Agreement is `1 − flips/256`
+for as long as every position's majority of 8 copies holds, so the 0.85 floor
+caps the flip count directly: 38 flips is agreement 0.8516 and reportable, 39
+is 0.8477 and must be refused however cleanly the CRC checks out. Both ends are
+measured rather than asserted — the layout self-test in `vcap-ml` decodes the
+pinned `mark_id` under 512 random flip patterns at each end on every run, and
+39 flips produced no reportable id in any of them.
+
+**Inside the ceiling, recovery is likely and not certain.** A position whose
+eight copies split 4–4 ties and reads 0, so some patterns lose the CRC even
+below the ceiling. Swept over 20 000 random flip patterns per flip count on the
+pinned toolchain:
+
+| Flips of 256 | Agreement | Right id reported | Wrong id reported |
+|---|---|---|---|
+| 12 | 0.953 | 99.8 % | 0 |
+| 28 | 0.891 | 92.3 % | 0 |
+| **38** | **0.8516** | **75.2–75.7 %** | **0** |
+| 39 | 0.8477 | 0 | 0 |
+
+**Every failure inside the budget is a refusal, never a wrong id**, and that
+asymmetry is the whole reason the floor exists. A pattern that ties a position
+loses the CRC and the decoder answers *no id* plus the agreement figure; no
+pattern at any flip count in the sweep returned an id that was not the one
+embedded. A verifier at the edge of this channel therefore fails by saying
+less, not by naming somebody else's capture.
+
+**On the build the browser ships, the headroom is about four bits.** The
+hardest chain that still recovers, crf 36 at 640 px, costs 25 flips on fp32 and
+**34 on int8** — four under the 38-flip ceiling, on the only build published
+for browsers. And the margin is thinner still at low frame counts: the same
+chain on int8 reads **39 flips / 0.848 when a verifier aggregates a single
+frame**, already below the floor, and clears it only from 4 frames aggregated
+(36 / 0.859), settling at 34 / 0.867 by 8. On that chain a single-frame
+verifier may report no id at all — not because the code failed to correct it,
+but because it is not allowed to say what it found.
+
+Two limits on the flip sweep, because it is a property of the code and not of
+the channel. The flips are drawn **uniformly at random**, while a codec puts
+errors where its bitrate ran out, correlated across neighbouring positions; the
+layout is interleaved against exactly that, and the sweep does not measure it.
+And it says nothing about how many flips a given chain costs — that is the
+table above, one embed into one clip.
 
 ## Build precision: what quantization costs
 
@@ -171,8 +231,8 @@ The browser verifier ships the int8 build, so the difference matters.
 Measured by aggregating N of the 24 frames, for N from 1 to 24, under two
 sampling policies (`first` N frames, and N evenly spaced).
 
-- On every chain that recovers at all, it **already recovers at N = 1**, and
-  the outcome never flips going up to N = 24.
+- On every chain whose id the code recovers at all, it **already recovers at
+  N = 1**, and that outcome never flips going up to N = 24.
 - On every chain that does not recover, **more frames do not help**: `past-worst`
   and `destroyed` never recover at any N. Frame count is not a substitute for
   the model's bit-error budget once a chain is past it.
@@ -182,13 +242,22 @@ sampling policies (`first` N frames, and N evenly spaced).
   clip: 39 bit errors at N = 1, settling to 33–35 by N = 8 and not improving
   materially past it.
 
+**On that one chain, what may be reported does flip with N.** The sweep counts
+a recovery wherever the code corrects the id, which is how it shows where the
+floor lands; the floor is applied on top. 39 errors at N = 1 is agreement
+0.848, under the floor, so on the int8 build a verifier that aggregates a
+single frame of the crf 36 clip **may report no id at all**, and reports one
+from 4 frames (36 errors / 0.859) upward. This is the only row in the sweep
+where the two readings differ, and it is on the build the browser ships.
+
 **This does not mean a verifier should read one frame.** The corpus has zero
 motion — 24 re-encodes of one image — so it structurally cannot show what a
 moving clip does, and cross-frame redundancy is the cheap defence against
 exactly the failure modes it cannot produce. A reasonable policy is **8 evenly
 spaced frames**: a third of a second at 24 fps, the point where the one
-measurable margin gain stops, and conservative with respect to a corpus that
-cannot justify anything smaller.
+measurable margin gain stops, where the hardest surviving chain is back above
+the floor on every build, and conservative with respect to a corpus that cannot
+justify anything smaller.
 
 ## What the detector costs in a browser
 
@@ -338,7 +407,8 @@ chain is safer than another.
 
 The 15 false ids came out at agreement **0.59–0.63** (int8: 0.55–0.63). Every
 chain in the video table above that recovers sits at **0.87–1.00**, the worst
-chain that still works at 0.90, and the layout's correction floor is near 0.80.
+chain that still works at 0.90, and the code's own correction radius runs down
+to roughly 0.80 — below what may now be reported, which is 0.85.
 
 That gap is why `video-rep-v1` returns an agreement figure at all, and why a
 verifier reporting a `mark_id` without it has discarded the only discriminator
@@ -380,8 +450,9 @@ What a verifier can do with that is refuse to answer, not decide. Hence the
 floor in `watermark-layouts-1.0.md`: above every wrong id observed (0.789),
 below every synthetic chain that recovers (0.87), and honest about what it
 costs — the correct ids under it are refused with the wrong ones. Measured
-here, that is a real fraction of the campaign's recordings, including one clip
-the per-frame marking build had just rescued at 0.816.
+here, that is **six of the thirty-eight recordings, at 0.727–0.816**, including
+one clip the per-frame marking build had just rescued at 0.816. On a phone, in
+a room, the floor is not a corner case: it is one clip in six.
 
 Two limits, which are the campaign's and not the layout's. One device, one
 room, one afternoon: the spread is within that and between devices it is
