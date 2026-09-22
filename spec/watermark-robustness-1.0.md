@@ -340,9 +340,51 @@ chain that still works at 0.90, and the layout's correction floor is near 0.80.
 
 That gap is why `video-rep-v1` returns an agreement figure at all, and why a
 verifier reporting a `mark_id` without it has discarded the only discriminator
-there is. It is an **observation on a small corpus, not a threshold**: it was
-not swept for a cut, the layout does not require one, and this document does
-not turn it into a rule.
+there is. On this corpus it is an **observation, not a threshold**: it was not
+swept for a cut, and nothing here would place one. The layout now carries a
+floor at 0.85, and what put it there is the device campaign below rather than
+these rows — this corpus is 90 % synthetic and its two populations do not even
+touch.
+
+### A device campaign, where they do touch
+
+Thirty-eight recordings of 8 s on one phone (moto g75 5G, `vcap-sdk-android`
+#46 against `vcap-ml` #14), four named scenes, back and front camera, 720p30
+and 1080p30, each pulled off the device and decoded here with the shipped
+detector. The recordings and the full tables are in `vcap-ml`
+(`docs/video-margin.md`); what matters to a verifier is this:
+
+| | Agreement |
+|---|---|
+| unmarked control, whole clips | 0.566–0.664 |
+| clips that resolved the **wrong** `mark_id` (2 of 38) | 0.738, 0.789 |
+| the lowest agreement at which a **correct** id came back | 0.727 |
+| two recordings of one scene a minute apart, on one build | differ by up to 0.20 |
+
+Three readings, and they are the reason the layout changed:
+
+- **A false pass lands on marked content too.** The 1/256 measured above as a
+  property of the CRC is not confined to unmarked frames: on a marked clip
+  whose signal is weak the same eight bits admit the same wrong word, and it
+  arrives carrying a plausible id.
+- **The populations overlap.** 0.727 correct sits below 0.738 wrong. No
+  threshold separates right from wrong, and any rule that claims to is reading
+  this data wrong.
+- **The synthetic spread understates the real one.** Every chain in the table
+  above that recovers reads 0.87–1.00; on a phone, correct recoveries reach
+  down to 0.727 and repeat recordings of one scene move by 0.20.
+
+What a verifier can do with that is refuse to answer, not decide. Hence the
+floor in `watermark-layouts-1.0.md`: above every wrong id observed (0.789),
+below every synthetic chain that recovers (0.87), and honest about what it
+costs — the correct ids under it are refused with the wrong ones. Measured
+here, that is a real fraction of the campaign's recordings, including one clip
+the per-frame marking build had just rescued at 0.816.
+
+Two limits, which are the campaign's and not the layout's. One device, one
+room, one afternoon: the spread is within that and between devices it is
+unmeasured. And the clips went through that phone's own MediaCodec, which has
+never been compared with the ffmpeg chains above on the same content.
 
 ### The rate is per decode, not per file
 
@@ -592,10 +634,13 @@ and a number that was not measured is not published in its place.
   ≈ 3 % arrived at for 8 sampled frames is arithmetic on top of them, not a
   measurement, and no frame-sampling policy has been measured against unmarked
   clips.
-- **Whether `agreement` can be made a rule.** The separation between the false
-  ids (0.55–0.63) and every row that recovers (0.87–1.00) was not swept for a
-  threshold, and doing that on a corpus 90 % synthetic would produce a number
-  that does not travel.
+- **A swept threshold.** The layout's floor at 0.85 is placed in the gap
+  between two measured populations (*A device campaign*), not swept for an
+  optimum: nobody has traded false resolves against refused true ones over a
+  range of cuts, and the corpus that would let them — thousands of real
+  recordings on several devices — does not exist. What *is* known is that the
+  populations overlap, so no cut is a separator and a sweep would be choosing
+  where to lose true answers, not whether to.
 - **The false-positive behaviour of the fp16 and distilled builds.** fp32 and
   int8 were measured and agree; the argument that the rate is the code rather
   than the model predicts the others land in the same place, and for them the

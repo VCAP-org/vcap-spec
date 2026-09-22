@@ -28,6 +28,58 @@ have wanted to change it.
 
 ## Unreleased
 
+### **Breaking.** `video-rep-v1` reports no id below 0.85 agreement
+
+A `video-rep-v1` decoder MUST NOT report a `mark_id` at an agreement below
+**0.85**: below it the answer is *no id* plus the agreement figure, exactly as
+a CRC mismatch is, and §8's outcome for it is the existing *watermark not
+recovered* — no new outcome word, and none may be invented.
+
+**Why.** The layout's checksum is eight bits over a 24-bit id, so it passes by
+chance about one word in 256, and every value it admits is a plausible
+`mark_id`. A campaign of 38 recordings on real hardware found that this does
+not stay confined to unmarked content: two clips resolved an id their pixels
+had never been given, at agreement **0.738** and **0.789**. A wrong `mark_id`
+is not a weak answer, it is a confident false one — it points a reader at a
+different capture.
+
+**Why 0.85, and what it costs.** The floor sits above every wrong id observed
+anywhere (0.789) and below every chain measured to recover (0.87), with 0.06
+and 0.02 of margin. The layout's own ≈ 0.80 correction floor would also clear
+both wrong ids, by 0.011, while two recordings of one scene a minute apart
+differ by as much as 0.20 — a margin a twentieth of the measurement's spread
+is a coincidence, not a rule. It is **not** a separator and does not pretend to
+be: correct ids appear at 0.727, below a wrong one at 0.738, so the populations
+overlap and every correct id under the floor is refused with the wrong ones.
+What the rule buys is that the verifier stops saying something false; what it
+costs is true answers it used to give, and that trade is the point rather than
+a side effect. The numbers and their conditions are in
+`spec/watermark-robustness-1.0.md`, *A device campaign*.
+
+**Breaking, and in two directions.** A clip that resolved an id at 0.738 now
+reports *watermark not recovered* where it used to report a green id — and a
+clip whose below-floor block disagreed with the proof's `mark_id` is no longer
+**red**: §8's invalidating row is narrowed, because a decode nobody may report
+is not evidence against the file that carried it, and calling a re-compressed
+clip of a genuine capture forged is the worst mistake this format can make.
+No proof field, schema, signature input, bit layout or numbered vector moves,
+and `photo-bch-v3` is untouched — BCH(255,131) admits a wrong codeword at about
+10⁻¹⁰, so there is nothing for a floor to catch and inventing one would be a
+rule with no measurement under it. Recorded as breaking under the decision of
+22 September 2026 above: nothing sealed is in anybody else's hands, so no
+fallback is carried for files decoded under the old rule.
+
+§8 also gains the consequence of the layout's figure: a verifier that reports a
+`video-rep-v1` id **without** the agreement has discarded the only
+discriminator the layout has, and MUST NOT call that *watermark matched* —
+it is *watermark not evaluated*, evidence it cannot read.
+
+Vectors: `vectors/_watermark/agreement-floor.json` pins the constant, the
+inclusive boundary and the decision for each measured case, including the two
+wrong ids, the correct one at 0.727 that the floor refuses, and the worst
+synthetic chain that must keep resolving. Corpus 1.1.0 → **1.2.0** (a fixture
+added; the 85 numbered vectors are byte-identical).
+
 ### `vcap-vault/1` is in use, and additive from here
 
 The envelope's status block said the app and platform did not upload or serve

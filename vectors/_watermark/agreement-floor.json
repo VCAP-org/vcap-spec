@@ -1,0 +1,92 @@
+{
+  "layout": "video-rep-v1",
+  "floor": 0.85,
+  "rule": "A video-rep-v1 decoder reports a mark_id only when the CRC-8 passes AND agreement >= 0.85; otherwise no id, plus the agreement figure.",
+  "spec": "spec/watermark-layouts-1.0.md, The agreement floor",
+  "cases": [
+    {
+      "agreement": 1.0,
+      "crc_passes": true,
+      "resolves": true,
+      "origin": "synthetic corpus, as-sealed (crf 18, 1280 px)",
+      "note": "The unstressed case. A floor that moved this would be a floor in the wrong place."
+    },
+    {
+      "agreement": 0.9,
+      "crc_passes": true,
+      "resolves": true,
+      "origin": "synthetic corpus, crf 36 at 640 px, fp32",
+      "note": "The worst chain that still recovers on fp32. The floor sits below it on purpose: no measured recovery may be refused by it."
+    },
+    {
+      "agreement": 0.87,
+      "crc_passes": true,
+      "resolves": true,
+      "origin": "synthetic corpus, crf 36 at 640 px, int8",
+      "note": "The same chain on the build the browser ships, and the lowest agreement at which anything has been measured to recover. The floor's upper bound."
+    },
+    {
+      "agreement": 0.996,
+      "crc_passes": true,
+      "resolves": true,
+      "origin": "synthetic corpus, one genuine frame spliced into 23 foreign ones",
+      "note": "A high agreement is not honesty: this clip is foreign footage. The floor does not address splicing, and it does not pretend to — the frame count of vcap-proof-1.0.md section 8 is what qualifies this one."
+    },
+    {
+      "agreement": 0.85,
+      "crc_passes": true,
+      "resolves": true,
+      "origin": "the constant itself",
+      "note": "The floor is inclusive. Two implementations that disagree on the boundary disagree on a verdict."
+    },
+    {
+      "agreement": 0.84,
+      "crc_passes": true,
+      "resolves": false,
+      "origin": "the constant itself",
+      "note": "One step under the floor, with a CRC that passes: the case the rule exists for."
+    },
+    {
+      "agreement": 0.816,
+      "crc_passes": true,
+      "resolves": false,
+      "origin": "device campaign, flat 2, per-frame mark: a CORRECT id",
+      "note": "What the rule costs. This clip carries the id the pixels were given and the floor refuses it anyway, because nothing at this agreement can be told apart from the two rows below."
+    },
+    {
+      "agreement": 0.789,
+      "crc_passes": true,
+      "resolves": false,
+      "origin": "device campaign, 1080p30: a WRONG id",
+      "note": "The highest agreement at which a wrong id has been observed, and the reason the floor is not at the layout's 0.80 correction floor."
+    },
+    {
+      "agreement": 0.738,
+      "crc_passes": true,
+      "resolves": false,
+      "origin": "device campaign: a WRONG id",
+      "note": "CRC-8 passing by chance on genuinely marked content. Before the floor this made the file tampered, not unresolved."
+    },
+    {
+      "agreement": 0.727,
+      "crc_passes": true,
+      "resolves": false,
+      "origin": "device campaign: a CORRECT id",
+      "note": "Below a wrong id and above nothing. The populations overlap, which is why the floor is a refusal band and never a claim that the id is false."
+    },
+    {
+      "agreement": 0.63,
+      "crc_passes": true,
+      "resolves": false,
+      "origin": "synthetic corpus, unmarked content, an id the detector invented",
+      "note": "The top of the false-positive range on unmarked frames."
+    },
+    {
+      "agreement": 0.67,
+      "crc_passes": false,
+      "resolves": false,
+      "origin": "synthetic corpus, crf 40 at 480 px",
+      "note": "Past the break point, CRC rejects. One answer with the rows above it: no id, plus the figure."
+    }
+  ]
+}

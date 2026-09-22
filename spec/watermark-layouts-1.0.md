@@ -102,6 +102,83 @@ The decoder returns an **agreement** figure — the fraction of copies that
 matched the majority — and that figure stays meaningful when the CRC fails.
 A verifier shows it instead of a verdict.
 
+### The agreement floor
+
+**A `video-rep-v1` decoder MUST NOT report a `mark_id` at an agreement below
+0.85.** CRC and floor are one gate, not two answers: below it the decode is
+**no id**, plus the agreement figure, exactly as a CRC mismatch is, and a
+reader cannot tell the two apart because there is nothing to tell apart —
+neither one produced an id worth believing.
+
+The floor exists because the CRC alone does not decide anything. Eight bits of
+checksum over a 24-bit id admit one word in 256, every non-reserved 24-bit
+value is legal, and there is no other filter between "CRC passed" and "look
+this id up". So a block that passes is a block that passes *by chance* about
+0.39 % of the time, and the id it carries is a plausible one by construction.
+Measured on unmarked content, that is one decode in 289
+(`watermark-robustness-1.0.md`, *False positives*). What the floor adds is the
+one discriminator the layout has.
+
+**Why 0.85, from the measurements rather than from roundness.** Two populations
+are known, and they overlap:
+
+| What | Agreement |
+|---|---|
+| unmarked content, ids the detector invented (15 cases, synthetic corpus) | 0.55–0.63 |
+| unmarked control clips, whole recordings on a device | 0.566–0.664 |
+| a **wrong** `mark_id` off genuinely marked content (2 of 38 device recordings) | 0.738, 0.789 |
+| a **correct** `mark_id` off the same campaign, at its worst | 0.727 |
+| every synthetic chain that recovers at all | 0.87–1.00 |
+| the layout's own self-test correction floor | ≈ 0.80 |
+
+The device figures are a campaign of 38 recordings on one phone, four scenes,
+recorded in `vcap-ml` and summarised in `watermark-robustness-1.0.md`,
+*A device campaign*. They are what forced this rule: two of those recordings
+resolved an id the pixels were never given, at 0.738 and at 0.789.
+
+0.85 is the value that sits above every wrong id observed anywhere (0.789) and
+below every chain measured to recover (0.87), with margin on both sides. The
+margin is the point. The layout's own correction floor, ≈ 0.80, would also
+exclude both wrong ids — by 0.011, while the same campaign found two recordings
+of the *same scene* a minute apart differing by as much as 0.20. A threshold
+whose margin is a twentieth of the spread of the measurement is a number that
+happens to fit this corpus. 0.85 keeps 0.06 above the worst observed false
+resolve and 0.02 below the worst measured true one, and that is the whole
+justification: it is not derived, it is placed in the gap that the two
+measurements leave, as far from the closer edge as the data allows.
+
+**It is a refusal band and not a separator, and it costs true answers.**
+0.727 is a *correct* id. Nothing in the numbers above separates right from
+wrong — 0.727 correct sits below 0.738 wrong — so no floor can be the rule
+"reject the false ones". This floor says something weaker and honest: between
+the unmarked baseline and the recovery range there is a band where the decoder
+does not know, and in that band it declines to answer. Every correct id below
+0.85 is lost with the wrong ones, and on the campaign above that is a real
+number of clips, not a corner case.
+
+Three zones follow, and the middle one is new:
+
+| Agreement | CRC | Answer |
+|---|---|---|
+| ≥ 0.85 | passes | the `mark_id` |
+| ≥ 0.85 | fails | no id |
+| < 0.85 | either | **no id** — a mark may be present and its id is not resolvable |
+
+The third row is never a contradiction. A proof declaring a different
+`mark_id` is not contradicted by a decode that did not happen, so a below-floor
+block can no more make a file *tampered* than a failed CRC can
+(`vcap-proof-1.0.md` §8, *Invalidating*). Before this rule those two wrong ids
+would have been read as evidence against the files that carried them.
+
+The floor belongs to **this** layout and travels with it. `photo-bch-v3` gets
+none: BCH(255,131) with t=18 admits a wrong codeword at about 10⁻¹⁰ by the
+code and 0 in 4 329 measured, so there is nothing for a floor to catch, and a
+number invented for it would be a rule with no measurement under it. A future
+repetition layout states its own floor from its own curve.
+
+Vectors: `vectors/_watermark/agreement-floor.json`, which pins the constant and
+the decision for the measured cases above.
+
 ## Strength
 
 `watermark.strength` is an integer in the proof and the embed path takes a float
@@ -123,7 +200,9 @@ decoder has exactly one failure answer:
 
 - `photo-bch-v3`: beyond the correction radius → **no id**. There is no partial
   answer; a corrected block either checks out or does not exist.
-- `video-rep-v1`: CRC mismatch → **no id**, plus the agreement figure.
+- `video-rep-v1`: CRC mismatch, **or agreement below 0.85** → **no id**, plus
+  the agreement figure. One answer for both, because a decode that is not
+  believed and a decode that did not happen license exactly the same claim.
 
 The verifier reports *watermark not recovered* (§8 of the proof format) and
 produces its verdict from the signature alone. The proof format's own rule
@@ -157,9 +236,10 @@ These are design constraints, not caveats:
 Collisions between issued ids are not the only reason the hint is weak. Content
 that was never marked also produces one: measured at about one decode in 289,
 which is the false-pass rate of the CRC-8 above and not a property of any
-model (`watermark-robustness-1.0.md`, *False positives*). That is a robustness
-observation, informative like the document it comes from; it changes nothing in
-this layout, and the rules above already assumed it.
+model (`watermark-robustness-1.0.md`, *False positives*). That observation is
+what *The agreement floor* above is built on: the floor removes the passes that
+land below it and leaves the rest, so a hint that survives the floor is still a
+hint and still a candidate set.
 
 Widening the id would move the problem, not solve it: the channel is what
 limits it to 24 bits, and the proof already carries a 128-bit id. A future model

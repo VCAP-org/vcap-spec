@@ -1088,7 +1088,7 @@ a reader that does not find one never guesses. Three outcomes, all non-red:
 | Outcome | Label |
 |---|---|
 | the payload decodes and matches the proof | *watermark matched* |
-| the layout is known, the payload does not decode | *watermark not recovered* |
+| the layout is known, the payload does not decode — including a decode the layout's own rules refuse | *watermark not recovered* |
 | the layout is not one this verifier implements | *watermark not evaluated* |
 
 *Watermark matched* is a label, not a verdict: the verdict still comes from
@@ -1102,6 +1102,24 @@ partial answer at all — a block code either corrects or does not — and then
 there is nothing to show but the label. Neither outcome weakens a signature:
 §8 already says an absent field is a weaker verdict, not an error, and a
 watermark is not part of what `sig` covers.
+
+**What counts as a decode is the layout's to say, and it is not only the
+checksum.** `video-rep-v1` requires an agreement of at least **0.85** before
+an id may be reported at all (`watermark-layouts-1.0.md`, *The agreement
+floor*): its 8-bit CRC passes by chance about one word in 256, and on a
+campaign of 38 device recordings two clips resolved an id their pixels had
+never carried, at agreement 0.738 and 0.789. Below the floor the only
+supportable statement is *a mark may be present and its id is not resolvable*,
+which is what *watermark not recovered* already means here — the outcome word
+does not change, and a verifier MUST NOT invent a fourth one. What a verifier
+adds beside it is the agreement figure the layout defines, and, in its own
+plain-language line, that a mark may be there and its id did not resolve.
+
+This has teeth in both directions. A verifier that reports a `video-rep-v1`
+id **without** the agreement figure has discarded the only discriminator the
+layout has, so it MUST NOT report *watermark matched* on that evidence; the
+honest outcome is *watermark not evaluated*, evidence this verifier cannot
+read. And a below-floor block is never red, below.
 
 **For a clip, *watermark matched* says how much of it carried the mark.** A
 verifier that decodes several frames and reports one answer MUST report the
@@ -1140,7 +1158,10 @@ different from `sig.pub`; a present segment whose `content_hash` recomputed from
 differs from the signed one (§5); a watermark payload that **decodes** to an id other
 than the one the proof declares (`capture_id` for `photo-bch-v3`,
 `watermark.mark_id` for `video-rep-v1`) — a payload that fails to decode is
-*watermark not recovered*, above, and not this; a segment signature invalid, or the chain broken where the file claims
+*watermark not recovered*, above, and not this, and **a `video-rep-v1` block
+below the layout's agreement floor did not decode**: a decode nobody may report
+is not evidence against the file that carried it, and reading one as forgery
+would turn a re-compressed clip of a genuine capture into an accusation; a segment signature invalid, or the chain broken where the file claims
 contiguity; footer structurally valid with a CRC mismatch (*corrupted proof*,
 distinct from *no proof found*).
 

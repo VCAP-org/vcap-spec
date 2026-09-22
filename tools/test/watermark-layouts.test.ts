@@ -12,8 +12,9 @@ import { createHash } from 'node:crypto'
  * the wrong answer for. So the corpus is checked for internal consistency here:
  * the message must follow from the id, and the id from the capture id.
  */
-const LAYOUTS = join(import.meta.dirname, '..', '..', 'vectors', '_watermark', 'layouts.json')
-const layouts = JSON.parse(readFileSync(LAYOUTS, 'utf8'))
+const WATERMARK = join(import.meta.dirname, '..', '..', 'vectors', '_watermark')
+const layouts = JSON.parse(readFileSync(join(WATERMARK, 'layouts.json'), 'utf8'))
+const floorVectors = JSON.parse(readFileSync(join(WATERMARK, 'agreement-floor.json'), 'utf8'))
 
 const crc8 = (id: number): number => {
   let crc = 0
@@ -53,6 +54,40 @@ describe('video-rep-v1', () => {
     const reserved = (layout.derivation.cases as { sha256: string }[])
       .filter((c) => c.sha256.startsWith('000000'))
     expect(reserved).toHaveLength(1)
+  })
+})
+
+/**
+ * `spec/watermark-layouts-1.0.md` *The agreement floor*, as the one line of
+ * code it is: a `video-rep-v1` decode is an id only when the checksum passes
+ * **and** the copies agreed enough to be believed.
+ *
+ * It lives here rather than in a numbered vector because no verifier in this
+ * repository carries a detector — there are no pixels in the corpus to decode
+ * — so the rule is checked where the rest of the layout's arithmetic is.
+ */
+const FLOOR = 0.85
+const resolvesId = (agreement: number, crcPasses: boolean): boolean => crcPasses && agreement >= FLOOR
+
+describe('video-rep-v1 agreement floor', () => {
+  it('pins the constant the specification states', () => {
+    expect(floorVectors.floor).toBe(FLOOR)
+    expect(floorVectors.layout).toBe('video-rep-v1')
+  })
+
+  for (const c of floorVectors.cases as Array<{ agreement: number, crc_passes: boolean, resolves: boolean, origin: string }>) {
+    it(`${c.agreement} with the CRC ${c.crc_passes ? 'passing' : 'failing'} (${c.origin}): ${c.resolves ? 'an id' : 'no id'}`, () => {
+      expect(resolvesId(c.agreement, c.crc_passes)).toBe(c.resolves)
+    })
+  }
+
+  it('refuses no agreement that any chain was measured to recover at', () => {
+    // The floor's upper bound is the worst measured recovery (0.87, int8 at
+    // crf 36): a floor above it would refuse a chain the curve says works.
+    expect(FLOOR).toBeLessThanOrEqual(0.87)
+    // And its lower bound is the highest wrong id observed on a device (0.789),
+    // which the layout's own 0.80 correction floor clears by only 0.011.
+    expect(FLOOR).toBeGreaterThan(0.80)
   })
 })
 
