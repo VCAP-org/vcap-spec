@@ -28,6 +28,83 @@ have wanted to change it.
 
 ## Unreleased
 
+### **Breaking.** A clip's frame count is not gated by the agreement floor
+
+§8 required the count of sampled frames that "decoded to that id" and said
+nothing about a frame whose own agreement is below the floor. Both of our
+implementations guessed that the floor applies per frame, and the guess is now
+settled the other way: a sampled frame counts when its **own** decode passes
+the layout's checksum and yields the id the clip reported, and its own
+agreement is not tested against 0.85.
+
+**Why.** The floor is a rule about naming an id, and the count names none — the
+id is the aggregate decode's and cleared the floor before anything was counted.
+The floor exists because an 8-bit checksum over a 24-bit id admits one word in
+256 and every value it admits is a plausible `mark_id`; a counted frame is not
+free that way, because it must produce the id the clip already resolved, so a
+chance CRC pass is counted only when it also lands on that one value in 2²⁴.
+Equality against an already-floored id supplies what the floor supplied, and a
+second application costs true counts for nothing.
+
+**What it cost.** On the build a browser ships, the hardest chain that still
+recovers reads 39 flipped bits of 256 from a single frame (agreement 0.848,
+under the floor) and 35 from eight averaged (0.863, reportable) — `vcap-ml`,
+`reports/frames-to-recover.md`. Under a per-frame floor a clip marked
+throughout reported **0 of 8**, while one genuine frame spliced into foreign
+footage reports **1 of 8** at the agreement of a clean recovery. The count
+ranked the marked recording below the splice, which is the one comparison it
+exists to make, and the count is the only thing that makes that comparison at
+all.
+
+**Not a weakening of the floor.** No below-floor decode names an id to a
+reader: a below-floor frame can only agree with an id the aggregate already
+resolved, never propose one, and a clip whose own decode is refused reports no
+id and no count. A sampled frame that decodes to some *other* id counts as
+carrying nothing and is not evidence against the file — §8's invalidating row
+reads the clip's decode and never one frame's, unchanged. `photo-bch-v3` is
+untouched.
+
+**Breaking**: a wholly marked clip on a hard chain now reports *8 of 8* where
+both implementations reported *0 of 8*. Recorded as breaking under the decision
+of 22 September 2026 above; no proof field, schema, signature input, bit layout
+or numbered vector moves.
+
+### **Breaking.** A clip's reported agreement is the aggregate decode's own
+
+The second thing §8 did not decide, and the one where our two implementations
+printed different numbers for the same clip. The figure shown beside a
+`video-rep-v1` id is the one produced by the decode that produced the id — the
+aggregate over the sampled frames. A verifier MUST NOT substitute a mean over
+the frames that carried the id, or over any other selected subset.
+
+**Why.** A reader is shown four things at once — the id, the count, the figure
+and the outcome word — and only the aggregate's own figure keeps them
+consistent. It is the number the floor was applied to, so it is the reason the
+id may be named; and it is the population the floor was placed in, every figure
+behind that constant being one clip's (`watermark-robustness-1.0.md`, *A device
+campaign*). A mean over the carrying frames answers the question the count
+already answers, and answers it backwards: conditioned on its own selection, it
+rises as fewer frames qualify, so a clip where one frame of eight carried the
+mark cleanly would show a *higher* figure than one where all eight carried it
+through heavy re-compression. Falling back to the aggregate when no frame
+carried the id does not repair that — it makes one field mean two things a
+reader cannot tell apart.
+
+**Breaking** for the implementation that substituted: the platform detector
+reports a different number for a clip whose carrying frames are not the clip.
+No safety property moves — neither figure could ever bypass the floor — and no
+proof field, schema, bit layout or numbered vector moves.
+
+**Vectors for both entries**: `vectors/_watermark/clip-reading.json`, which
+pins the id, the count and the figure for the six cases where the aggregate
+decode and the per-frame decodes disagree — the wholly marked clip whose every
+frame is under the floor, the splice, a clip whose carrying frames average far
+above it, a clip that resolves while no frame resolves alone, a frame carrying
+another capture's id, and a clip whose own decode the floor refuses. The
+existing `agreement-floor.json` does not cover any of them: it pins one decode
+at a time, and both questions are about a clip read two ways. Corpus 1.2.0 →
+**1.3.0** (a fixture added; the 85 numbered vectors are byte-identical).
+
 ### **Breaking.** `video-rep-v1` reports no id below 0.85 agreement
 
 A `video-rep-v1` decoder MUST NOT report a `mark_id` at an agreement below

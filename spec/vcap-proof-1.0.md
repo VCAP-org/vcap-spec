@@ -1143,6 +1143,33 @@ rather than inventing one; the recovery is still *watermark matched*, and what
 it means is unchanged — **a frame of that capture appears in this file**, never
 that the file is that capture.
 
+**Which sampled frames count.** A frame counts when its own decode passes the
+layout's checksum and yields the id the clip reported. For `video-rep-v1` the
+agreement floor does **not** gate that test: the floor governs an id a verifier
+may name, and the count names none — equality against an id the floor already
+licensed is the discriminator here, and a second application of the floor would
+report a wholly marked clip as *0 of 8* on the build a browser ships while a
+single spliced frame reports *1 of 8* (`watermark-layouts-1.0.md`, *The
+agreement floor*). A frame that decodes to nothing and a frame that decodes to
+another id both count as carrying nothing, and neither is evidence against the
+file: *Invalidating* below reads the clip's decode, never one sampled frame's.
+
+**Which agreement is reported.** The figure shown beside a `video-rep-v1` id is
+the one produced by the decode that produced the id — the aggregate over the
+sampled frames. A verifier MUST NOT substitute a figure computed over the
+frames that carried the id, or over any other selected subset. A reader is
+shown four things at once — the id, the count, the figure, the outcome word —
+and only the aggregate's own figure keeps them consistent: it is the number the
+floor was applied to, so it is the reason the id may be named at all, and it is
+the population the floor was placed in, every figure behind that constant being
+one clip's (`watermark-robustness-1.0.md`, *A device campaign*). A mean over
+the frames that carried the id answers the question the count already answers,
+and answers it backwards: conditioned on its own selection, it *rises* as fewer
+frames qualify, so a clip where one frame of eight carried the mark cleanly
+would show a higher figure than one where all eight carried it through heavy
+re-compression. Substituting the aggregate when no frame carried the id does
+not repair that; it makes one field mean two things a reader cannot tell apart.
+
 **A mark id is not an identifier.** For `video-rep-v1` the payload is
 `watermark.mark_id`, a 24-bit value the proof binds to the 128-bit
 `capture_id`; it is short because a re-encoded clip cannot carry more, not
