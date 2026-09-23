@@ -12,7 +12,7 @@ import { type Verdict, verifyFile } from './verify.js'
 import { validateProof } from './schema.js'
 
 /**
- * The edge-case generator (C19, second half): frontier vectors produced by
+ * The edge-case generator (second half of the corpus tooling): frontier vectors produced by
  * sweeping a boundary systematically instead of hand-picking one example at a
  * time — every offset a trailer can be cut at, every byte its magic can be
  * flipped in, every required field a writer could forget, the JCS corners
@@ -20,7 +20,7 @@ import { validateProof } from './schema.js'
  * `vectors/edge-cases/` only, a sibling of the numbered corpus `generate.ts`
  * owns: nothing here renumbers, deletes or reinterprets vectors/NN-*, and the
  * two-digit prefix convention `vcap-verifier`'s snapshot regex and
- * `vcap-sdk-android`'s digit-first filter rely on is left alone.
+ * the Android SDK's digit-first filter rely on is left alone.
  *
  * Deterministic: every case here is an exhaustive sweep over a small,
  * enumerated domain (byte offsets, field names, version numbers), so there is
@@ -36,7 +36,7 @@ import { validateProof } from './schema.js'
  * its own file comment and `vectors/README.md`, "Not here yet"), so there is
  * no decoder in this repository to hand a marred payload to — the off-by-one
  * a bit-error-count budget invites belongs to whichever component owns the
- * decoder (`vcap-ml` / the SDK cores), not to the proof-format layer this
+ * decoder (the model pipeline / the SDK cores), not to the proof-format layer this
  * tool generates for. Left out rather than faked; see the branch's report.
  */
 const ROOT = join(import.meta.dirname, '..', '..')

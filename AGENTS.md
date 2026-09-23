@@ -86,7 +86,7 @@ These hold for every line of code in every repository:
 identifiers: package names, bundle ids, trailer magic, proof version string,
 database schemas, log prefixes. The product brand is provisional and must never
 appear in anything expensive to rename — it lives only in UI strings (single
-localization file) and store metadata. Full table in the workspace `AGENT.md`.
+localization file) and store metadata.
 
 ## Definition of done
 
@@ -95,5 +95,4 @@ person needs it. Not "works on my branch".
 
 ## Language
 
-Code, comments, README and commit messages in English. Project documentation in
-`Doc/` is in Italian.
+Code, comments, README and commit messages in English.

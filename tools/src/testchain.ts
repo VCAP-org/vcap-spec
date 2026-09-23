@@ -19,7 +19,7 @@ import { KEY_DESCRIPTION_OID, type Level } from './attestation.js'
  * vectors therefore prove is the **logic** of §7 — which level a chain
  * establishes, at which instant, and what a revoked certificate does to it —
  * and not that an implementation can walk a real Google chain. That is proved
- * elsewhere, by the real device chains in `vcap-verifier` and `vcap-platform`.
+ * elsewhere, by the real device chains in `vcap-verifier` and the platform.
  */
 const ALG: webcrypto.EcKeyGenParams & webcrypto.EcdsaParams = { name: 'ECDSA', namedCurve: 'P-256', hash: 'SHA-256' }
 

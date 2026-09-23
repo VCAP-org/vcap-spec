@@ -1,6 +1,6 @@
 # Cryptographic review of the vcap/1.0 draft
 
-**Step 2 of the work order** (`Doc/06-fase1-avvio.md` §3). Reviews
+**Step 2 of the work order.** Reviews
 `spec/vcap-proof-1.0.md` as of 8 September 2026. Question asked: *what is
 signed, what is not, and what can an attacker change without invalidating a
 signature?*
@@ -189,7 +189,7 @@ better: **store `r ‖ s` as 64 bytes (IEEE P1363)**.
 - DER has encoding variants (leading zero bytes, non-minimal lengths) that
   lenient parsers accept; P1363 has one form. With F3 the chain no longer
   depends on it, but "one way to write it" is still the right property.
-- JWS ES256 and COSE ES256 both use P1363; the C2PA mapping (C14) will want it.
+- JWS ES256 and COSE ES256 both use P1363; the C2PA mapping will want it.
 - Android and iOS return DER; the conversion happens once, at seal time, in
   code we own. WebCrypto verifies P1363 natively; Node accepts `dsaEncoding:
   'ieee-p1363'`.
@@ -366,7 +366,7 @@ or a comment in §6 — `pseudonymous` hides the operator, not the device.
 2. **F4** — audio on clips: **option 2**, audio frames in the segment hash, by
    DTS in the GOP's half-open interval.
 3. **F10** — `integrity` **leaves the core** and becomes a registry-signed
-   attachment over `core_hash ‖ verdict`. C6 signs one more statement with the
+   attachment over `core_hash ‖ verdict`. The log signs one more statement with the
    tree-head key; the sync path returns it to the device.
 4. **F11** — **CRC-32.**
 5. **F6** — low-`s`: **writers MUST emit, verifiers MUST accept both.**
@@ -376,7 +376,7 @@ All amendments are in `spec/vcap-proof-1.0.md`, same day. Step 3
 (implementability review) is next; step 4 (canonicalization rule) now has the
 core defined and only needs the JCS vectors.
 
-## Addendum — 8 September 2026, from building the log (C6)
+## Addendum — 8 September 2026, from building the log
 
 **F17 · SHOULD → done.** The draft's `registry` attachment (`log_id`,
 `leaf_index`, `sth_ref`) was a reference, not evidence: an offline verifier
@@ -386,7 +386,7 @@ the signed tree head inline, with the checks a verifier MUST run and the
 "registered after the declared capture" row in §7. Revocation remains an
 online check, said explicitly.
 
-**F18 · SHOULD → done (from building C7).** The `anchor` attachment listed
+**F18 · SHOULD → done (found during implementation).** The `anchor` attachment listed
 `chain`, `tx`, `block`, `merkle_path`: a path without the leaf's index and the
 tree size cannot be verified (RFC 6962 needs both), and without the root and
 the contract's anchor id there is nothing to compare against on-chain. All

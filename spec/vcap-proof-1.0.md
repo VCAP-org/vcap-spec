@@ -4,7 +4,7 @@
 contract is not yet binding.** There is no `v1.0` tag and no public release:
 both were removed on 22 September 2026, because nothing advertises a version
 that does not exist yet. Written 8 September 2026 as step 1 of
-the work order in `Doc/06-fase1-avvio.md` §3, amended the same day after the
+the work order, amended the same day after the
 cryptographic review (step 2, `reviews/01-crypto-review-draft-1.0.md`) and on
 9 September after the implementability review on real hardware (step 3,
 `reviews/implementability-android.md`).
@@ -144,7 +144,7 @@ by seeking from the end, never by scanning.
   are ignored, not fatal.
 - **Sidecar.** The same JSON, byte-identical, in `<filename>.vcap` next to the
   file: §3.1.
-- **The magic carries no brand** (decision P8): `VCAP` is the codename, and
+- **The magic carries no brand**: `VCAP` is the codename, and
   sealed files are immutable while the product name is provisional.
 
 ### 3.1 The sidecar
@@ -790,7 +790,7 @@ containing a schema-valid value remain readable under the same rules.
   attachment for the same result. Something whose absence and whose invalidity
   are the same answer cannot be load-bearing, which is the reason this
   attachment has no row in §7's table.
-- **`location_corroboration`** *(optional, added after v1.0; D12)* — an
+- **`location_corroboration`** *(optional, added after v1.0)* — an
   operator-side check of the declared position, relayed and countersigned by
   the registry. The registry, after the capture and with the user's consent
   handled by the operator, calls a CAMARA API about the line in the capturing
@@ -1289,25 +1289,25 @@ says.
       video — confirmed against C2PA 2.4 (`c2pa-interop-1.0.md` §3, vectors
       68 and 73): `c2pa.hash.data` covers to end of file, `c2pa.hash.bmff.v3`
       needs `/free` excluded; the on-device check with a real claim generator
-      waits for a signing certificate (R4)
+      waits for a signing certificate
 - [ ] `REVIEW (BE)` a C2PA update manifest appended to a sealed ISO-BMFF file
       takes the position the footer needs (vectors 69–70). Forbidden for
       writers; whether a future minor lets a reader step over a trailing C2PA
       `uuid` box before seeking the footer is open, and would be a new reading
       rule, not a change to this one
 - [ ] `REVIEW (mobile)` per-segment signing cost in StrongBox on a long clip
-- [~] `REVIEW (mobile)` NAL byte definition and audio DTS rule reproducible on both encoders — the DTS clock is now named (M8) and the timeline with it (edit lists, §5); H.264 and HEVC on Android are reproduced byte for byte by a second implementation written from this text (`tools/src/container.ts`, vectors 36–37), which is what "reproducible" was asking; iOS pending (S1)
+- [~] `REVIEW (mobile)` NAL byte definition and audio DTS rule reproducible on both encoders — the DTS clock is now named (M8) and the timeline with it (edit lists, §5); H.264 and HEVC on Android are reproduced byte for byte by a second implementation written from this text (`tools/src/container.ts`, vectors 36–37), which is what "reproducible" was asking; iOS pending (the iOS capture spike)
 - [x] `REVIEW (mobile)` hashing two interleaved tracks during encoding — resolved: 8 KB and 0.5 ms per segment on a TEE device (M8)
 - [ ] `REVIEW (mobile)` metadata stripping before sealing for pseudonymous captures
 - [ ] `REVIEW (LEAD)` the `authenticated` position level (§7.1) is reserved
       and unreachable: the first `location.evidence[].kind` that reaches it
       (Galileo OSNMA attested by the device) waits for a smartphone chipset
-      that exposes OSNMA — none does as of September 2026 (S4). Arrives as a
+      that exposes OSNMA — none does as of September 2026. Arrives as a
       new kind in an extensible field, with its vectors; no change to the core keys
 - [ ] `REVIEW (BE)` the registry's mapping from CAMARA raw results (`TRUE`,
       `FALSE`, `PARTIAL` with `matchRate`, `UNKNOWN`) and from
       number-verification plus SIM-swap onto §6.2's `result` — a registry
-      rule, to be published with the platform (C15, D12), not a format change
+      rule, to be published with the platform, not a format change
 - [x] `REVIEW (ML)` `watermark.layout` values and what the detector reports when
       the layout is declared but the payload does not decode — resolved in §7:
       *origin traced* / *watermark not recovered* / *watermark not evaluated*,
@@ -1337,10 +1337,10 @@ says.
 - [~] `REVIEW (mobile)` container-level video vectors: real MP4/MOV from each
       encoder, with `content_hash` recomputed from the NAL units and audio
       frames — Android H.264 and HEVC done (vectors 36–39, `kind: container`);
-      iOS after S1, and the MOV branch with it
+      iOS after the iOS capture spike, and the MOV branch with it
 - [x] Whether a verifier that cannot recompute segment hashes must say so in
       its labels: **yes** — *segment content not recomputed* (§5, §7), decided
-      10 September 2026 (D10). Recomputation stays optional, declaring it does
+      10 September 2026. Recomputation stays optional, declaring it does
       not
 - [x] Vectors for the proof level (§7): attestation chains (41–45), registry
       entries and the online revocation answer (49–54) — with test material in

@@ -163,7 +163,7 @@ format now permits.
 for as long as every position's majority of 8 copies holds, so the 0.85 floor
 caps the flip count directly: 38 flips is agreement 0.8516 and reportable, 39
 is 0.8477 and must be refused however cleanly the CRC checks out. Both ends are
-measured rather than asserted — the layout self-test in `vcap-ml` decodes the
+measured rather than asserted — the layout self-test in our model pipeline decodes the
 pinned `mark_id` under 512 random flip patterns at each end on every run, and
 39 flips produced no reportable id in any of them.
 
@@ -420,11 +420,11 @@ touch.
 
 ### A device campaign, where they do touch
 
-Thirty-eight recordings of 8 s on one phone (moto g75 5G, `vcap-sdk-android`
-#46 against `vcap-ml` #14), four named scenes, back and front camera, 720p30
+Thirty-eight recordings of 8 s on one phone (moto g75 5G, the Android SDK
+against the model pipeline), four named scenes, back and front camera, 720p30
 and 1080p30, each pulled off the device and decoded here with the shipped
-detector. The recordings and the full tables are in `vcap-ml`
-(`docs/video-margin.md`); what matters to a verifier is this:
+detector. The recordings and the full tables are in the model
+pipeline, which is not public; what matters to a verifier is this:
 
 | | Agreement |
 |---|---|

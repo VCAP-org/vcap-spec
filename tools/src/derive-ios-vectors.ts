@@ -1,6 +1,6 @@
 /**
  * Builds the three iOS vectors from what an iPhone actually produced, during
- * the S1 spike (`vcap-sdk-ios`, iPhone 11 Pro, iOS 18.6.2).
+ * the iOS capture spike (iPhone 11 Pro, iOS 18.6.2).
  *
  *   npx tsx src/derive-ios-vectors.ts <dir with the spike's device artifacts>
  *
@@ -45,7 +45,9 @@ const VECTORS = join(import.meta.dirname, '..', '..', 'vectors')
 const source = process.argv[2]
 if (!source) throw new Error("usage: derive-ios-vectors.ts <dir with the spike's device artifacts>")
 
-/** One phone for all three vectors; only the day differs. */
+/** One phone for all three vectors; only the day differs. The wording is
+ * byte-for-byte what the published NOTES.md files carry, so it stays as it
+ * was written: a vector's bytes never change. */
 const device = (day: string): string =>
   `An iPhone 11 Pro (\`iPhone12,3\`, iOS 18.6.2) during the S1 spike, ${day} 2026` +
   ' (`vcap-sdk-ios`, `docs/s1-videotoolbox-spike.md`).'

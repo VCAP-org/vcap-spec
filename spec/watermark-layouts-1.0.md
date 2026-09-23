@@ -9,7 +9,7 @@ name.
 Status: **draft**, alongside `vcap/1.0`. What is normative here is the bit layout
 and the decoder's failure answer. What is not here, and stays out on purpose,
 is the model: the weights, the exported graphs and their digests live in
-`vcap-ml`, which is not public. A layout is a wire contract and can be
+our model pipeline, which is not public. A layout is a wire contract and can be
 implemented against; a model is an artifact and is fetched by digest.
 
 `vectors/_watermark/layouts.json` pins both layouts with worked cases — a
@@ -145,7 +145,7 @@ are known, and they overlap:
 | the code's correction radius — what it recovers, not what may be reported | ≈ 0.80 |
 
 The device figures are a campaign of 38 recordings on one phone, four scenes,
-recorded in `vcap-ml` and summarised in `watermark-robustness-1.0.md`,
+recorded in the model pipeline and summarised in `watermark-robustness-1.0.md`,
 *A device campaign*. They are what forced this rule: two of those recordings
 resolved an id the pixels were never given, at 0.738 and at 0.789.
 
@@ -212,8 +212,8 @@ the floor a second time costs true counts and buys nothing.
 
 It costs them measurably. On the build a browser ships, the hardest chain that
 still recovers reads **39** flipped bits of 256 from a single frame (agreement
-0.848, under the floor) and **35** from eight averaged (0.863, reportable) —
-`vcap-ml`, `reports/frames-to-recover.md`. Under a per-frame floor a wholly
+0.848, under the floor) and **35** from eight averaged (0.863, reportable),
+measured in the model pipeline, which is not public. Under a per-frame floor a wholly
 marked clip of that chain reports **0 of 8**, while one genuine frame spliced
 into foreign footage reports **1 of 8** at the agreement of a clean recovery.
 The count would rank the marked recording *below* the splice, which is the one

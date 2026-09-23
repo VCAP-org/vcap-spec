@@ -95,8 +95,8 @@ second application costs true counts for nothing.
 
 **What it cost.** On the build a browser ships, the hardest chain that still
 recovers reads 39 flipped bits of 256 from a single frame (agreement 0.848,
-under the floor) and 35 from eight averaged (0.863, reportable) — `vcap-ml`,
-`reports/frames-to-recover.md`. Under a per-frame floor a clip marked
+under the floor) and 35 from eight averaged (0.863, reportable), measured in
+our model pipeline, which is not public. Under a per-frame floor a clip marked
 throughout reported **0 of 8**, while one genuine frame spliced into foreign
 footage reports **1 of 8** at the agreement of a clean recovery. The count
 ranked the marked recording below the splice, which is the one comparison it
@@ -217,8 +217,7 @@ refused. Five points of bit error rate separated the two, and the larger one
 was a promise the format does not keep.
 
 Both documents now say which is which. `watermark-robustness-1.0.md` gains
-*What may be reported* with the measurement and its method (`vcap-ml` #17:
-both ends asserted over 512 random flip patterns per run, the curve swept over
+*What may be reported* with the measurement and its method (both ends asserted over 512 random flip patterns per run, the curve swept over
 20 000 per flip count), and `watermark-layouts-1.0.md` states the budget beside
 the floor that causes it.
 
@@ -328,7 +327,7 @@ the rule the text now carries is the one the corpus was generated under.
 **Still owed: a vector.** `mp4-container-nal-trailing-zeros` — a sealed
 recording whose slices carry cabac padding — is the vector this sentence needs,
 and adding it is a corpus minor bump (`VERSION`, `MANIFEST.json`) plus the
-pinned counts in `vcap-verifier` and `vcap-sdk-android`. Written down here
+pinned counts in `vcap-verifier` and the Android SDK. Written down here
 rather than done quietly, because a normative rule with no vector is a comment.
 
 ### Erratum: the duplicate key frame in vector 85 is ours, not VideoToolbox's
@@ -351,8 +350,8 @@ to know a keyframe was just forced out of band, so it fires its own keyframe
 one frame later, on schedule. Over 240 s this happens 229 times out of ~236
 expected boundaries — 465 segments where a clean one-forced-keyframe-per-GOP
 writer would produce ~236 — not five times in eleven segments, which is what a
-30-second clip happens to show. Measured in
-`vcap-sdk-ios`, `docs/gop-boundary-statistics.md` (13 September 2026 section).
+30-second clip happens to show. Measured in the iOS capture spike on
+13 September 2026, an internal measurement.
 
 The vector is not weaker for it. A one-frame segment born from a
 misconfigured writer is still a segment a reader has to parse, and this file
@@ -462,7 +461,7 @@ manifest are untouched. Documentation only, and nothing normative moves.
   *`mark_id` is a lookup hint* pointing at that number. The layout, its bit
   layout and its failure answer are unchanged.
 
-### A checkable conformance claim, and the watermark's published curve (C10)
+### A checkable conformance claim, and the watermark's published curve
 
 No spec or vector change: `vectors/NN-*` and its expected verdicts are
 untouched.
@@ -490,7 +489,7 @@ untouched.
   `watermark-layouts-1.0.md` versioning rule 6, which had no published curve
   behind it.
 
-### Corpus version, manifest and edge-case generator (C19, tooling only)
+### Corpus version, manifest and edge-case generator (tooling only)
 
 No spec or vector change: `vectors/NN-*` and its expected verdicts are
 untouched. Two additions to the tooling that reads `vectors/`:
@@ -518,7 +517,7 @@ untouched. Two additions to the tooling that reads `vectors/`:
   and nothing outside this repository reads it. Does not cover the watermark's
   BCH(255,131) correction radius — no decoder exists anywhere in this
   repository to test it against; that boundary belongs to whichever component
-  owns the decoder (`vcap-ml` or an SDK core), not to this proof-format layer.
+  owns the decoder (the model pipeline or an SDK core), not to this proof-format layer.
 
 ### Editorial: one label, one spelling (§8, watermark layouts document)
 
@@ -557,8 +556,8 @@ documentation-only, non-breaking fix.
   Signed by the device means the device says so: the OS is the only thing
   between the app and any coordinates it likes, which is why the level is
   called *declared*.
-- **§6.2 `location_corroboration`, a new optional attachment (D12, spike
-  S4).** The registry relays an operator-side CAMARA check of the declared
+- **§6.2 `location_corroboration`, a new optional attachment.** The
+  registry relays an operator-side CAMARA check of the declared
   position — `method` (`camara-location-verification`,
   `camara-number-verification`, `camara-sim-swap`; extensible), `result`
   (`match`, `no-match`, `unknown`; **not** extensible, it decides the level),
@@ -637,8 +636,8 @@ documentation-only, non-breaking fix.
   `c2pa.hash.boxes` / `c2pa.hash.bmff.v3`, the watermark against
   `c2pa.soft-binding`, whose algorithm list we are not on); and a table of
   what survives each transformation with the §8 verdict, with and without a
-  sidecar. Cited to C2PA 2.4 by clause. We do not sign C2PA claims (R4), and
-  the document says so first.
+  sidecar. Cited to C2PA 2.4 by clause. We do not sign C2PA claims (no signing
+  credential exists yet), and the document says so first.
 - **Co-existence, analysed against the C2PA text.** JPEG: §4.1's exclusion
   is symmetric — the proof is byte-identical whether the manifest was added
   after sealing (02) or present at it (**68**) — and the C2PA hard binding
@@ -786,8 +785,8 @@ documentation-only, non-breaking fix.
 
 ### The first iOS captures in the corpus (vectors 47-48)
 
-- No spec text changes. Two vectors from an iPhone 11 Pro (S1 spike,
-  `vcap-sdk-ios`), and the first evidence in this repository that anything but
+- No spec text changes. Two vectors from an iPhone 11 Pro (the iOS
+  capture spike), and the first evidence in this repository that anything but
   Android can produce or be read at either layer.
 - **Vector 47**, a 1600×1200 HEIC the device sealed itself: the corpus's first
   `platform: "ios"`, its first `secure_hw: "secureEnclave"`, and its first
@@ -811,7 +810,7 @@ documentation-only, non-breaking fix.
 - `tools/src/derive-ios-vectors.ts` rebuilds both from the spike's artifacts,
   the way `derive-container-vectors.ts` does for 36-39.
 
-### BREAKING — `media.w` and `media.h` are required (§8, §9, D9)
+### BREAKING — `media.w` and `media.h` are required (§8, §9)
 
 - §8 requires the pixel dimensions of every proof. They are not evidence —
   nothing is proven by them — but every writer holds them at capture, and a
@@ -826,7 +825,7 @@ documentation-only, non-breaking fix.
   which is exactly what §9 forbids once the format is published. It is taken now
   because now is the only time it is free.
 
-### BREAKING — `segments[].range` is deprecated (§5, D9)
+### BREAKING — `segments[].range` is deprecated (§5)
 
 - Writers MUST NOT emit it; verifiers MUST ignore it where an older file carries
   it. It was unsigned, a verifier was already forbidden to conclude anything
@@ -838,7 +837,7 @@ documentation-only, non-breaking fix.
   per-segment message, so every already-sealed file verifies unchanged, and no
   vector carried it.
 
-### A verifier that does not recompute segment content says so (§5, §7, D10)
+### A verifier that does not recompute segment content says so (§5, §7)
 
 - Recomputing the §5 `content_hash` values from the container stays **optional**
   — a sidecar without a demuxable container, a light library — but a verifier
@@ -903,7 +902,7 @@ documentation-only, non-breaking fix.
   lowercase-hyphen, and §9 says a new value in an extensible field uses one of
   the two spellings the format already uses. The narrow pattern was the cause of
   the fix above, and it was still armed on `location.evidence[].kind` and
-  `timestamp.tsa_issuer`, whose values arrive with C15 and D2 — the same
+  `timestamp.tsa_issuer`, whose values are not published yet — the same
   incident, later, on another field. A pattern there is a gate against free
   text, not a style rule.
 - Tooling: the generator signs with **RFC 6979** (deterministic `k`) and the two

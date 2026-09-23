@@ -3,12 +3,12 @@ import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from '
 import { join, relative } from 'node:path'
 
 /**
- * The corpus manifest (C19): a byte-exact inventory of `vectors/`, versioned
+ * The corpus manifest: a byte-exact inventory of `vectors/`, versioned
  * independently of `vcap/1.0` — the format version says what a proof looks
  * like, the corpus version says which vectors an implementation checked
  * itself against. A third party can now name the corpus it ran, and a
  * consumer (this repository's own tools, or `vcap-verifier` /
- * `vcap-sdk-android`, which read `vectors/` directly) can check it holds
+ * the Android SDK, which read `vectors/` directly) can check it holds
  * exactly those bytes without diffing ninety directories by hand.
  *
  * Additive only, like the format it tests (`AGENTS.md`): a vector's hash

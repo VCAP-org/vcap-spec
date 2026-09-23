@@ -23,7 +23,7 @@ We do **not** sign C2PA claims today. A C2PA claim signature needs an X.509
 credential meeting the C2PA certificate profile (14.5.1 *Certificate Profiles*),
 issued to a legal entity and present on a trust list (14.4.1 *C2PA Signers*)
 before a validator reports *Trusted* (14.3.6 *Trusted Manifest*). No legal
-entity exists (decision R4, `Doc/05-decisioni.md`), so no manifest signed by
+entity exists, so no manifest signed by
 us exists either. Everything in §3 is therefore about a manifest **somebody
 else** writes on a sealed file — an editor, a platform, a camera pipeline that
 runs both — and about the day we write one.
@@ -76,7 +76,7 @@ knows nothing of vcap carries it intact and a vcap verifier finds it whole.
 
 - **Label**: `com.gregoriogalante.vcap.proof`. An entity namespace is the
   entity's Internet domain in reverse (6.2.1 *Namespacing*) — ours is
-  `vcap.gregoriogalante.com`, decision D1b — followed by the label components
+  `vcap.gregoriogalante.com` — followed by the label components
   (6.2.2 *Label Naming*). The codename, never the brand: a label in a signed
   manifest is as permanent as trailer magic. No version suffix: an unsuffixed
   label is version 1 (6.2.2), a compatible change adds fields without
@@ -125,7 +125,7 @@ assertion names an algorithm in `alg`, which "should" be an entry in the
 `c2pa.watermarked.bound` action requires one (18.15.5 *Watermarking*).
 
 Our algorithm is not on that list. Registration is a C2PA process and belongs
-to the deferred C2PA work (`Doc/01-piattaforma-build-spec.md`, C14). Until
+to the deferred C2PA work. Until
 then the `alg` value would be an entity-namespaced string — for example
 `com.gregoriogalante.vcap.photo-bch-v3`, one per layout as
 `watermark-layouts-1.0.md` numbers them — which a C2PA validator cannot
@@ -265,7 +265,7 @@ travelled with what it binds.
 
 ### 3.4 When we sign C2PA
 
-The day a signing credential exists (R4), the pipeline is fixed by the above:
+The day a signing credential exists, the pipeline is fixed by the above:
 seal, then write the manifest with the proof as `com.gregoriogalante.vcap.proof`,
 a `c2pa.created` action with a digital-capture `digitalSourceType`, a
 `c2pa.soft-binding` when the algorithm is registered, and the hard binding
@@ -378,7 +378,7 @@ Reading the table:
 
 - Registration of the watermark algorithm on the C2PA Soft Binding Algorithm
   List (18.10.4) — a C2PA process, deferred with the rest of the C2PA track.
-- A C2PA signing credential (R4). The custom assertion label,
+- A C2PA signing credential. The custom assertion label,
   `com.gregoriogalante.vcap.proof`, and the pipeline order of §3.4 are fixed
   here so that the day does not reopen them.
 - A reader rule for a trailing C2PA update box on a sealed BMFF file
