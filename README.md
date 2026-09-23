@@ -47,17 +47,6 @@ tools/     reference tooling (Node 22, TypeScript): JCS, trailer, canonical byte
   `vcap/1.0`, sidecar extension is `.vcap`. Sealed files are immutable; the brand
   is provisional.
 
-## Project documentation
-
-This repository is code only. Plan, specification, decisions and market context
-live in the project workspace, outside this repo:
-
-- `Doc/01-piattaforma-build-spec.md` — components, epics, estimates, sequence
-- `Doc/05-decisioni.md` — decision log (read before proposing an architectural change)
-- `Doc/06-fase1-avvio.md` — phase 1 work order
-- `AGENT.md` — workspace rules, naming conventions, product invariants
-- `CHECKLIST.md` — the single work list; tick your line in the same commit
-
 ## Product invariants
 
 These hold for every line of code in every repository:
@@ -80,7 +69,7 @@ These hold for every line of code in every repository:
 identifiers: package names, bundle ids, trailer magic, proof version string,
 database schemas, log prefixes. The product brand is provisional and must never
 appear in anything expensive to rename — it lives only in UI strings (single
-localization file) and store metadata. Full table in the workspace `AGENT.md`.
+localization file) and store metadata.
 
 ## Definition of done
 
@@ -89,8 +78,7 @@ person needs it. Not "works on my branch".
 
 ## Language
 
-Code, comments, README and commit messages in English. Project documentation in
-`Doc/` is in Italian.
+Code, comments, README and commit messages in English.
 
 ## License
 
@@ -98,7 +86,7 @@ MIT, for everything in this repository: the specification text, the threat
 model, the schema, the vectors and the tools (`LICENSE`). A specification is
 worth what it can be implemented into, and the conformance vectors are meant to
 live inside other people's test suites. The copyright holder is "the vcap
-authors" until decision D1 names the legal entity.
+authors" until a legal entity is named.
 
 
 

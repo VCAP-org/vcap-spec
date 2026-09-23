@@ -101,7 +101,7 @@ real one, and 47 and 85 are the proofs here made by a Secure Enclave — 85 is
 the only one where a Secure Enclave signed a **segment chain** and not just a
 core. In 48 the **container** is the device's and every `content_hash` is
 recomputed from it, but the chain over them is synthesized with the test key —
-the S1 spike inserted vcap SEIs and had not yet sealed a video, so at the time
+the iOS capture spike inserted vcap SEIs and had not yet sealed a video, so at the time
 there was no iOS video signature to carry. 85 is that file, two days later:
 same phone, `AVAssetWriter` again, and the chain its own.
 
@@ -240,4 +240,4 @@ corroboration of a `location` with no coordinates).
 - **A JPEG carrying a C2PA manifest with a real claim signature** next to a
   vcap trailer, validated by a C2PA validator as well as by ours. Both halves
   of `spec/c2pa-interop-1.0.md` §3 are argued from the C2PA text; the C2PA
-  half is not executed here because no C2PA signing credential exists (R4).
+  half is not executed here because no C2PA signing credential exists.

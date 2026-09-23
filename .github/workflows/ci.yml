@@ -19,7 +19,7 @@ jobs:
       - run: npm test
       # Every vector's proof.json against the schema, and every expected.json against its own.
       - run: npm run validate
-      # The committed corpus manifest must match vectors/ exactly (C19).
+      # The committed corpus manifest must match vectors/ exactly.
       - run: npm run manifest:check
       # The published conformance claim, re-earned: it names the corpus version
       # and the manifest hash, and it exits 1 if the run covered fewer vectors

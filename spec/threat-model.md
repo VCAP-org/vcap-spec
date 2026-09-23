@@ -1,6 +1,6 @@
 # vcap threat model
 
-**Status: DRAFT for review** — written 8 September 2026 as the C18 deliverable
+**Status: DRAFT for review** — written 8 September 2026 as the deliverable
 "public threat model"; the technical lead owns it, the backend reviews it. It
 is public on purpose: a verifier's expert who cannot read what we defend
 against, and what we do not, should not trust our green.
@@ -120,7 +120,7 @@ Boundaries, each enforced by code and tested:
 | Threat | What the attacker does | Mitigation | Residual |
 |---|---|---|---|
 | Software key posing as hardware | generates a key outside the TEE, claims StrongBox | attestation chain to Google/Apple root; `attestationSecurityLevel` and `keyMintSecurityLevel`, the weaker; software → `none` | none |
-| Relayed attestation | forwards a genuine device's attestation to register an attacker session (Quarkslab 2026) | single-use challenge issued by us, consumed atomically before any check; proof of possession over `"vcap/1.0/pop" ‖ challenge ‖ channel_binding` (Android) / nonce in the App Attest certificate and assertions (iOS); short RKP certificate validity checked; channel binding when the control plane provides one | **medium** until spike S3 confirms against Frida on a rooted device; channel binding without a TLS exporter is weaker and the verdict says so |
+| Relayed attestation | forwards a genuine device's attestation to register an attacker session (Quarkslab 2026) | single-use challenge issued by us, consumed atomically before any check; proof of possession over `"vcap/1.0/pop" ‖ challenge ‖ channel_binding` (Android) / nonce in the App Attest certificate and assertions (iOS); short RKP certificate validity checked; channel binding when the control plane provides one | **medium** until a spike confirms against Frida on a rooted device; channel binding without a TLS exporter is weaker and the verdict says so |
 | Key extraction | reads the private key out of the device | secure hardware; not our control | accepted: the platform's promise, not ours |
 | Compromised app | a modified build of our app, or another app, uses the key | `attestationApplicationId` (package + signing digest) / App ID, per tenant; token rotation stops a leaked build | low; a re-signed app has a different digest |
 | Imported key | key created elsewhere, imported into the TEE | `origin` must be `GENERATED` | none |
@@ -133,7 +133,7 @@ Boundaries, each enforced by code and tested:
 |---|---|---|---|
 | Insider registers a key without a device | writes a leaf for a key nobody attested | the leaf is public; the attestation digest is in it; a mirror or an auditor asks for the chain; KYB before any leaf | medium: detection, not prevention — this is what "transparency" buys |
 | Insider rewrites history | edits or deletes a leaf | Postgres triggers refuse UPDATE/DELETE/TRUNCATE; signed tree heads kept forever; consistency proofs; mirrors | none against a database admin acting alone; a rewrite breaks consistency for every mirror |
-| Split view | the log shows different trees to different parties | every head is signed and kept; mirrors compare heads and consistency proofs; gossip between verifiers is future work | medium until mirrors exist (C10) |
+| Split view | the log shows different trees to different parties | every head is signed and kept; mirrors compare heads and consistency proofs; gossip between verifiers is future work | medium until mirrors exist |
 | Hidden revocation | the log says "valid" for a revoked key | status is signed by the log key over key, time, tree size, status; revocation leaves have inclusion proofs; anyone can check the revocation leaves for a key | low; a lying log signs the lie, which is evidence |
 | Retroactive revocation abuse | an insider revokes a key retroactively to invalidate inconvenient captures | retroactive only for `compromise`, refused otherwise by the log itself; the leaf is public with its reason | low: visible, attributable |
 | Log key compromise | attacker signs heads and statuses | key in KMS; rotation with the old key's heads kept; verifiers pin by `log_id` | medium: recovery is a new log id, published |
@@ -237,18 +237,18 @@ like, and it is the true one.
 
 ## 6. Open items
 
-- **Spike S3**: the relay attack reproduced with Frida on a rooted device
+- **Relay spike**: the relay attack reproduced with Frida on a rooted device
   against the deployed mitigations. Until then, "relay" stays *medium*.
 - **Channel binding** derivation in the control plane (TLS exporter or session
   hash): today optional; the verdict says when it is absent.
-- **Mirrors and gossip** (C10, C11): split-view resistance depends on them.
-- **External audit** (D7): commissioned during phase 1, findings folded here.
+- **Mirrors and gossip**: split-view resistance depends on them.
+- **External audit**: commissioned during phase 1, findings folded here.
 - **Per-capture keys** for unlinkability: cost and policy, later.
 - **Position, corroborated** (§5.7): the residual on SIM/device decoupling
   stays *medium* until the registry's combination rule (number verification
   over the capturing session, SIM swap, local signals) exists and is
   measured; Location Verification is not offered by any Italian operator as
-  of September 2026 (D12, spike S4), so the *corroborated* level is
+  of September 2026, so the *corroborated* level is
   reachable in production only through the other two methods. The
   *authenticated* level waits for a smartphone chipset with OSNMA.
 
@@ -259,7 +259,7 @@ like, and it is the true one.
   the id, the platform's detector decodes each frame and reports the count,
   and the reference verifier puts it in the sentence. The underlying fact
   stays accepted and named — one marked frame is one marked frame.
-- 2026-09-20 — §5.9, threats against the stored original, written when C9
+- 2026-09-20 — §5.9, threats against the stored original, written when the vault
   shipped: the two storage modes as different risks, key substitution as the
   first entry because it is the one no cryptography answers, custody moved to
   the customer, metadata, and what a deletion receipt can and cannot prove.
@@ -272,5 +272,5 @@ like, and it is the true one.
   verification-policy mitigation.
 - 2026-09-11 — §5.7, threats against the declared position and the
   `location_corroboration` attachment: the false accept with the SIM in the
-  cell and the SIM/device decoupling from spike S4 (D12), the registry as
+  cell and the SIM/device decoupling, the registry as
   the asserter, no phone number in a proof.

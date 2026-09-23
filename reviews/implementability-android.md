@@ -1,6 +1,6 @@
 # Implementability review of the vcap/1.0 draft on Android
 
-**Step 3 of the work order** (`Doc/06-fase1-avvio.md` §3), mobile half. Reviews
+**Step 3 of the work order**, mobile half. Reviews
 `spec/vcap-proof-1.0.md` as of 8 September 2026, after the cryptographic review
 (step 2). Question asked: *what does the device actually produce, and what does
 it cost?*
@@ -30,7 +30,7 @@ something could not be measured it says so; nothing is estimated.
 rooted, bootloader locked. KeyMint 300, **TEE only — no StrongBox**. Same unit
 as the attestation fixture of 8 September 2026.
 
-**Instrument.** `vcap-sdk-android/tools/capture-probe`, a Gradle/Kotlin project
+**Instrument.** A capture probe in the Android SDK, a Gradle/Kotlin project
 of instrumented tests, no UI. Each probe writes one JSON file read back with
 `adb shell run-as`; the raw outputs are the source of every figure here. Its
 JVM tests keep the SEI builder and the SEI recogniser each other's inverse,
@@ -138,7 +138,7 @@ whatever the encoder did — but it changes the arithmetic in §5's own review
 note. "A 2-second GOP on a 10-minute clip is 300 signatures" holds only if the
 capture rate holds; on a variable-rate capture the count is
 `frames / (interval × configured fps)`, and the wall-clock spacing drifts.
-Implementation guidance for C1, not a spec change: **pin the capture frame
+Implementation guidance for the Android SDK, not a spec change: **pin the capture frame
 rate, and derive the expected segment count from frames, not from seconds.**
 
 Second observation in the same area: the encoder emitted **two IDRs 63 ms
@@ -179,7 +179,7 @@ IDR in the same access unit, then handed to `MediaMuxer` as one sample.
 file stores length-prefixed NAL units. An implementation that assumes the
 stored form when re-reading its own output finds one-byte NAL units and
 concludes the SEI was dropped. This is the probe bug the JVM tests caught; it
-is worth a sentence of implementation guidance somewhere in C1, because every
+is worth a sentence of implementation guidance somewhere in the Android SDK, because every
 verifier that recomputes `content_hash` from a received MP4 will meet it.
 
 ### M4 · BLOCKING — the vcap SEI UUID is still a `TODO`
@@ -198,7 +198,7 @@ vcap SEI UUID = SHA-256("vcap/1.0/sei")[0:16]
 ```
 
 Nothing up the sleeve, recomputable by anyone from one ASCII string, and it
-carries no brand (P8). A future layout takes a new separator string exactly as
+carries no brand. A future layout takes a new separator string exactly as
 §5's segment message does.
 
 ### M5 · SHOULD — say what the vcap SEI carries, or say it carries nothing
@@ -233,7 +233,7 @@ frame periods at 30 fps. Nothing was dropped, because `MediaCodec`'s output
 queue absorbed it, but that is luck about queue depth, not a margin to design
 on.
 
-Guidance for C1, not a spec change: **hash on the drain thread, sign on a
+Guidance for the Android SDK, not a spec change: **hash on the drain thread, sign on a
 single offload thread.** Single, because the TEE serializes anyway (69 vs 75
 signatures/s from one to four threads) — a pool would add contention and no
 throughput. The chain in §5 is sequential by construction, so a single-consumer
@@ -358,7 +358,7 @@ encode from YUV through `HeifWriter`.
 
 §4.1 already treats HEIC as ISO-BMFF and needs no change. The consequence is
 for the vectors: the HEIC conformance file cannot come from this device's
-capture path, and the C1 decision "which container for photos" has one fewer
+capture path, and the Android SDK's decision "which container for photos" has one fewer
 option than the hardware inventory suggests.
 
 ### M13 · NOTE — §3 works exactly as designed, on both containers
@@ -426,7 +426,7 @@ remain the registry and revocation semantics, not the hardware.
 
 ### M17 · ML half — the runtime is cheap, the artifact is not, the detector does not exist
 
-The watermark model is spike S2 and does not exist, so **no number in this
+The watermark model is still a spike and does not exist, so **no number in this
 review says anything about detection cost or quality**. What was measured is
 the runtime underneath it, with a stand-in model of a plausible shape (a 143k
 parameter strided CNN, 1×3×256×256 input, 572 KB):
@@ -435,11 +435,11 @@ parameter strided CNN, 1×3×256×256 input, 572 KB):
 - Inference: 13.4 ms p50 single-threaded, 5.7 ms p50 with four intra-op
   threads. Sessions are reusable and cheap to keep alive.
 - **The stock `onnxruntime-android` artifact adds 17.6 MB of native library for
-  arm64 alone**, before any model. That is the number that matters for C3
-  packaging: the SDK cannot ship it as-is, and `vcap-sdk-android/AGENTS.md`
-  already anticipates a runtime download or a reduced build.
+  arm64 alone**, before any model. That is the number that matters for
+  packaging: the SDK cannot ship it as-is, and the Android SDK's own notes
+  already anticipate a runtime download or a reduced build.
 
-Open for S2, and untouched by this review: `watermark.layout` values, what the
+Open for the watermark model, and untouched by this review: `watermark.layout` values, what the
 detector reports when a layout is declared but the payload does not decode, and
 the 24-bit `mark_id` collision question. Those three checklist items stay
 unticked — no measurement here bears on them.
@@ -455,7 +455,7 @@ unticked — no measurement here bears on them.
 | 4.2 — the signature | **fine**, one footnote proposed | Costs measured; the pre-hash path needs `DIGEST_NONE` on the key and saves nothing (M10) |
 | 5 — segment granularity | **change proposed** | UUID must be filled (M4, BLOCKING); DTS timebase must be named (M8, BLOCKING for vectors); audio before the first IDR (M9); SEI payload (M5); one-frame first segment (M1). Cost itself is fine (M7) |
 | 6.1 — the core | **fine** | The integer/enum restriction made a 12-line canonicalizer agree with the reference verifier first time (M14) |
-| 6.2 — attachments | **not evaluated** | Only `sig` was exercised; `attestation` was covered by the 8 September attestation work, the rest wait on C6–C8 |
+| 6.2 — attachments | **not evaluated** | Only `sig` was exercised; `attestation` was covered by the 8 September attestation work, the rest wait on components not yet built |
 | 7 — proof level | **not evaluated here** | The probe's proofs carry no attestation attachment; the level table was exercised by the real-chain fixture instead |
 | 8 — optional vs invalidating | **underspecified** | "Required for video" has no definition of video, no implementation and no vector (M15) |
 | 9 — compatibility | **not evaluated** | No version-skew case was produced on device |
@@ -488,10 +488,10 @@ unticked — no measurement here bears on them.
 
 - **Anything on StrongBox.** The only device available is TEE-only; the §5
   review question about the slow path is unanswered.
-- **iOS / VideoToolbox.** Spike S1; no Apple hardware.
+- **iOS / VideoToolbox.** Left to the iOS capture spike; no Apple hardware.
 - **A real C2PA manifest on video** (the second half of §4's review item): no
   manifest writer was exercised on an MP4.
-- **Watermark embedding and detection cost.** The S2 model does not exist; the
+- **Watermark embedding and detection cost.** The watermark model does not exist; the
   ONNX figures are for a stand-in and say nothing about the detector.
 - **Battery and thermal behaviour.** The longest run was 100 seconds, far too
   short to show throttling. No number is offered rather than an estimate.
