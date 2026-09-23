@@ -40,7 +40,7 @@ const report = {
   ),
   // What the corpus is *made of*, not only how much of it passed: most of
   // these vectors expect a verdict that is not green, and a reader who only
-  // sees "84/84 passed" learns nothing about that.
+  // sees "all passed" learns nothing about that.
   by_expected_outcome: Object.fromEntries(
     [...new Set(c.names.map((n) => c.outcomes[n]))].sort().map((o) => [o, c.names.filter((n) => c.outcomes[n] === o).length])
   )

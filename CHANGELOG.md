@@ -28,6 +28,28 @@ have wanted to change it.
 
 ## Unreleased
 
+### The conformance sample cites the corpus that exists, and a test says so
+
+No spec, schema or vector change; `vectors/VERSION` stays **1.3.0** and
+`MANIFEST.json` is untouched.
+
+`vectors/CONFORMANCE.md` framed itself around "conformant with vcap-spec corpus
+1.0.0" and its sample report declared `corpus_version: 1.0.0` with 84 vectors,
+two corpus releases after that stopped being true. Those numbers were
+illustrations, but this is the document a third party **copies from** to
+declare conformance in their own published material, in our name — and a
+reader copying the sample would have declared conformance against a corpus that
+no longer exists. The sample, the framing sentence, the worked example of
+flooring a count and the closing rule now name **1.3.0** and **85**, and the
+same two stale claims in `vectors/README.md` move with them.
+
+The numbers are no longer hand-maintained: `tools/test/conformance-doc.test.ts`
+reads `vectors/VERSION` and `vectors/MANIFEST.json` and fails when either
+document disagrees, naming the files to fix. It matches every "corpus X.Y.Z" in
+the prose rather than known lines, so a sentence added later is covered without
+anyone remembering to extend the test. A number in a document with no check on
+it is a comment, and it was exactly the mechanism that produced this drift.
+
 ### **Breaking.** A clip's frame count is not gated by the agreement floor
 
 §8 required the count of sampled frames that "decoded to that id" and said
