@@ -30,7 +30,9 @@ schema/    JSON Schema of the proof + validator
 vectors/   conformance vectors: sealed files, broken signatures, edge cases (see vectors/README.md),
            the versioned corpus manifest and how to claim conformance against it (vectors/CONFORMANCE.md)
 tools/     reference tooling (Node 22, TypeScript): JCS, trailer, canonical bytes, core signature,
-           segment chain, the vector generator and the reference verifier CI runs over vectors/
+           segment chain, the vector generator and the reference verifier CI runs over vectors/,
+           plus corpus-drift.sh, which a consumer that pins this repository as a submodule
+           runs from its own suite to learn whether its pin has fallen behind main
 ```
 
 ## Rules

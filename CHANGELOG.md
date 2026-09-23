@@ -28,6 +28,31 @@ have wanted to change it.
 
 ## Unreleased
 
+### The corpus-drift check ships from here
+
+No spec, schema or vector change; `vectors/VERSION` stays **1.3.0** and
+`MANIFEST.json` is untouched.
+
+`tools/corpus-drift.sh` is new here and was, until now, three byte-identical
+copies — one in each repository that pins this one as a submodule. It answers
+the question no consumer can answer on its own: `git submodule update --init`
+checks out the *pin*, so a pin nobody moved keeps a suite green forever against
+an old corpus. Three repositories sat two weeks behind and nothing said so.
+
+Three copies of a drift detector are three things that can drift, and a guard
+that means different things in different repositories is the exact failure the
+guard exists to catch. It ships from here because the submodule already
+delivers this directory to every consumer.
+
+The check is unchanged in behaviour: it fires only when a **numbered** vector
+directory moved upstream, prose and tooling and `_watermark/` fixtures move
+nothing, no network is a loud skip and never a failure, and a deliberate hold
+is `accepted_upstream_vectors_sha256` plus `reason_for_staying_behind` in the
+consumer's own pin. What changed is how it finds its inputs: the spec checkout
+is the directory it was delivered into rather than an argument, and its
+argument is now the consumer's `conformance-pin.json`. Nothing in this
+repository runs it.
+
 ### The conformance sample cites the corpus that exists, and a test says so
 
 No spec, schema or vector change; `vectors/VERSION` stays **1.3.0** and

@@ -44,6 +44,12 @@ that reaches somebody else, not at a tag. `CHANGELOG.md` is the authority.
   implementation others copy. When it disagrees with an expected verdict, the
   review decides which one is wrong — the generator refuses to write a vector
   the verifier fails.
+  `tools/corpus-drift.sh` is the one exception to "tooling that runs here": it
+  runs in the **consumers**, delivered by the submodule, and tells them when
+  their pin has fallen behind this repository's main. It lives here because
+  three copies of a drift detector are three things that can drift. Nothing in
+  this repository runs it, and inside a development checkout of vcap-spec it
+  finds no `conformance-pin.json` and skips.
 
 ## Working rules
 
