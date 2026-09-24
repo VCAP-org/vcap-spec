@@ -15,11 +15,12 @@ import { jcs } from './jcs.js'
 import { ProofSyntaxError, parseProofJson } from './json.js'
 
 /**
- * Reference verifier for the signature layer of the format: trailer, canonical
- * bytes, core signature, segment chain, version policy, labels for absent
- * attachments, and — when asked — the §5 content hashes recomputed from an
- * ISO-BMFF container. It does NOT evaluate the proof level (§7: attestation,
- * registry, revocation): that is a separate layer with its own vectors.
+ * Reference verifier for the whole format: trailer, canonical bytes, core
+ * signature, the segment chain and its binding to the GOPs of the received
+ * container (§5), version policy, every §6.2 attachment and its labels, the
+ * proof level and its ceiling (§7) and the position level (§7.1). What it
+ * takes as inputs rather than fetching — the online key status, the chain
+ * read, the verifier's clock — is what a caller supplies.
  *
  * Its job in this repository is to prove that the committed vectors are
  * consistent with the spec. It is written from the spec; when it disagrees with
@@ -98,8 +99,8 @@ const hasNonInteger = (v: Json): boolean => {
 const b64urlLen = (s: unknown, bytes: number): s is string =>
   typeof s === 'string' && /^[A-Za-z0-9_-]+$/.test(s) && Buffer.from(s, 'base64url').length === bytes
 
-// Shape checks a schema will formalize in step 6; here, what the verifier
-// needs before it can trust the types it reads.
+// The shape checks the verifier needs before it can trust the types it reads;
+// `schema/` formalizes the rest.
 const shapeProblem = (proof: Proof): string | null => {
   if (!b64urlLen(proof.capture_id, 16)) return 'capture_id missing or not 16 bytes'
   if (!isObject(proof.media) || typeof proof.media.hash !== 'string' || typeof proof.media.mime !== 'string') return 'media.hash or media.mime missing'

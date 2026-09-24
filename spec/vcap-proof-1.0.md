@@ -3,11 +3,10 @@
 **Status: `vcap/1.0` DRAFT — the six format decisions are settled, the wire
 contract is not yet binding.** There is no `v1.0` tag and no public release:
 both were removed on 22 September 2026, because nothing advertises a version
-that does not exist yet. Written 8 September 2026 as step 1 of
-the work order, amended the same day after the
-cryptographic review (step 2, `reviews/01-crypto-review-draft-1.0.md`) and on
-9 September after the implementability review on real hardware (step 3,
-`reviews/implementability-android.md`).
+that does not exist yet. Written 8 September 2026, amended the same day after
+the cryptographic review (`reviews/01-crypto-review-draft-1.0.md`) and on
+9 September after the implementability review on real hardware
+(`reviews/implementability-android.md`).
 
 **When the format freezes.** The additive-only rule of §9 starts at the first
 publication: the first build, SDK or sealed file that reaches somebody else.
@@ -1568,9 +1567,11 @@ says.
       revocation snapshot on either side of the instant): **45** in `vectors/`
       when this item closed, **73** with the registry, anchor, timestamp,
       integrity, iOS, C2PA co-existence and sidecar slices since,
-      **84** with the position level (74–84) and **85** with the iOS sealed
-      clip, which is the corpus today,
-      checked by the reference verifier in `tools/` (steps 4–5). The §7 vectors
+      **84** with the position level (74–84), **85** with the iOS sealed
+      clip, and **121** in corpus 2.0.0 with the video binding (86–94), the
+      time, revocation and attestation rules (96–110), the JSON reading rules
+      (111–120) and the extensible identifiers (95, 121),
+      checked by the reference verifier in `tools/`. The §7 vectors
       trust the anchors in `vectors/_trust/`, whose attestation root is a test
       root: they prove the level logic, not that an implementation can walk a
       real Google chain — for which the real device chains in the two verifier
@@ -1595,4 +1596,4 @@ says.
 - [x] Vectors for `timestamp` and `anchor` attachments — 59–63 and 55–58,
       with committed tokens in `_timestamps/` and the chain read as an input
 - [x] JSON Schema validates every vector, and rejects each malformed case:
-      `schema/vcap-proof-1.0.schema.json`, run by `tools` in CI (step 6)
+      `schema/vcap-proof-1.0.schema.json`, run by `tools` in CI

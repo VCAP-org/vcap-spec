@@ -103,7 +103,10 @@ capture id.
 from `thumbnail-q30` onward, on every build. The break is not gradual: the last
 chain that works costs 3.3 bit errors on average and the first that fails costs
 30, because BCH has no partial answer — a corrected block either checks out or
-does not exist. A thumbnail at 480 px and JPEG quality 30 has no readable mark,
+does not exist. The code's guaranteed radius is 18 bit errors, and the chains
+measured jump from at most 7 to 30 on average: where between 7 and 30 flipped
+bits a real chain stops recovering is **not measured**. The model owner will
+publish that curve; until then no break point between the two is claimed. A thumbnail at 480 px and JPEG quality 30 has no readable mark,
 and neither does anything past it: an aggressive crop with a heavy re-encode
 (115 bit errors, near half the message) or a 320 px round trip at quality 15.
 
@@ -143,21 +146,22 @@ worse there.
 else: it means *some structure was found and it did not decode*, and it must
 not be rendered as a partial match or a percentage of confidence.
 
-### What may be reported: 38 flipped bits of 256, not 51
+### What may be reported: 38 flipped bits of 256; what is guaranteed: 3
 
-Two different numbers have been quoted for this channel, and until now this
-document quoted the wrong one of them.
+Three different numbers have been quoted for this channel, and this document
+used to call the wrong one a radius.
 
 | | Bits of 256 | Bit error rate | Agreement |
 |---|---|---|---|
-| **correction radius** — where the repetition code stops recovering the id at all, under random flips | ≈ 51 | 19.9 % | ≈ 0.80 |
+| **guaranteed radius** — the most flips no pattern can defeat: four flips on the eight copies of one position already tie it | **3** | 1.2 % | 0.988 |
 | **reportable budget** — where `watermark-layouts-1.0.md` stops allowing a recovered id to be reported | **38** | **14.8 %** | **0.8516** |
+| where the recovery curve tails off — about two random patterns in five still recover | ≈ 51 | 19.9 % | ≈ 0.80 |
 
-The correction radius is what the code can fix. The reportable budget is what a
-verifier may say out loud, and it is the only one of the two a reader of a
-verdict ever meets. The gap between them, five points of bit error rate, is the
-difference between what this document used to promise for video and what the
-format now permits.
+Beyond 3 flips recovery is a **curve**, the share of random patterns that
+still resolve the id, and not a radius: nothing about 51 is a boundary, and
+earlier versions of this document that called it "the correction radius" were
+wrong. The reportable budget is what a verifier may say out loud, and it is
+the only one of these a reader of a verdict ever meets.
 
 **The budget is arithmetic, not a chosen figure.** Agreement is `1 − flips/256`
 for as long as every position's majority of 8 copies holds, so the 0.85 floor
@@ -217,7 +221,7 @@ The browser verifier ships the int8 build, so the difference matters.
   at crf 40 for all three builds. Quantization does not create a new failure
   mode; it eats into the margin of the one the full model already has.
 - **What it costs is margin, on the rows already under stress**: 8.3 bit errors
-  against 3.3 on `heavy-recompress` (against a budget of 18 byte errors), and
+  against 3.3 on `heavy-recompress` (against a guaranteed radius of 18 bit errors), and
   34 against 25 on the crf 36 clip, agreement 0.87 against 0.90. On the lighter
   chains the difference is under one bit.
 - **fp16 is the fp32 curve**, within one bit on every row measured.
@@ -407,8 +411,8 @@ chain is safer than another.
 
 The 15 false ids came out at agreement **0.59–0.63** (int8: 0.55–0.63). Every
 chain in the video table above that recovers sits at **0.87–1.00**, the worst
-chain that still works at 0.90, and the code's own correction radius runs down
-to roughly 0.80 — below what may now be reported, which is 0.85.
+chain that still works at 0.90, and the repetition code's recovery curve tails
+off near 0.80 — below what may now be reported, which is 0.85.
 
 That gap is why `video-rep-v1` returns an agreement figure at all, and why a
 verifier reporting a `mark_id` without it has discarded the only discriminator

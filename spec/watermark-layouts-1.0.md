@@ -36,9 +36,12 @@ a block code, and the video carries a short id many times over and lets the
 proof tie it back to the capture id.
 
 How far that gets the video channel is a smaller number than the repetition
-code alone suggests, and the two must not be confused: the code recovers an id
-through roughly 51 random flips of 256, but *The agreement floor* below allows
-one to be **reported** only through **38 of 256, a 14.8 % bit error rate**.
+code alone suggests, and the two must not be confused: the code is
+**guaranteed** to recover the id through only **3** flipped bits of 256 — four
+flips on the eight copies of one position tie it — and beyond that recovery is
+a curve over random flip patterns, not a radius; *The agreement floor* below
+allows an id to be **reported** only through **38 of 256, a 14.8 % bit error
+rate**.
 Measured budget and margins in `watermark-robustness-1.0.md`, *What may be
 reported*.
 
@@ -55,9 +58,14 @@ The parity bits follow the data bits. A BCH implementation that pads its parity
 buffer to whole bytes emits more than 124 bits: only the first 124 are code,
 the rest is always zero and is **not** transmitted.
 
-The correction radius is 18 **byte** errors, not bit errors. Recovery holds
-through every real sharing chain measured so far and fails around 30 flipped
-bits — the point where the errors spread over more than 18 bytes.
+The correction radius is **18 bit errors**: BCH(255,131) with t = 18 is a
+binary code over GF(2^8), whose symbols are bits, and any block with at most
+18 of its 255 code bits flipped decodes. (An earlier version of this document
+said 18 *byte* errors; that is a Reed–Solomon reading and it is wrong.) Every
+real sharing chain measured so far recovers, at no more than 7 flipped bits,
+and the first chain that fails flips 30 on average. Where between 7 and 30 a
+real chain stops recovering is **not measured**; the guaranteed radius is 18,
+and the curve around it is the model owner's to publish.
 
 ## `video-rep-v1`
 
@@ -142,7 +150,7 @@ are known, and they overlap:
 | a **wrong** `mark_id` off genuinely marked content (2 of 38 device recordings) | 0.738, 0.789 |
 | a **correct** `mark_id` off the same campaign, at its worst | 0.727 |
 | every synthetic chain that recovers at all | 0.87–1.00 |
-| the code's correction radius — what it recovers, not what may be reported | ≈ 0.80 |
+| where the repetition code's recovery curve tails off — around 51 random flips, where about two patterns in five still recover | ≈ 0.80 |
 
 The device figures are a campaign of 38 recordings on one phone, four scenes,
 recorded in the model pipeline and summarised in `watermark-robustness-1.0.md`,
@@ -151,8 +159,8 @@ resolved an id the pixels were never given, at 0.738 and at 0.789.
 
 0.85 is the value that sits above every wrong id observed anywhere (0.789) and
 below every chain measured to recover (0.87), with margin on both sides. The
-margin is the point. The code's own correction radius, ≈ 0.80, would also
-exclude both wrong ids — by 0.011, while the same campaign found two recordings
+margin is the point. A floor where the code's recovery curve tails off,
+≈ 0.80, would also exclude both wrong ids — by 0.011, while the same campaign found two recordings
 of the *same scene* a minute apart differing by as much as 0.20. A threshold
 whose margin is a twentieth of the spread of the measurement is a number that
 happens to fit this corpus. 0.85 keeps 0.06 above the worst observed false
@@ -186,7 +194,8 @@ would have been read as evidence against the files that carried them.
 **What the floor leaves.** Since agreement is `1 − flips/256` while every
 position's majority holds, the rule caps the error budget arithmetically at
 **38 flipped bits of 256** (0.8516, reportable) against 39 (0.8477, refused) —
-against the ≈ 51 the code can still correct. Inside that ceiling recovery is
+against a guaranteed radius of 3 and a recovery curve that tails off around 51.
+Inside that ceiling recovery is
 probable and not certain, because a position whose eight copies split 4–4 ties
 and loses the CRC: about three patterns in four resolve the id at 38 flips, and
 the rest answer *no id*. An implementation should expect that shape, and should

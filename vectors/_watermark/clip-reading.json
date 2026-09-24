@@ -18,7 +18,7 @@
         { "agreement": 0.848, "crc_passes": true, "mark_id": 5902900 }
       ],
       "reported": { "mark_id": 5902900, "frames_with_id": 8, "sampled": 8, "agreement": 0.863 },
-      "origin": "synthetic corpus, crf 36 at 640 px, int8: 39 flipped bits from one frame, 35 from eight averaged (vcap-ml, reports/frames-to-recover.md)",
+      "origin": "synthetic corpus, crf 36 at 640 px, int8: 39 flipped bits from one frame, 35 from eight averaged (model pipeline, frames-to-recover report)",
       "note": "The case that decides it. Every frame is under the floor and the aggregate clears it, so a floor applied per frame would report 0 of 8 for a clip that is marked throughout — below the 1 of 8 of the splice two rows down, which is the one comparison the count exists to make."
     },
     {

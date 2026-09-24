@@ -74,9 +74,10 @@ to the three roots of trust inside vcap.
 The whole proof travels as **one custom assertion**, so a C2PA validator that
 knows nothing of vcap carries it intact and a vcap verifier finds it whole.
 
-- **Label**: `com.gregoriogalante.vcap.proof`. An entity namespace is the
+- **Label**: `io.github.vcap-org.vcap.proof`. An entity namespace is the
   entity's Internet domain in reverse (6.2.1 *Namespacing*) — ours is
-  `vcap.gregoriogalante.com` — followed by the label components
+  `vcap-org.github.io`, the domain of the organization that publishes this
+  specification — followed by the label components
   (6.2.2 *Label Naming*). The codename, never the brand: a label in a signed
   manifest is as permanent as trailer magic. No version suffix: an unsuffixed
   label is version 1 (6.2.2), a compatible change adds fields without
@@ -127,7 +128,7 @@ assertion names an algorithm in `alg`, which "should" be an entry in the
 Our algorithm is not on that list. Registration is a C2PA process and belongs
 to the deferred C2PA work. Until
 then the `alg` value would be an entity-namespaced string — for example
-`com.gregoriogalante.vcap.photo-bch-v3`, one per layout as
+`io.github.vcap-org.vcap.photo-bch-v3`, one per layout as
 `watermark-layouts-1.0.md` numbers them — which a C2PA validator cannot
 resolve and treats as an algorithm it does not have. The two carry different
 things anyway: a C2PA soft binding is a **value** a resolver looks up; ours is
@@ -266,7 +267,7 @@ travelled with what it binds.
 ### 3.4 When we sign C2PA
 
 The day a signing credential exists, the pipeline is fixed by the above:
-seal, then write the manifest with the proof as `com.gregoriogalante.vcap.proof`,
+seal, then write the manifest with the proof as `io.github.vcap-org.vcap.proof`,
 a `c2pa.created` action with a digital-capture `digitalSourceType`, a
 `c2pa.soft-binding` when the algorithm is registered, and the hard binding
 covering the trailer in its final form. On video the manifest is written
@@ -379,7 +380,7 @@ Reading the table:
 - Registration of the watermark algorithm on the C2PA Soft Binding Algorithm
   List (18.10.4) — a C2PA process, deferred with the rest of the C2PA track.
 - A C2PA signing credential. The custom assertion label,
-  `com.gregoriogalante.vcap.proof`, and the pipeline order of §3.4 are fixed
+  `io.github.vcap-org.vcap.proof`, and the pipeline order of §3.4 are fixed
   here so that the day does not reopen them.
 - A reader rule for a trailing C2PA update box on a sealed BMFF file
   (§3.2, `vcap-proof-1.0.md` §11).

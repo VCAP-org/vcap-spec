@@ -9,7 +9,8 @@ below would be invisible.
 | File | What it is |
 |---|---|
 | `attestation-roots.pem` | The root the corpus's attestation chains end in. **A test root, standing in for a pinned Google root.** |
-| `logs.json` | The public key of the transparency log the corpus pretends to trust: `log_id` (base64url of SHA-256 of the SPKI, as in CT) and `spki` (base64 DER). It signs tree heads and, per §6.2, `attestation_status` snapshots. |
+| `logs.json` | The public key of the transparency log the corpus pretends to trust: `log_id` (base64url of SHA-256 of the SPKI, as in CT) and `spki` (base64 DER). It signs tree heads and, per §6.2, `attestation_status`, `integrity` and `location_corroboration` statements. `app_signing_digests` lists the signing-certificate digests of the app builds the log admits keys from, which §7 compares with an attestation leaf's `attestationApplicationId`. |
+| `tsa-roots.pem` | The TSA root the corpus's timestamp tokens chain to, standing in for a qualified TSA's. |
 
 ## What this proves, and what it does not
 
@@ -20,8 +21,8 @@ certificate does to the level, what a revoked one does — and they say nothing
 about whether an implementation can walk a real Google chain to a real Google
 root.
 
-That is proved elsewhere, and has to be: `vcap-verifier` and `vcap-platform`
-both carry real chains from real devices (a moto g75 5G under Remote Key
+That is proved elsewhere, and has to be: the verifier implementations carry
+real chains from real devices (a moto g75 5G under Remote Key
 Provisioning, a Samsung SM-S908B with a StrongBox batch key) as fixtures. An
 implementation that passes this corpus and has never met a real chain has
 tested its arithmetic, not its trust store.

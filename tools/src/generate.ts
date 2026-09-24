@@ -19,6 +19,7 @@ import { corroborationMessage } from './location.js'
 import { loadTrust } from './trust.js'
 import { type Verdict, verifyFile, verifySegments } from './verify.js'
 import { validateProof } from './schema.js'
+import { isVectorDir } from './corpus-names.js'
 
 /**
  * Writes vectors/. Each vector's expected verdict is decided here, in words,
@@ -1557,6 +1558,31 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
   }
 }
 
+{
+  const CAPTURE = 1757332800000
+  const day = 86_400_000
+  const logKey = createPrivateKey({ key: Buffer.from(TEST_LOG_KEY_PKCS8_BASE64, 'base64'), format: 'der', type: 'pkcs8' })
+  {
+    const proof0 = sign(photoCore(baseJpeg, 'image/jpeg'))
+    const body: { [key: string]: Json } = { source: 'deviceCheck', verdict: 'hardware', evaluated_at: CAPTURE + 1000 }
+    const proof = { ...proof0, integrity: { ...body, sig: signEs256(integrityMessage(coreHash(proof0), body), logKey).toString('base64url') } }
+    file({ name: '121-jpeg-integrity-unknown-source', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: {
+        outcome: 'authentic', labels: PHOTO_LABELS, not_evaluated: [], core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'none', ceiling: 'amber' },
+        validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+      },
+      notes: 'A correctly signed integrity statement whose `source` is `deviceCheck`, a value this version does not define. `integrity.source` is extensible (§9), so this is a verifier meeting a later minor: it cannot weigh a verdict from a source it does not know, and reads the attachment as absent — *integrity unevaluated*, and not *integrity evidence invalid*. The schema accepts it: an identifier is an identifier. Until corpus 2.0.0 both the schema and the reference verifier refused the value §9 declares extensible.' })
+  }
+  {
+    const proof = sign(photoCore(baseJpeg, 'image/jpeg', { watermark: { algo: 'videoseal', layout: 'photo-bch-v4', payload_bits: 128, ecc: 'bch-255-131', strength: 8 } }))
+    file({ name: '95-jpeg-watermark-unknown-layout', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      expected: { outcome: 'authentic', labels: PHOTO_LABELS, not_evaluated: [], core_hash: hashOf(proof) },
+      notes: 'A core declaring `watermark.layout: photo-bch-v4`, a layout this version does not define. The field is extensible (§9): the proof is schema-valid and the verdict is the ordinary one, with *watermark not evaluated* — the answer §8 gives for a layout a verifier does not implement, never a refusal of the file.' })
+  }
+}
+
 // ---- C2PA co-existence and the sidecar (§3.1, spec/c2pa-interop-1.0.md) ----
 
 {
@@ -1679,7 +1705,7 @@ file({ name: '72-jpeg-footer-crc-mismatch-sidecar', ext: 'jpg', file: seal(baseJ
     file({ name: '75-jpeg-location-corroborated', ext: 'jpg', file: seal(baseJpeg, proof), proof,
       verifierClock: CAPTURE + day,
       expected: { outcome: 'authentic', labels: CORROBORATED_LABELS, not_evaluated: [], core_hash: hashOf(proof), ...at({}), location: { claimed: 'declared', level: 'corroborated' } },
-      notes: 'A `location_corroboration` attachment: the registry called the operator\'s CAMARA Location Verification about a 2 km circle around the declared position, the operator answered `TRUE`, and the registry signed `match` with the key that signs its tree heads, over `"vcap/1.0/location" ‖ core_hash ‖ JCS(body)`. The level is **corroborated**.\n\nWhat a verifier must say about it, in these words or ones that keep their meaning: *the registry attests that the operator confirmed the zone, radius 2000 m*. Not "verified by the operator" — the operator\'s answer is JSON over TLS with no transportable signature, so the only thing a proof can carry is the registry\'s countersignature of what the registry saw (§6.2, D12). That is trust in the registry, stated, and it is the same construction as `integrity`.\n\nAnd it is orthogonal to the verdict. The ceiling is amber for the reason every unattested photo\'s is, and it would be amber with the attachment deleted: the position level says how much the coordinates are worth, never how much the file is.' })
+      notes: 'A `location_corroboration` attachment: the registry called the operator\'s CAMARA Location Verification about a 2 km circle around the declared position, the operator answered `TRUE`, and the registry signed `match` with the key that signs its tree heads, over `"vcap/1.0/location" ‖ core_hash ‖ JCS(body)`. The level is **corroborated**.\n\nWhat a verifier must say about it, in these words or ones that keep their meaning: *the registry attests that the operator confirmed the zone, radius 2000 m*. Not "verified by the operator" — the operator\'s answer is JSON over TLS with no transportable signature, so the only thing a proof can carry is the registry\'s countersignature of what the registry saw (§6.2). That is trust in the registry, stated, and it is the same construction as `integrity`.\n\nAnd it is orthogonal to the verdict. The ceiling is amber for the reason every unattested photo\'s is, and it would be amber with the attachment deleted: the position level says how much the coordinates are worth, never how much the file is.' })
   }
 
   {
@@ -1850,7 +1876,7 @@ const owned = new Set(vectors.map((v) => v.name))
 if (existsSync(VECTORS)) {
   const foreign: string[] = []
   for (const entry of readdirSync(VECTORS)) {
-    if (!/^\d\d-/.test(entry)) continue
+    if (!isVectorDir(entry)) continue
     if (owned.has(entry)) rmSync(join(VECTORS, entry), { recursive: true })
     else foreign.push(entry)
   }
