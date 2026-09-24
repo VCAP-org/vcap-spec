@@ -47,7 +47,7 @@ it are not readable by the person deciding whether to trust the verdict.
 | Model version | `videoseal-y256b-1` (the string a proof carries in `watermark.algo`) |
 | Detector graph | ConvNeXt-tiny trunk + pixel decoder, 33.4 M parameters, 256-bit message + 1 detection logit |
 | Input handling | the graph resizes its input to a fixed 256 px working size before the trunk, so input resolution barely changes cost or result |
-| Layouts | `photo-bch-v3` at strength 1.5, `video-rep-v1` at strength 2.0 — the defaults of `watermark-layouts-1.0.md` |
+| Layouts | `photo-bch-v3` at strength 1.5, `video-rep-v1` at strength 2.0 — the defaults of `watermark-layouts-1.0.md` when measured; the photo default is now 1.2 (§ *Strength* there), not re-measured here |
 | Builds | fp32 (133.6 MB), fp16 (66.9 MB), int8 dynamic quantization (34.2 MB), same graph |
 | Hardware | Apple M4, 10 cores, 16 GB |
 | Runtime | onnxruntime 1.28 (native), onnxruntime-web 1.29 (browser), Chromium 152, ffmpeg/libx264 for the video chains |

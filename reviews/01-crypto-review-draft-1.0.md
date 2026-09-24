@@ -1,5 +1,10 @@
 # Cryptographic review of the vcap/1.0 draft
 
+> **Historical record.** This review describes the draft as it stood on
+> 8 September 2026. Its findings are absorbed into `spec/`, which is
+> authoritative wherever the two differ; the review is kept as the record of
+> why, and is not updated.
+
 **Step 2 of the work order.** Reviews
 `spec/vcap-proof-1.0.md` as of 8 September 2026. Question asked: *what is
 signed, what is not, and what can an attacker change without invalidating a

@@ -1,5 +1,10 @@
 # Implementability review of the vcap/1.0 draft on Android
 
+> **Historical record.** This review describes the draft as it stood on
+> 8 September 2026. Its findings are absorbed into `spec/`, which is
+> authoritative wherever the two differ; the review is kept as the record of
+> why, and is not updated.
+
 **Step 3 of the work order**, mobile half. Reviews
 `spec/vcap-proof-1.0.md` as of 8 September 2026, after the cryptographic review
 (step 2). Question asked: *what does the device actually produce, and what does

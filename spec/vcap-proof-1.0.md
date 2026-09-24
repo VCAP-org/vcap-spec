@@ -1296,7 +1296,7 @@ says.
       `uuid` box before seeking the footer is open, and would be a new reading
       rule, not a change to this one
 - [ ] `REVIEW (mobile)` per-segment signing cost in StrongBox on a long clip
-- [~] `REVIEW (mobile)` NAL byte definition and audio DTS rule reproducible on both encoders — the DTS clock is now named (M8) and the timeline with it (edit lists, §5); H.264 and HEVC on Android are reproduced byte for byte by a second implementation written from this text (`tools/src/container.ts`, vectors 36–37), which is what "reproducible" was asking; iOS pending (the iOS capture spike)
+- [~] `REVIEW (mobile)` NAL byte definition and audio DTS rule reproducible on both encoders — the DTS clock is now named (M8) and the timeline with it (edit lists, §5); H.264 and HEVC on Android are reproduced byte for byte by a second implementation written from this text (`tools/src/container.ts`, vectors 36–37), which is what "reproducible" was asking; on iOS the NAL bytes are reproduced for HEVC in MOV (vector 48) and H.264 in MP4 (vector 85), and the audio DTS rule is not yet exercised: neither clip has an audio track
 - [x] `REVIEW (mobile)` hashing two interleaved tracks during encoding — resolved: 8 KB and 0.5 ms per segment on a TEE device (M8)
 - [ ] `REVIEW (mobile)` metadata stripping before sealing for pseudonymous captures
 - [ ] `REVIEW (LEAD)` the `authenticated` position level (§7.1) is reserved
@@ -1337,7 +1337,8 @@ says.
 - [~] `REVIEW (mobile)` container-level video vectors: real MP4/MOV from each
       encoder, with `content_hash` recomputed from the NAL units and audio
       frames — Android H.264 and HEVC done (vectors 36–39, `kind: container`);
-      iOS after the iOS capture spike, and the MOV branch with it
+      iOS HEVC in MOV (48) and H.264 in MP4 under a Secure Enclave chain (85)
+      done, both without audio; an iOS clip with audio is still owed
 - [x] Whether a verifier that cannot recompute segment hashes must say so in
       its labels: **yes** — *segment content not recomputed* (§5, §7), decided
       10 September 2026. Recomputation stays optional, declaring it does
