@@ -52,8 +52,8 @@ const write = (name: string, input: Buffer, proof: Record<string, unknown>, note
   console.log(`[vcap] ${name}: ${verdict.outcome} segments=${JSON.stringify(verdict.segments?.verified)} ${verdict.reason ?? ''}`)
 }
 
-const provenance = 'Sealed by `SDK-Android` on a Samsung SM-S908B (Exynos 2200, Android 16, StrongBox),' +
-  ' 640×360 at 30 fps with one-second GOPs, recorded by `VideoPipelineOnDeviceTest`. The signatures are' +
+const provenance = 'Sealed by the reference Android SDK on a Samsung SM-S908B (Exynos 2200, Android 16, StrongBox),' +
+  ' 640×360 at 30 fps with one-second GOPs, recorded by its on-device video pipeline test. The signatures are' +
   ' the device\'s: `tools/src/generate.ts` cannot make these vectors, and `src/derive-container-vectors.ts`' +
   ' rebuilds them from the sealed files.'
 
@@ -77,12 +77,12 @@ No edit list here — with no audio track there is nothing for the muxer to dela
 
 ${provenance}`)
 
-// ---- 38: a clip, at container level ----------------------------------------
+// ---- 38: an entry dropped from the proof, the GOP kept in the file ---------
 const clipProof = { ...h264Proof, segments: (h264Proof.segments as unknown[]).slice(1) }
 write('38-mp4-container-clip', seal(h264Media, clipProof), clipProof,
-  `The file of vector 36 with the entry for segment 0 removed from the proof, so \`media.segment_count\` is 3 and two segments are present: **verified clip** (§5), reporting 1 and 2.
+  `The file of vector 36 with the entry for segment 0 removed from the **proof** and GOP 0 left in the **file**: \`media.segment_count\` is 3, two entries are present, and the file still carries all three GOPs.
 
-The trap is index mapping. The file still contains all three GOPs, and its first GOP is segment 0 — the one with no entry. A verifier that matched GOPs to entries by position would check GOP 0's bytes against segment 1's signature, fail, and call a clip tampered. The vcap SEI is what says which GOP is which, and §5 allows exactly that use and no more: it locates, it does not prove.
+**Tampered**, 1 and 2 verified. GOP 0 carries a vcap SEI naming segment 0, and the proof signs no segment 0: that GOP is content no signature covers (§5, *Locating segments*). It is exactly the file an attacker produces by prepending a forged GOP to a genuine clip whose first segment is gone, and before the binding rule it read *verified clip*, 1 and 2, with the unsigned frames on screen. The genuine clip — the GOP cut from the file, the proof whole — is vector 89.
 
 ${provenance}`)
 

@@ -21,9 +21,11 @@ const BOOT_STATES: Record<number, string> = { 0: 'verified', 1: 'selfSigned', 2:
 const ROOT_OF_TRUST_TAG = 704
 
 // --- DER, only as much as the extension needs.
-interface Node { tagNumber: number, body: Buffer, end: number }
+interface Node { cls: number, tagNumber: number, body: Buffer, end: number }
 
 const read = (b: Buffer, at: number): Node => {
+  if (at >= b.length) throw new Error('DER: read past the end')
+  const cls = (b[at] as number) >> 6
   let tagNumber = (b[at] as number) & 0x1f
   let cursor = at + 1
   if (tagNumber === 0x1f) {
@@ -41,7 +43,8 @@ const read = (b: Buffer, at: number): Node => {
     length = 0
     for (let i = 0; i < count; i++) length = (length << 8) | (b[cursor++] as number)
   }
-  return { tagNumber, body: b.subarray(cursor, cursor + length), end: cursor + length }
+  if (cursor + length > b.length) throw new Error('DER: length past the end')
+  return { cls, tagNumber, body: b.subarray(cursor, cursor + length), end: cursor + length }
 }
 
 const children = (body: Buffer): Node[] => {
@@ -58,7 +61,18 @@ export interface KeyDescription {
   attestationLevel: Level
   keyMintLevel: Level
   rootOfTrust?: { locked: boolean, state: string }
+  /**
+   * `attestationApplicationId.signature_digests`, lowercase hex: the signing
+   * certificates of the app that created the key. Null when the extension
+   * carries no `attestationApplicationId`.
+   */
+  appSigningDigests: string[] | null
 }
+
+// AuthorizationList tag of attestationApplicationId: in softwareEnforced on
+// every KeyMint version, and read from either list so a future move is not a
+// silent miss.
+const APPLICATION_ID_TAG = 709
 
 /**
  * KeyDescription ::= SEQUENCE { attestationVersion, attestationSecurityLevel,
@@ -84,12 +98,69 @@ export const parseKeyDescription = (der: Buffer): KeyDescription => {
       rootOfTrust = { locked, state: BOOT_STATES[asNumber(parts[2] as Node)] ?? 'unknown' }
     }
   }
+  // AttestationApplicationId ::= SEQUENCE { package_infos SET OF
+  // AttestationPackageInfo, signature_digests SET OF OCTET STRING }, wrapped
+  // in an OCTET STRING under its explicit tag.
+  let appSigningDigests: string[] | null = null
+  for (const list of [fields[6], fields[7]]) {
+    const entry = list ? children(list.body).find((n) => n.tagNumber === APPLICATION_ID_TAG) : undefined
+    if (!entry) continue
+    const wrapped = read(entry.body, 0)
+    const id = children(read(wrapped.body, 0).body)
+    appSigningDigests = id[1] ? children(id[1].body).map((d) => d.body.toString('hex')) : []
+  }
   return {
     attestationVersion: asNumber(fields[0] as Node),
     attestationLevel: level(fields[1], 'attestationSecurityLevel'),
     keyMintLevel: level(fields[3], 'keyMintSecurityLevel'),
-    rootOfTrust
+    rootOfTrust,
+    appSigningDigests
   }
+}
+
+// ---- X.509 extensions, read from the structure -----------------------------
+
+const BASIC_CONSTRAINTS = '2.5.29.19'
+const KEY_USAGE = '2.5.29.15'
+
+const oidOf = (node: Node): string => {
+  const bytes = node.body
+  const first = bytes[0] as number
+  const parts = [Math.floor(first / 40), first % 40]
+  let value = 0
+  for (const byte of bytes.subarray(1)) {
+    value = value * 128 + (byte & 0x7f)
+    if (!(byte & 0x80)) { parts.push(value); value = 0 }
+  }
+  return parts.join('.')
+}
+
+/** extnID → extnValue (the OCTET STRING's content), from TBSCertificate [3]. */
+const extensionsOf = (cert: X509Certificate): Map<string, Buffer> => {
+  const tbs = children(read(cert.raw, 0).body)[0] as Node
+  const block = children(tbs.body).find((n) => n.cls === 2 && n.tagNumber === 3)
+  const out = new Map<string, Buffer>()
+  if (!block) return out
+  for (const extension of children(read(block.body, 0).body)) {
+    const parts = children(extension.body)
+    // [ extnID, critical BOOLEAN?, extnValue OCTET STRING ]
+    out.set(oidOf(parts[0] as Node), Buffer.from((parts[parts.length - 1] as Node).body))
+  }
+  return out
+}
+
+/** basicConstraints cA, and keyUsage with keyCertSign: what an issuer needs. */
+const mayIssue = (cert: X509Certificate): boolean => {
+  const extensions = extensionsOf(cert)
+  const constraints = extensions.get(BASIC_CONSTRAINTS)
+  const usage = extensions.get(KEY_USAGE)
+  if (!constraints || !usage) return false
+  // BasicConstraints ::= SEQUENCE { cA BOOLEAN DEFAULT FALSE, ... }
+  const cA = children(read(constraints, 0).body)[0]
+  if (!cA || cA.tagNumber !== 1 || (cA.body[0] ?? 0) === 0) return false
+  // KeyUsage ::= BIT STRING; keyCertSign is bit 5, 0x04 in the first byte.
+  const bits = read(usage, 0).body
+  return (((bits[1] ?? 0) & 0x04) !== 0)
 }
 
 const spkiOf = (cert: X509Certificate): Buffer => cert.publicKey.export({ type: 'spki', format: 'der' }) as Buffer
@@ -109,9 +180,9 @@ export const validateChain = (
   try {
     certs = chainBase64.map((der) => new X509Certificate(Buffer.from(der, 'base64')))
   } catch {
-    return { proven: 'none', failures: ['attestation is not a chain of DER certificates'] }
+    return { proven: 'none', failures: ['attestation is not a chain of DER certificates'], evidenceInvalid: true }
   }
-  if (certs.length === 0) return { proven: 'none', failures: ['attestation chain is empty'] }
+  if (certs.length === 0) return { proven: 'none', failures: ['attestation chain is empty'], evidenceInvalid: true }
   const leaf = certs[0] as X509Certificate
 
   if (!spkiOf(leaf).equals(sigPub)) failures.push('attestation leaf key differs from sig.pub')
@@ -126,6 +197,20 @@ export const validateChain = (
   const root = roots.find((r) => r.raw.equals(last.raw) || last.verify(r.publicKey))
   if (root) { if (!root.raw.equals(last.raw)) walked.push(root) } else failures.push('chain does not end in a pinned root')
 
+  // Every certificate above the leaf issues the one below it, so each MUST be
+  // a CA allowed to sign certificates. Without this an attested key — a leaf,
+  // genuine hardware and all — could sign a "leaf" of its own with any
+  // KeyDescription it liked, and the chain would still verify to the root.
+  try {
+    for (let i = 1; i < walked.length; i++) {
+      if (!mayIssue(walked[i] as X509Certificate)) failures.push(`certificate ${i} is not a CA with keyCertSign`)
+      // The attestation extension belongs to the leaf and only the leaf.
+      if (keyDescriptionOf(walked[i] as X509Certificate) !== null) failures.push(`certificate ${i} carries a key attestation extension`)
+    }
+  } catch {
+    failures.push('a certificate\'s extensions are unreadable')
+  }
+
   const outside = walked.findIndex((c) => !validAt(c, at))
   let expiredSince: string | undefined
   if (outside !== -1) failures.push(`certificate ${outside} was not valid at ${at.toISOString()}`)
@@ -135,13 +220,19 @@ export const validateChain = (
   }
 
   const extension = keyDescriptionOf(leaf)
-  if (!extension) return { proven: 'none', failures: [...failures, 'leaf carries no key attestation extension'], expiredSince }
+  if (!extension) return { proven: 'none', failures: [...failures, 'leaf carries no key attestation extension'], evidenceInvalid: true, expiredSince }
   let description: KeyDescription
   try {
     description = parseKeyDescription(extension)
   } catch (e) {
-    return { proven: 'none', failures: [...failures, `key attestation extension unreadable: ${(e as Error).message}`], expiredSince }
+    return { proven: 'none', failures: [...failures, `key attestation extension unreadable: ${(e as Error).message}`], evidenceInvalid: true, expiredSince }
   }
+  // Up to here a failure means the evidence does not hold up. From here on
+  // the evidence holds and proves too little: a genuine chain from an
+  // unlocked device, or of a software key, is not a forged one.
+  const evidenceInvalid = failures.length > 0
+  // §7: verified boot on a locked device, from the hardware-enforced
+  // rootOfTrust. An unlocked bootloader lets anything run above the TEE.
   if (!description.rootOfTrust) failures.push('no hardware-enforced rootOfTrust')
   else if (!(description.rootOfTrust.locked && description.rootOfTrust.state === 'verified')) {
     failures.push(`boot state ${description.rootOfTrust.state}, device ${description.rootOfTrust.locked ? 'locked' : 'unlocked'}`)
@@ -154,48 +245,47 @@ export const validateChain = (
   return {
     proven: failures.length === 0 && weakest !== 'software' ? weakest : 'none',
     failures,
+    evidenceInvalid,
     bootState: description.rootOfTrust,
-    expiredSince
+    expiredSince,
+    appSigningDigests: description.appSigningDigests,
+    serials: certs.filter((c) => !roots.some((r) => r.raw.equals(c.raw))).map((c) => normalSerial(c.serialNumber))
   }
 }
+
+/** Serials compare as lowercase hex without leading zeros (§6.2). */
+export const normalSerial = (hex: string): string => hex.toLowerCase().replace(/^0+(?=.)/, '')
 
 export interface ChainOutcome {
   proven: 'strongbox' | 'tee' | 'none'
   failures: string[]
+  /** A failure of the evidence itself, as opposed to evidence of too little. */
+  evidenceInvalid?: boolean
   bootState?: { locked: boolean, state: string }
   expiredSince?: string
+  /** From the leaf's `attestationApplicationId`; null when it carries none. */
+  appSigningDigests?: string[] | null
+  /** Every certificate of the chain but the pinned root, normalized (§6.2). */
+  serials?: string[]
 }
 
-/** DER of an OBJECT IDENTIFIER, header included. Encoded rather than written
- * out as bytes: the second subidentifier of this OID is 11129, whose base-128
- * form is easy to get wrong by hand and impossible to notice afterwards. */
-const encodeOid = (oid: string): Buffer => {
-  const parts = oid.split('.').map(Number)
-  const body: number[] = [40 * (parts[0] as number) + (parts[1] as number)]
-  for (const part of parts.slice(2)) {
-    const septets: number[] = []
-    let value = part
-    do { septets.unshift(value & 0x7f); value >>>= 7 } while (value > 0)
-    for (let i = 0; i < septets.length - 1; i++) septets[i] = (septets[i] as number) | 0x80
-    body.push(...septets)
-  }
-  return Buffer.from([0x06, body.length, ...body])
-}
-
-const KEY_DESCRIPTION_OID_DER = encodeOid(KEY_DESCRIPTION_OID)
-
-/** The raw extension body, unwrapped from its OCTET STRING. */
+/** The KeyDescription extension's value, or null when the certificate has none. */
 const keyDescriptionOf = (cert: X509Certificate): Buffer | null => {
-  // Node exposes no extension accessor, so the certificate's DER is searched
-  // for the extension by its OID. Reading it out of the structure beats
-  // re-encoding the certificate to get at it.
-  const der = cert.raw
-  const at = der.indexOf(KEY_DESCRIPTION_OID_DER)
-  if (at === -1) return null
-  const after = read(der, at + KEY_DESCRIPTION_OID_DER.length)
-  // extnValue is an OCTET STRING; the optional critical BOOLEAN sits between.
-  const value = after.tagNumber === 1 ? read(der, after.end) : after
-  return Buffer.from(value.body)
+  try {
+    return extensionsOf(cert).get(KEY_DESCRIPTION_OID) ?? null
+  } catch {
+    return null
+  }
+}
+
+/** The SPKI of an attestation leaf given as base64url DER, or null when unreadable. */
+export const leafSpki = (der: unknown): Buffer | null => {
+  if (typeof der !== 'string') return null
+  try {
+    return spkiOf(new X509Certificate(Buffer.from(der, 'base64url')))
+  } catch {
+    return null
+  }
 }
 
 export const keyIdOf = (spki: Buffer): string => createHash('sha256').update(spki).digest('hex')

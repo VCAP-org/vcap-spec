@@ -6,4 +6,4 @@ Every signature still verifies, because a signature covers the hash a writer dec
 
 Without this vector the corpus cannot tell a verifier that recomputes from one that does not: every other container vector passes for both.
 
-Sealed by `SDK-Android` on a Samsung SM-S908B (Exynos 2200, Android 16, StrongBox), 640×360 at 30 fps with one-second GOPs, recorded by `VideoPipelineOnDeviceTest`. The signatures are the device's: `tools/src/generate.ts` cannot make these vectors, and `src/derive-container-vectors.ts` rebuilds them from the sealed files.
+Sealed by the reference Android SDK on a Samsung SM-S908B (Exynos 2200, Android 16, StrongBox), 640×360 at 30 fps with one-second GOPs, recorded by its on-device video pipeline test. The signatures are the device's: `tools/src/generate.ts` cannot make these vectors, and `src/derive-container-vectors.ts` rebuilds them from the sealed files.

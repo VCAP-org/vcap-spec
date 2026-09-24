@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
+import { byNumber, isVectorDir } from './corpus-names.js'
 
 /**
  * The corpus manifest: a byte-exact inventory of `vectors/`, versioned
@@ -75,7 +76,7 @@ const vectorEntry = (name: string): VectorEntry => {
 }
 
 const build = (): object => {
-  const names = existsSync(VECTORS) ? readdirSync(VECTORS).filter((d) => /^\d\d-/.test(d)).sort() : []
+  const names = existsSync(VECTORS) ? readdirSync(VECTORS).filter(isVectorDir).sort(byNumber) : []
   const version = existsSync(VERSION_FILE) ? readFileSync(VERSION_FILE, 'utf8').trim() : '0.0.0'
   const fixtures: Record<string, string> = {}
   for (const name of FIXTURE_DIRS) {

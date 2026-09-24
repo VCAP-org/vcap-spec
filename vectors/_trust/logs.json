@@ -2,7 +2,10 @@
   "logs": [
     {
       "log_id": "n86HEwJWvHOhbryJkD8Q18_41VkQcVInSIqNa1EaBVs",
-      "spki": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEcHAb2h28QSAYF+A64rH7p8TBgJTTiteGtWvtE9GHRKPcufefCiD2KCufSsDGzo17ju3vLveEK4aG35COvjX5OQ=="
+      "spki": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEcHAb2h28QSAYF+A64rH7p8TBgJTTiteGtWvtE9GHRKPcufefCiD2KCufSsDGzo17ju3vLveEK4aG35COvjX5OQ==",
+      "app_signing_digests": [
+        "0195aac1dbeecff25bc14d6ebd59720dbb10f4c03e832f9deae5780c7cd3d1d9"
+      ]
     }
   ]
 }

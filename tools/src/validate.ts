@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { validateConformanceReport, validateExpected, validateProof } from './schema.js'
+import { byNumber, isVectorDir } from './corpus-names.js'
 
 /**
  * CLI. With arguments: validates each given proof JSON file against the
@@ -34,7 +35,7 @@ if (asReports) {
     if (!result.valid) failures++
   }
 } else {
-  for (const dir of readdirSync(VECTORS).filter((d) => /^\d\d-/.test(d)).sort()) {
+  for (const dir of readdirSync(VECTORS).filter(isVectorDir).sort(byNumber)) {
     const expectedPath = join(VECTORS, dir, 'expected.json')
     const expected = read(expectedPath) as { kind: string, schema_valid?: boolean }
     const shape = validateExpected(expected)

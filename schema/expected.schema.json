@@ -19,6 +19,7 @@
       "enum": [
         "authentic",
         "verified_clip",
+        "frames_not_compared",
         "tampered",
         "nested_proof",
         "corrupted_proof",

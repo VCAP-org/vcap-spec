@@ -3,11 +3,10 @@
 **Status: `vcap/1.0` DRAFT — the six format decisions are settled, the wire
 contract is not yet binding.** There is no `v1.0` tag and no public release:
 both were removed on 22 September 2026, because nothing advertises a version
-that does not exist yet. Written 8 September 2026 as step 1 of
-the work order, amended the same day after the
-cryptographic review (step 2, `reviews/01-crypto-review-draft-1.0.md`) and on
-9 September after the implementability review on real hardware (step 3,
-`reviews/implementability-android.md`).
+that does not exist yet. Written 8 September 2026, amended the same day after
+the cryptographic review (`reviews/01-crypto-review-draft-1.0.md`) and on
+9 September after the implementability review on real hardware
+(`reviews/implementability-android.md`).
 
 **When the format freezes.** The additive-only rule of §9 starts at the first
 publication: the first build, SDK or sealed file that reaches somebody else.
@@ -90,8 +89,14 @@ by seeking from the end, never by scanning.
 - **Footer validity.** The last 16 bytes are a *valid footer* when all hold:
   `magic == "VCAP"`, `major == 1`, `8 + payload_len + 16 <= len(F)`, the 8 bytes
   before the payload read `box_size == 8 + payload_len + 16` followed by `"free"`.
-  If any of these fails, the file carries no trailer: *no proof found*, not an
-  error. If the structure holds and `crc32` does not match the payload, the
+  The sum is computed without overflow — in 32 bits, `payload_len = 2^32 − 1`
+  wraps to 23 and points a reader into the footer (vector 118). If any of
+  these fails, the file carries no trailer: *no proof found*, not an error —
+  with one exception: `magic == "VCAP"` and `major != 1` is **unsupported
+  format version**, with the major shown (vector 115). The magic says a vcap
+  trailer is there and the major says it is not one this reader implements;
+  a reader does not interpret the rest of a footer of a major it does not
+  know, and *no proof found* would tell a reader the proof was stripped. If the structure holds and `crc32` does not match the payload, the
   proof is **corrupted**, reported as such and never as *no proof found*. The
   distinction matters: one means the platform stripped the metadata, the other
   means somebody edited the file. The structural checks come first so that
@@ -213,7 +218,11 @@ Given the received file `F`:
 1. **Strip the trailer.** If the last 16 bytes are a valid footer (§3), let
    `T = 8 + payload_len + 16` and `F' = F[0 : len(F) - T]`. Otherwise `F' = F`.
    If `F'` itself ends in a valid footer: *nested proof*, stop (§3).
-2. **Container normalization.**
+2. **Container normalization.** The container is decided by the **first
+   bytes of `F'`**, never by `media.mime`: `FF D8` is JPEG, `ftyp` at offset 4
+   is ISO-BMFF, and anything else is hashed as it is, `C = F'`. The MIME type
+   is a claim inside the proof, and letting a claim choose how the bytes it
+   describes are hashed would let a writer pick the rule its file passes.
    - **JPEG**: remove every `APP11` segment (marker `0xFF 0xEB`) whose payload —
      the bytes after the 2-byte segment length — begins with `0x4A 0x50`
      (`"JP"`, the JUMBF common identifier C2PA uses), and only those. Keep every
@@ -221,6 +230,9 @@ Given the received file `F`:
      original order → `C`. The walk stops at `SOS`; fill bytes (`0xFF` padding
      before a marker) and markers without a length field (`TEM`, `RSTn`) are
      kept where they are, like every other byte that is not a JUMBF APP11.
+     A segment whose length is below 2 or runs past the end of the file makes
+     the JPEG malformed: it has no canonical bytes, and the verdict is *no
+     proof found* — never an exception (vector 116).
    - **ISO-BMFF** (MP4, MOV, HEIC): `C = F'` unchanged. Nothing is removed.
 3. **Hash.** `H = SHA-256(C)`, 32 raw bytes. `media.hash` is `H` in base64url,
    no padding.
@@ -228,7 +240,7 @@ Given the received file `F`:
 The asymmetry between containers is deliberate and follows from where each
 standard puts its own hash:
 
-- **Photos embed the C2PA manifest AFTER sealing**, because the JPEG hard binding
+- **JPEG embeds the C2PA manifest AFTER sealing**, because the JPEG hard binding
   (`c2pa.hash.data`) hashes every byte not excluded, EOI to end of file
   included; if the manifest were inside the canonical bytes, adding it would
   invalidate the vcap signature it depends on. So it is excluded — and, as a
@@ -237,9 +249,10 @@ standard puts its own hash:
   and 68). It carries its own signature, and once written after sealing its
   hard binding covers the trailer: a trailer rewritten later breaks the
   manifest, not the proof (`c2pa-interop-1.0.md` §3).
-- **Video embeds the manifest BEFORE sealing**: the manifest is inside the
+- **ISO-BMFF — video and HEIC alike — embeds the manifest BEFORE sealing**:
+  the manifest is inside the
   canonical bytes and stays there (a manifest inserted afterwards is
-  *tampered*, vector 73), and the trailer appended after it is a `free` box,
+  *tampered*, vector 73, a HEIC photo), and the trailer appended after it is a `free` box,
   which a C2PA claim generator keeps out of `c2pa.hash.bmff.v3` by putting
   `/free` on its exclusion list — the one exclusion, with `/skip`, that a C2PA
   validator does not even flag. Without that entry the trailer breaks the C2PA
@@ -319,34 +332,86 @@ prev_link(n)    = SHA-256( message(n-1) )
 sig(n)          = ECDSA-P256-SHA256( message(n) ), P1363, low s (§4.2)
 ```
 
+- **Segment boundaries are IDR access units**, decided by NAL unit type —
+  H.264 `nal_unit_type` 5, H.265 `IDR_W_RADL` (19) and `IDR_N_LP` (20) — and
+  **not** by the container's sync sample table. `stss` lists random-access
+  points, and in H.265 those include CRA pictures that are not IDRs: a reader
+  that cut there would split a writer's segment in two and check half of it
+  against the whole one's signature (vector 94). Video samples before the
+  first IDR belong to no segment.
 - **A vcap SEI NAL unit** is an SEI NAL (type 6 in H.264, 39 or 40 in H.265)
-  carrying a `user_data_unregistered` payload (payloadType 5) whose 16-byte UUID
-  is the vcap SEI UUID, `SHA-256("vcap/1.0/sei")[0:16]` =
-  `caa653d1ed1763c7af388aea76527336`, and whose `payloadSize` is therefore 36:
-  the 16 UUID bytes are inside the payload that size counts, so a parser that
-  reads it as 20 over-reads the SEI. Derived, not registered:
-  `user_data_unregistered` UUIDs are unregistered by definition (H.264 §D.2.6
-  asks only that they be unlikely to collide), and anyone can recompute this
-  one from a single ASCII string; a future layout takes a new string, as the
-  segment separator does. The payload after the UUID is
-  `capture_id (16 B) || uint32 BE n`, 20 bytes. A writer SHOULD emit one vcap
-  SEI per segment, as a prefix SEI immediately before the segment's IDR, so a
-  demuxed or re-muxed elementary stream still says which capture and which
-  segment a GOP belongs to. A verifier MAY use it to locate segments and MUST
-  NOT treat it as evidence: `content_hash`, the chain and the signatures are.
-  Where no vcap SEI names a GOP, a verifier **MUST NOT infer that GOP's index
-  from its position in the file**, and recomputes nothing for it: position is
-  the index only in a file nobody cut, which is the one assumption a clip
-  breaks. Refusing to guess costs a verifier nothing it can use — a file whose
-  SEIs were stripped no longer matches `media.hash` either, so its ceiling is
-  amber whatever the segments say — while guessing wrong checks one GOP's bytes
-  against another GOP's signature and calls an authentic clip forged. Two
-  implementations of §5 disagreed here, one guessing and one refusing, before
-  this sentence existed.
+  that carries **exactly one** SEI message: a `user_data_unregistered` payload
+  (payloadType 5) whose 16-byte UUID is the vcap SEI UUID,
+  `SHA-256("vcap/1.0/sei")[0:16]` = `caa653d1ed1763c7af388aea76527336`, whose
+  `payloadSize` is **exactly 36**, and after which the NAL holds nothing but
+  `rbsp_trailing_bits` (the byte `0x80`, then only zero bytes). The 16 UUID
+  bytes are inside the payload that size counts, so a parser that reads it as
+  20 over-reads the SEI. The payload after the UUID is
+  `capture_id (16 B) || uint32 BE n`, 20 bytes.
+  - **Emulation prevention.** The SEI header and payload are read from the
+    RBSP: every `emulation_prevention_three_byte` (a `0x03` that follows two
+    zero bytes, H.264 §7.4.1, H.265 §7.4.2) is removed first, and the zero
+    count restarts after it. `capture_id` and `n` routinely contain `00 00`,
+    so a writer MUST apply emulation prevention to the payload and a reader
+    MUST undo it before comparing; `payloadSize` counts RBSP bytes. What
+    `content_hash` excludes is the NAL unit **as stored**, emulation
+    prevention bytes included.
+  - **Shape.** An SEI NAL that carries the vcap UUID in any other shape — a
+    second message beside it, a `payloadSize` other than 36, bytes after the
+    message — is malformed, and the GOP holding it is *tampered*. Excluding a
+    whole NAL because one of its messages is ours would leave every other
+    message in it unsigned inside a verified segment (vector 93).
+  - **Writers MUST emit exactly one vcap SEI in each segment**, in the
+    segment's IDR access unit ahead of its first VCL NAL unit, so a demuxed or
+    re-muxed stream still says which capture and which segment a GOP belongs
+    to. The UUID is derived, not registered: `user_data_unregistered` UUIDs are
+    unregistered by definition (H.264 §D.2.6 asks only that they be unlikely
+    to collide), and anyone can recompute this one from a single ASCII
+    string; a future layout takes a new string, as the segment separator does.
+
   Only vcap SEI NAL units are excluded from `content_hash`: a signature cannot
   cover the bytes that contain it. Every other SEI — registered or not — is
   content and is covered. Excluding by NAL type, as an earlier draft did, would
   have left unsigned bytes inside "verified" segments.
+- **Locating segments.** The vcap SEI locates a segment and is never evidence
+  on its own: `content_hash`, the chain and the signatures are. The binding
+  between the proof and the frames of the received file is this rule, and a
+  verifier that recomputes applies it whole:
+
+  > A signed segment `n` counts as **verified** only if the container yields
+  > exactly one GOP whose vcap SEI carries index `n` and a `capture_id` equal
+  > to the proof's, and that GOP's recomputed `content_hash` matches the signed
+  > one. Once any GOP of the file carries a vcap SEI naming the proof's
+  > `capture_id`, every GOP of the file is accounted for, in decode order: a
+  > GOP whose SEI index is not a signed segment of the proof, an index carried
+  > by more than one GOP, indices not strictly increasing in decode order, a
+  > GOP with no vcap SEI or with one naming another capture, and a GOP with
+  > more than one vcap SEI are each **tampered**. If no GOP can be located —
+  > no vcap SEI names this capture, the file is not ISO-BMFF or has no
+  > H.264/H.265 track, or the verifier did not recompute — there is no segment
+  > credit: `segments.verified` is empty, and unless `media.hash` matches, the
+  > outcome is **frames not compared** — the signatures hold, the frames were
+  > not compared — and it is never *verified clip*.
+
+  A verifier **MUST NOT infer a GOP's index from its position in the file**:
+  position is the index only in a file nobody cut, which is the one
+  assumption a clip breaks, and guessing wrong checks one GOP's bytes against
+  another GOP's signature. And a verifier MUST NOT skip a GOP it cannot
+  place: before this rule both of the implementations that existed did, and a
+  stolen proof next to an unrelated clip read *verified clip* (vector 86), a
+  file with one SEI index edited read *verified clip* with the edited segment
+  counted (vector 88), and a genuine clip with a forged GOP prepended read
+  *verified clip* too (vector 38). Order, duplication and insertion are
+  checked here and not by the chain, because the chain proves the order of
+  the *messages*: only the SEI indices in decode order say where the frames
+  are (vectors 90, 91).
+- **The NAL units of a sample tile it exactly.** In a length-prefixed sample
+  each prefix is followed by that many bytes and the next prefix starts where
+  they end; the last unit ends at the end of the sample. A prefix that is cut
+  short, a zero length, or a unit that overruns the sample makes the container
+  malformed and the verdict *tampered*, never a silent stop: stopping would
+  leave the rest of the sample out of every hash while the GOP still read as
+  verified (vector 92). A sample that lies outside the file is the same case.
 - **A NAL unit is exactly the bytes the container stores for it.** In a
   length-prefixed sample it is the `lengthSizeMinusOne + 1`-byte prefix's whole
   extent; in an Annex-B stream it is everything from the end of a three-byte
@@ -424,25 +489,30 @@ sig(n)          = ECDSA-P256-SHA256( message(n) ), P1363, low s (§4.2)
   - `media.hash` matches, every segment verifies, chain unbroken, first index 0,
     `segment_count` segments present → eligible for **green** (subject to §7);
   - `media.hash` does not match, or segments are missing, but every present
-    segment verifies and the chain holds wherever two consecutive segments are
-    both present → **verified clip**, amber, reporting which segment indexes
-    verified out of `segment_count`;
+    segment signature verifies, the chain holds wherever two consecutive
+    segments are both present, and at least one GOP is located and verified
+    under *Locating segments* → **verified clip**, amber, reporting which
+    segment indexes verified out of `segment_count`;
   - a segment signature fails, or a present segment's `prev` differs from
     `SHA-256(message(n−1))` while segment n−1 is present (the chain breaks where
     the file claims contiguity) → **tampered**, red;
-  - **a present segment whose `content_hash`, recomputed from the container,
+  - **a located segment whose `content_hash`, recomputed from the container,
     differs from the signed one → tampered**, red, reporting which segments do
-    verify. Recomputation is optional — a verifier without a demuxer verifies
-    the signature layer and nothing here changes that — but a verifier that
-    holds the file and skips it has checked that somebody signed some hashes,
-    not that the frames in front of the reader are those frames. A verifier
-    that skips it stays conformant and **MUST** say so, with *segment content
-    not recomputed* (§7): the two answers differ — on vector 39 the same file
-    reads *verified_clip* without the recomputation and *tampered* with it — so
-    a reader who is not told which one ran cannot know what the verdict means. A contradicted
+    verify; so is every other failure *Locating segments* lists. A contradicted
     segment is not a missing one: a clip lacks segments, this file *has* the
     segment and its bytes are not the bytes that were signed, which is
     substitution inside a signed range and never amber (vector 39);
+  - `media.hash` does not match and no GOP is located → **frames not
+    compared**, amber: the core and segment signatures hold, and nothing ties
+    them to these frames (vectors 86, 87). Recomputation is optional — a
+    verifier without a demuxer verifies the signature layer and nothing here
+    changes that — but a verifier that skips it has checked that somebody
+    signed some hashes, not that the frames in front of the reader are those
+    frames. It stays conformant, **MUST** say so with *segment content not
+    recomputed* (§7), and never reaches *verified clip*: on vector 39 the same
+    file reads *frames not compared* without the recomputation and *tampered*
+    with it, and a reader who is not told which one ran cannot know what the
+    verdict means;
   - `segments[].range` is **deprecated**: writers MUST NOT emit it, and
     verifiers MUST ignore it where an older file carries it. It was a byte
     range in the received file, unsigned, and a verifier was already forbidden
@@ -510,14 +580,34 @@ A verifier builds it from the received proof by taking those keys and nothing
 else, then serializes it with JCS. Unknown top-level keys are not part of the
 core and are listed as *not evaluated* (§9).
 
-**Canonicalization procedure** (normative; vector `32-jcs-core-canonicalization`):
+**Reading the JSON** (normative). A proof — trailer payload or sidecar — is
+read under rules that leave two parsers no room to disagree, and a proof that
+breaks one is **not well formed: *no proof found*** (§8):
+
+- UTF-8, **no byte-order mark** (vector 114), and valid UTF-8 throughout.
+- **No duplicate member names**, at any depth (vector 111). JSON leaves them
+  undefined and parsers split between the first and the last, so one proof
+  would read as two.
+- **Every number is an integer, written as an integer literal**
+  `-?(0|[1-9][0-9]*)` — no fraction, no exponent, not `4032.0`, not `1.25e3`
+  (vector 113) — **within ±(2^53 − 1)** (vector 112), the range every JSON
+  implementation reads exactly. The format has no other numbers, in the core
+  or out of it; a later minor adds none.
+
+**Canonicalization procedure** (normative; vectors `32-jcs-core-canonicalization`
+and `120-jcs-integer-like-and-proto-keys`):
 
 1. Parse the proof JSON. Take the top-level members named above, in whatever
    order they appear; ignore every other member.
 2. Serialize the resulting object with JCS (RFC 8785): object members sorted by
    the UTF-16 code units of their names at every level, arrays in place, no
    whitespace, strings escaped as ECMAScript `JSON.stringify` does, numbers as
-   plain decimal integers (the core has no other numbers).
+   plain decimal integers (the core has no other numbers). The order is the
+   code-unit order of the names **as strings**: `"10"` before `"9"`, and a
+   member named `__proto__` is a member like any other. JavaScript objects
+   enumerate integer-like names first in numeric order and treat `__proto__`
+   as the prototype, so an implementation that builds a sorted object and
+   hands it to `JSON.stringify` gets both wrong (vector 120).
 3. `core_bytes` is the UTF-8 encoding of that string; `core_hash = SHA-256(core_bytes)`.
 
 A writer MUST store the whole proof in the trailer as JCS of the entire object;
@@ -606,7 +696,7 @@ containing a schema-valid value remain readable under the same rules.
 | `registry` | sync | inclusion proof against a Signed Tree Head, carried inline | leaf carries `device.key_id` and `sig.pub` |
 | `timestamp.tsr` | sync | RFC 3161 token, TSA chain, validated offline | `messageImprint = core_hash` |
 | `anchor` | sync | RFC 6962 path from `SHA-256(0x00 ‖ core_hash)` to the root the chain recorded | leaf = `core_hash` |
-| `integrity` | sync | registry key signature over `core_hash ‖ verdict` | by construction |
+| `integrity` | sync | registry key signature over `"vcap/1.0/integrity" ‖ core_hash ‖ JCS(body)` | signature covers `core_hash` |
 | `location_corroboration` | sync, after an operator answered | registry key signature over `"vcap/1.0/location" ‖ core_hash ‖ JCS(body)` | signature covers `core_hash`, which covers the declared position |
 
 - **`attestation`** — the key attestation certificate chain, leaf first, each
@@ -614,21 +704,28 @@ containing a schema-valid value remain readable under the same rules.
   level above `none`), absent on web; on iOS the App Attest material goes to the
   registry at enrolment and the proof carries the `registry` attachment
   instead. **The leaf's SubjectPublicKeyInfo MUST be byte-equal to `sig.pub`**;
-  otherwise *attestation does not match the signing key*, red. The chain MUST
+  otherwise the verdict is *tampered*, red (vector 108): a chain about another
+  key next to this signature is a signature swap, not weak evidence. What the
+  chain must satisfy to prove a level is in §7. The chain MUST
   NOT carry device identifiers (no ID attestation: serial, IMEI, MEID).
-- **`attestation_status`** *(optional, added after v1.0)* — the revocation
-  status of the certificates in the `attestation` chain, as it stood **while
-  the chain was still current**, relayed and countersigned by the registry.
-  Without it a verifier reading a proof years later cannot answer the question
-  the instant rule (§7) poses: whether the chain was revoked *at* the capture,
-  because the status of an expired certificate is no longer published anywhere.
+- **`attestation_status`** *(optional)* — the revocation status of the
+  certificates in the `attestation` chain, as it stood **while the chain was
+  still current**, relayed and countersigned by the registry. Without it a
+  verifier reading a proof years later cannot answer the question the instant
+  rule (§7) poses: whether the chain was revoked *at* the capture, because the
+  status of an expired certificate is no longer published anywhere.
   - `source`: extensible; `googleStatusList` is Android's attestation status
     list. An unknown value → the attachment is ignored and the verdict is the
     one without it (*chain revocation not checked*).
-  - `fetched_at`: ms, registry clock, when the status was read.
-  - `entries`: one per certificate looked up — `{ "serial": lowercase hex of
-    the certificate serial number, "status": "valid" | "revoked" | "unknown",
-    "reason": optional string }`.
+  - `fetched_at`: ms, registry clock, when the status was read. **It is not a
+    revocation date** and a verifier MUST NOT use it as one: a list read a
+    month after a revocation says nothing about when the revocation happened.
+  - `entries`: one per certificate looked up — `{ "serial", "status":
+    "valid" | "revoked" | "unknown", "reason": optional string, "revoked_at":
+    optional ms }`. `serial` is the certificate serial number in lowercase
+    hex; serials compare with leading zeros stripped. `revoked_at` is the
+    revocation date **as the source itself gives it**, and is absent when the
+    source gives none.
   - `sig`: the registry signing key's ES256 signature, P1363, over
     `core_hash ‖ JCS(entries) ‖ uint64 BE fetched_at`.
 
@@ -650,15 +747,35 @@ containing a schema-valid value remain readable under the same rules.
   "we checked, it was fine" statement from us would be trusting us, which is
   the property this format exists not to require.
 
-  Revocation of a chain certificate is **temporal**, exactly as in the device
-  key's case above. Let `T` be the proven instant of §7. A `revoked` entry with
-  `fetched_at ≤ T` means the chain was already revoked when the capture was
-  claimed: proven level `none`, *attestation key revoked*, red for the level. A
-  `revoked` entry with `fetched_at > T` means it was revoked afterwards: the
-  level at `T` stands, shown with *attestation key revoked after the capture* —
-  a batch key withdrawn in 2028 does not un-attest a capture from 2026, for the
-  same reason a rotated device key does not rewrite the past. `unknown` and a
-  missing entry are *chain revocation not checked*, amber.
+  **Coverage.** A snapshot answers for the certificates it names and no
+  others. Every certificate of the chain other than the pinned root MUST have
+  an entry; a certificate without one, or with `unknown`, leaves the chain's
+  revocation unchecked: *chain revocation not checked*, amber, never red
+  (vectors 98, 99). `unknown` is the registry not knowing, and reading it as
+  revoked would turn silence into an accusation.
+
+  **Revoked.** A `revoked` entry for a certificate of the chain makes the
+  proven level `none`, *attestation key revoked*, **red** (vectors 44, 96, 97)
+  — unless all of these hold, in which case the level at the proven instant
+  stands and is shown with *attestation key revoked after the capture*
+  (vector 45):
+  1. the proven instant of §7 comes from a **trusted source** — a valid
+     `timestamp` token or a verified `anchor` — and not from
+     `time.device_clock`. The device clock is set by whoever holds the device
+     key, and after a leaked keybox that is exactly who the revocation is
+     about: a thief signing today with the clock set to last month would
+     otherwise read *revoked after the capture* (vector 96);
+  2. the entry carries `revoked_at` and the proven instant is before it.
+     `fetched_at` is never that date (vector 97);
+  3. the entry's `reason` is not `KEY_COMPROMISE` or `CA_COMPROMISE`. A
+     compromised key vouches for nothing it ever signed, so those revocations
+     reach back to the key's first use whatever the date says — the rule §6.2
+     already applies to a device key revoked for `compromise` (vector 44).
+
+  A batch key withdrawn in 2028 for `SUPERSEDED` does not un-attest a capture
+  a time-stamping authority placed in 2026, for the same reason a rotated
+  device key does not rewrite the past; a batch key leaked and listed in 2028
+  does not keep attesting what its thief signed with a clock set to 2026.
 
 - **`registry`** — everything a verifier needs to check, **offline**, that the
   signing key was in the transparency log when the tree head was signed. Not a
@@ -707,12 +824,18 @@ containing a schema-valid value remain readable under the same rules.
   for a claim above its evidence.
 
   **Before the capture.** `tree_head.timestamp` is when the log signed a tree
-  containing the key. If it exceeds `time.device_clock`, the key was logged
-  after the declared capture time: *registered after the declared capture*,
-  shown, amber. When a `timestamp` attachment exists, `tree_head.timestamp`
-  MUST also not exceed the token's time. Revocation is not visible in this
-  attachment — it is a later leaf — and is checked online against the log
-  (§7, *revocation not checked* when offline).
+  containing the key. It MUST NOT exceed `time.device_clock`: a key logged
+  after the declared capture time is *registered after the declared capture*,
+  shown, amber (vector 53). When a valid `timestamp` token exists it MUST NOT
+  exceed the token's `genTime` either: *registered after the trusted time*,
+  amber (vector 102) — the token is an instant the device does not choose,
+  and a key logged after it was not in the log when the capture was stamped.
+  A core that declares no `time.device_clock` has no capture time to be early
+  against: the key is **not** shown to have been registered before the
+  capture, and the verdict says *capture time not declared* (vector 101). An
+  absent field is a weaker verdict, never a stronger one. Revocation is not
+  visible in this attachment — it is a later leaf — and is checked online
+  against the log (§7, *revocation not checked* when offline).
 
   **Revocation, online.** A verifier with network asks the log for the key's
   status **at the capture time** and receives a statement signed by the log
@@ -725,10 +848,10 @@ containing a schema-valid value remain readable under the same rules.
   capture at `T` is affected only if `effective_from ≤ T` — a lost or rotated
   key does not rewrite the past — unless the leaf is `retroactive`, which the
   log accepts for the reason `compromise` only: a compromised key vouches for
-  nothing it ever signed. The instant a verifier asks about is
-  `time.device_clock`, or the `timestamp` token's time when present (the
-  trusted bound). *Revoked at the declared capture time* → **red** for the
-  key's standing, shown with the reason.
+  nothing it ever signed. The instant a verifier asks about is the proven
+  instant of §7 — the token's `genTime`, else a verified anchor's block time,
+  else `time.device_clock`. *Revoked at that instant* → **red** for the key's
+  standing, shown with the reason.
 - **`anchor`** — existence before a block, verifiable against the chain and
   nothing of ours. `chain` names the network (`base`, `base-sepolia`; `ebsi`,
   `ebsi-pilot` for EBSI's Hyperledger Besu ledger); `tx` and `block` locate
@@ -760,37 +883,41 @@ containing a schema-valid value remain readable under the same rules.
   move, and nothing says how long before. An anchor whose root the chain
   contradicts gives no instant at all: dating a capture by a transaction that
   does not contain it would be worse than having no anchor.
-- **`integrity`** — `source` is `playIntegrity`, `appAttest` or `none`;
-  `verdict` is `hardware`, `basic`, `unevaluated` or `failed`; `evaluated_at`
-  is the registry's clock; `sig` is the registry signing key's ES256 signature
-  over `core_hash ‖ UTF-8(verdict)`, P1363. Integrity verdicts are tokens only
-  the developer's server can decrypt, so they cannot live in the core as
-  anything but a self-declaration — and a self-declaration by the app is
-  worthless against the compromised device it exists to flag. As a
+- **`integrity`** — `source` is `playIntegrity`, `appAttest` or `none`
+  (extensible, §9: a verifier that does not know the value reads the
+  attachment as absent, *integrity unevaluated*); `verdict` is `hardware`,
+  `basic`, `unevaluated` or `failed` (not extensible: any other value under a
+  valid signature is *integrity evidence invalid*); `evaluated_at` is the
+  registry's clock; `sig` is the registry signing key's ES256 signature, P1363,
+  over `"vcap/1.0/integrity" ‖ core_hash ‖ JCS(A)`, where `A` is the attachment
+  without `sig` — the construction of `location_corroboration`, so `source` and
+  `evaluated_at` are signed too and the separator keeps the registry's key
+  from being read across messages. **Which key**: the one that signs that
+  log's tree heads, found as for `attestation_status`. Integrity verdicts are
+  tokens only the developer's server can decrypt, so they cannot live in the
+  core as anything but a self-declaration — and a self-declaration by the app
+  is worthless against the compromised device it exists to flag. As a
   registry-signed attachment the verdict is Google's or Apple's, relayed and
   signed by a key the verifier already has for tree heads. Absent →
   *integrity unevaluated* (§8). The server *adds* evidence; it is never
   *needed* for a verdict.
 
-  A verifier MUST check the signature over `core_hash ‖ UTF-8(verdict)` under a
-  trusted registry key and that `source` and `verdict` are values this section
-  names. A valid attachment is shown as **`integrity <verdict>`** and **changes
-  no ceiling**: §7 takes the proven level from `attestation`, and the same
-  rooted device that fails an integrity check also fails to produce a chain to
-  a hardware root — so counting it again would count one fact twice. `failed`
-  is therefore *authentic, and here is what Google said*, which is the point of
-  showing it at all: a reader shown nothing takes no news for good news.
+  A valid attachment is shown as **`integrity <verdict>`**. A valid `failed`
+  caps the ceiling at **amber** and is shown prominently (§7, vector 109):
+  the chain proves where the key lives, and Google's or Apple's word that the
+  device failed its check is a reason not to say green however good the chain
+  is. No other verdict moves the ceiling, and neither does absence.
 
-  The verdict is inside the signed message, and that is what the signature
-  buys: a verdict cannot be **strengthened**, because `failed` cannot become
-  `hardware` without breaking it. It cannot buy the other direction. A
-  relabelled attachment is indistinguishable from one signed by a registry the
-  verifier does not follow — both are "no key of mine made this signature" —
-  and an attacker who wanted to suppress a `failed` verdict could delete the
-  attachment for the same result. Something whose absence and whose invalidity
-  are the same answer cannot be load-bearing, which is the reason this
-  attachment has no row in §7's table.
-- **`location_corroboration`** *(optional, added after v1.0)* — an
+  The cap works in one direction, and the signature is why. The verdict is
+  inside the signed message, so a verdict cannot be **strengthened**: `failed`
+  cannot become `hardware` without breaking it. It cannot buy the other
+  direction. A relabelled attachment is indistinguishable from one signed by a
+  registry the verifier does not follow — both are "no key of mine made this
+  signature" (vector 66) — and an attacker who wanted to suppress a `failed`
+  verdict could delete the attachment for the same result. So no integrity
+  verdict is a condition *for* green; a present `failed` is a reason against
+  it.
+- **`location_corroboration`** *(optional)* — an
   operator-side check of the declared position, relayed and countersigned by
   the registry. The registry, after the capture and with the user's consent
   handled by the operator, calls a CAMARA API about the line in the capturing
@@ -878,13 +1005,29 @@ containing a schema-valid value remain readable under the same rules.
      as. One byte, and every CMS implementation gets it wrong once.
   4. the signer certificate chains to a **TSA root the verifier pins** and was
      valid at `genTime`. Anyone can run a TSA and stamp anything with any time,
-     so the root is the whole of the trust.
+     so the root is the whole of the trust. The signer is validated at
+     `genTime` and not at the verifier's clock for the reason §7 validates an
+     attestation chain at the capture: a TSA certificate that expired since
+     would otherwise make every token it ever issued worthless.
   5. the signer carries the `timeStamping` extended key usage
      (`1.3.6.1.5.5.7.3.8`). Without this check any certificate under the root
      could stamp, and a TSA root signs more than its own stamping key.
 
-  Any failure → both labels of §8. No pinned TSA root at all is *trusted time
-  not evaluated*: evidence this verifier cannot read, not evidence that failed.
+  6. when a verified `anchor` is also present, `genTime` does not exceed the
+     anchor's block time, and the signer certificate was still valid at that
+     block time (vectors 103, 104). Validating at `genTime` is circular in one
+     respect: `genTime` is chosen by whoever holds the TSA key, so a key that
+     leaks after its certificate expired can stamp a fresh core with a time
+     inside the certificate's life. A block time is chosen by nobody. A core
+     first anchored after the certificate expired cannot carry a token that
+     honest stamping produced, and a token that postdates the block which
+     already anchors its core contradicts the order the evidence was made in.
+     Without an anchor nothing bounds a leaked TSA key's backdating; the
+     residual risk is in `threat-model.md` §5.4.
+
+  Any failure → both labels of §8, and the instant falls to the next source
+  (§7). No pinned TSA root at all is *trusted time not evaluated*: evidence
+  this verifier cannot read, not evidence that failed.
 
   A valid token makes `genTime` the instant the proof is validated at (§7),
   outranking a verified anchor and `time.device_clock` — and it removes
@@ -909,28 +1052,75 @@ field set that stops the web SDK and iOS from presenting themselves as Android
 with StrongBox.
 
 **Proven level.** Android: the weaker of `attestationSecurityLevel` and
-`keyMintSecurityLevel` in the attestation extension, with the chain valid to a
-pinned Google root and the leaf key equal to `sig.pub`; `software`, an invalid
-chain or a key mismatch prove `none`. iOS: `secureEnclave` when the registry
-entry records a valid App Attest binding for `device.key_id`. Web: `none`.
+`keyMintSecurityLevel` in the attestation extension, when the chain satisfies
+every rule below; `software`, or a chain that fails any of them, proves
+`none`. iOS: see *The Secure Enclave level* below. Web: `none`.
+
+An Android chain proves a level only when all of these hold — the checks
+Google's key attestation guidance asks of a verifier, written as MUSTs so two
+verifiers cannot disagree about a chain:
+
+1. **Signatures and anchor.** Each certificate is signed by the next, and the
+   last is, or is signed by, a pinned Google attestation root. Every
+   certificate is valid at the proven instant (below).
+2. **Issuers are CAs.** Every certificate above the leaf carries
+   `basicConstraints` with `cA` true and `keyUsage` with `keyCertSign`.
+3. **The extension is the leaf's.** The key attestation extension
+   (`1.3.6.1.4.1.11129.2.1.17`) is present in the leaf and in **no other**
+   certificate of the chain. Rules 2 and 3 are what stop a genuine attested
+   key — a leaf, real hardware and all — from signing a "leaf" of its own with
+   whatever KeyDescription it likes and having the chain still verify to the
+   root (vector 105).
+4. **Verified boot.** The hardware-enforced `rootOfTrust` says
+   `deviceLocked` true and `verifiedBootState` `Verified`. An unlocked
+   bootloader lets anything run above the TEE, so the key's level says nothing
+   about what asked it to sign.
+5. **The signing key.** The leaf's SubjectPublicKeyInfo equals `sig.pub`;
+   otherwise the verdict is *tampered* (§6.2, vector 108).
+
+A chain that fails rule 1, 2, 3 or 5, or cannot be read, is evidence that does
+not hold up: *origin not hardware-attested* **and** *attestation evidence
+invalid* (§8). A chain that holds and proves too little — rule 4, or a
+`software` level — is *origin not hardware-attested* alone: a genuine chain
+from an unlocked phone is not a forged one.
+
+**The app that made the key.** The leaf's `attestationApplicationId` names the
+signing certificates of the app that created the key (`signature_digests`,
+SHA-256). When a `registry` attachment verifies, a verifier compares them with
+the app signing digests the log's operator declares for the apps it admits
+keys from — shipped with the log's public key in the verifier's trust list
+(`app_signing_digests`, `vectors/_trust/logs.json`), so the check needs no
+network. None of the leaf's digests declared → *attestation app not admitted*;
+no declaration for the log, or no `attestationApplicationId` in the leaf →
+*attestation app not checked* (vectors 106, 107). Both are **amber, never
+red**: the hardware claim stands and what is missing is the claim that a known
+app build made the key, which green asserts (`threat-model.md` §1). Without a
+`registry` attachment the check is not made, and the verdict is already amber
+for *key not in transparency log*.
 
 | proven level | attestation / binding | key in log before capture | verdict ceiling | label shown |
 |---|---|---|---|---|
-| `strongbox` | valid to Google hardware root, RKP fresh, revocation checked | yes | **green** | sealed in secure hardware |
-| `tee` | valid to Google root, revocation checked | yes | **green** | sealed in the TEE |
-| `secureEnclave` | App Attest valid, key bound to app | yes | **green** | sealed in the Secure Enclave (app-attested) |
+| `strongbox` | valid to Google hardware root, RKP fresh, revocation checked, app admitted | yes | **green** | sealed in secure hardware |
+| `tee` | valid to Google root, revocation checked, app admitted | yes | **green** | sealed in the TEE |
+| `secureEnclave` | the registry records an App Attest binding (see below) | yes | **green** | sealed in the Secure Enclave (app-attested) — *our records* |
 | any of the above | valid | no (`registry` absent), or its evidence invalid | **amber** | key not in the transparency log |
 | any of the above | valid | yes, but `tree_head.timestamp` after the declared capture | **amber** | registered after the declared capture |
+| any of the above | valid | yes, but `tree_head.timestamp` after a valid token's `genTime` | **amber** | registered after the trusted time |
+| any of the above | valid | the core declares no `time.device_clock` | **amber** | capture time not declared |
 | any of the above | valid, log not reachable | any | **amber** | revocation not checked |
-| any | key revoked at the declared capture time (signed status, §6.2) | — | **red** | key revoked |
-| any | a chain certificate `revoked` at or before the proven instant (`attestation_status`, §6.2) | — | **red** | attestation key revoked |
-| any of the above | a chain certificate revoked *after* the proven instant | any | unchanged | attestation key revoked after the capture |
+| any of the above | valid, and the only instant is `time.device_clock` | any | **amber** | no trusted time |
+| any of the above | valid, `attestationApplicationId` not among the log's declared digests | yes | **amber** | attestation app not admitted |
+| any of the above | valid, no digests to compare | yes | **amber** | attestation app not checked |
+| any | key revoked at the proven instant (signed status, §6.2) | — | **red** | key revoked |
+| any | a chain certificate `revoked` (`attestation_status`, §6.2), not shown by a trusted instant to predate the source's revocation date, or revoked for compromise | — | **red** | attestation key revoked |
+| any of the above | a chain certificate revoked, and a trusted instant predates the source's revocation date | any | unchanged | attestation key revoked after the capture |
+| any of the above | an entry `unknown`, or a certificate of the chain without an entry | any | **amber** | chain revocation not checked |
 | any of the above | valid at the proven instant of capture, expired since | any | unchanged by the expiry | (nothing: expiry alone says nothing) |
 | any of the above | expired, and the capture time is only `time.device_clock` | any | **amber** | attestation chain expired, capture time not proven |
-| `none` | session key, or no attestation | n/a | **amber, never green** | origin not hardware-attested |
+| `none` | session key, no attestation, or a chain that does not prove a level | n/a | **amber, never green** | origin not hardware-attested |
 | any of the above | a video proof whose `content_hash` values were not recomputed from the container (§5) | any | unchanged | segment content not recomputed |
 | any | claimed level above the level the `attestation` attachment proves | — | **amber at best, flagged** | inconsistent claim |
-| any | `integrity.verdict` is `failed`, or mock location provider flagged | — | **amber at best, prominently flagged** | device integrity failed |
+| any | a valid `integrity` attachment whose verdict is `failed` (§6.2) | — | **amber at best, prominently flagged** | integrity failed |
 | any | `sig` invalid, or attestation leaf ≠ `sig.pub` | — | **red** | tampered |
 
 - **Claimed above proven** is flagged and capped at amber, not red: the core is
@@ -949,9 +1139,17 @@ entry records a valid App Attest binding for `device.key_id`. Web: `none`.
   `attestation` chain, the TSA chain of a `timestamp` token — MUST be validated
   at the **proven instant of the capture**, not at the moment the verifier
   runs. That instant is, in this order: the `genTime` of a valid `timestamp`
-  token; the block time of a verified `anchor`; `time.device_clock`, which is a
-  device claim and caps the verdict at amber whatever else holds. A chain that
-  was valid at that instant and has expired since is **not** an error. The
+  token (§6.2, including its agreement with an anchor); the block time of a
+  verified `anchor`; `time.device_clock`; and, when the core declares none,
+  the verifier's own clock. **Green needs one of the first two.** The device
+  clock is a claim, set by whoever holds the device, so every check made "at
+  the capture" against it is a check made at a moment the signer chose: it
+  caps the verdict at **amber** whatever else holds (vector 54; the green is
+  vector 100). The verifier's clock proves nothing about the capture and caps
+  it the same way, with *capture time not declared* — a missing
+  `time.device_clock` is never a stronger verdict than a present one (vector
+  101). A chain that was valid at the proven instant and has expired since is
+  **not** an error. The
   reason is measured, not theoretical: in the real chain of the moto g75 5G the
   RKP-issued intermediate is valid from 6 to 18 September 2026 — twelve days —
   so a verifier that validated at its own clock would report *origin not
@@ -975,6 +1173,20 @@ entry records a valid App Attest binding for `device.key_id`. Web: `none`.
   which proves `none` for want of anything to prove it with. A JSON Schema for
   v1.0 rejects such a document and is right to — *"not a v1.0 document"* and
   *"still verifiable"* are different statements (vector 40).
+
+**The Secure Enclave level.** iOS carries no attestation chain in the proof:
+App Attest material goes to the registry at enrolment, and what reaches a
+verifier is the registry's leaf, whose `secure_hw` says what the registry saw
+proven then. This version defines **no offline binding** between a proof and
+an App Attest attestation: nothing in the file lets a verifier recompute that
+the key lives in a Secure Enclave, and a v1.0 verifier MUST NOT pretend
+otherwise. So `secureEnclave` is reachable **only through the registry**: it
+is the proven level when a `registry` attachment verifies under a trusted log
+and its leaf records `secureEnclave` for this key, and a verifier MUST label it
+as evidence of **our records** — the registry's word, like *corroborated* in
+§7.1 — never as *checkable without us*. Without such a leaf the level is
+`none`, whatever `device.secure_hw` claims. A binding a verifier can check
+offline arrives as a new attachment in a later minor, with its vectors.
 
 ### 7.1 The position level
 
@@ -1025,6 +1237,28 @@ Rules:
 
 ## 8. Decision 5 — Optional versus invalidating
 
+**Outcome and ceiling.** A verdict answers two questions and keeps them apart.
+The **outcome** says what the received bytes are; the **ceiling** (§7) says
+what the origin is worth. The outcomes:
+
+| Outcome | Colour | Meaning |
+|---|---|---|
+| `authentic` | the ceiling's | the file is the one the key sealed; §7 decides green, amber or red |
+| `verified_clip` | amber | a video that is not the original, whose present segments are located in the file and verify (§5) |
+| `frames_not_compared` | amber | a video whose core and segment signatures hold, and in which no segment could be located or none was recomputed (§5, *Locating segments*) |
+| `tampered` | red | a signature, a hash or a binding the proof makes does not hold |
+| `corrupted_proof` | red | a structurally valid trailer whose CRC does not match (§3) |
+| `nested_proof` | red | the canonical bytes end in another trailer (§3) |
+| `no_proof_found` | none | no trailer, no sidecar, or a proof that is missing, unparseable or malformed (below) |
+| `unsupported_format_version` | none | a proof or a footer of a major version this verifier does not implement (§9) |
+
+The ceiling is computed for an `authentic` outcome and is red only for a
+revocation (§7): the file is intact and the origin is worth nothing, which is
+a different statement from *tampered* (vector 44). **Labels accompany every
+verdict whose outcome is not red**, a red ceiling included; a red *outcome*
+carries its reason and nothing else, because "no trusted time" on a tampered
+file is noise. A clip's outcome is amber whatever its ceiling would be.
+
 **Required.** `v`, `capture_id`, `media`, `media.mime`, `media.hash`,
 `media.w`, `media.h`, `device.secure_hw`, `device.key_id`, `sig`, and for a
 video proof `media.segment_count` and `segments`. The pixel dimensions are
@@ -1038,11 +1272,9 @@ verified as §5 says. Missing or unparseable → *no proof found*. Present but
 invalid → *tampered*.
 
 **Optional, each with its exact label when absent.** Absence is never an error,
-and the verifier states it rather than staying silent. Labels accompany
-non-red verdicts only: a red verdict carries its reason and nothing else,
-because "no trusted time" on a tampered file is noise.
+and the verifier states it rather than staying silent.
 
-| Absent | Label | What it means |
+| Absent, or present and not enough | Label | What it means |
 |---|---|---|
 | `timestamp` | *no trusted time* | only the device clock, shown as declared |
 | `anchor` | *not anchored* | existence before a block is not proven |
@@ -1050,8 +1282,27 @@ because "no trusted time" on a tampered file is noise.
 | `registry` present, `log_id` unknown to this verifier | *log not trusted* | not evidence that failed: evidence this verifier cannot read |
 | the log's signed status, when offline | *revocation not checked* | the key was in the log; whether it still is cannot be established without asking |
 | `timestamp` present, no TSA root pinned | *trusted time not evaluated* | evidence this verifier cannot read |
-| `integrity` present and valid | *integrity `<verdict>`* | what Google or Apple said about the device, relayed — shown, and never a ceiling |
+| `integrity` present and valid | *integrity `<verdict>`* | what Google or Apple said about the device, relayed and signed by the registry; `failed` caps the ceiling at amber (§7), every other verdict caps nothing |
 | `anchor` present, chain not consulted | *anchoring not verified* | the path reaches the claimed root; nobody checked the chain recorded it |
+| `attestation` (Android) | *origin not hardware-attested* | proven level `none` |
+| `integrity` | *integrity unevaluated* | no statement about the device's state |
+| `watermark` | *no watermark* | the detector did not run, or no mark was looked for |
+| `location` | nothing shown | absence is not a claim about place: `location.level` is `none` (§7.1) |
+| `location` present, no valid corroboration | *location declared only* | the device signed the coordinates and nothing else vouches for them |
+| `location_corroboration` present and valid, `match` | *location corroborated* | the registry attests the operator's answer, to the stated method and radius; the position level is `corroborated` and no ceiling moves |
+| `location_corroboration` present and valid, `no-match` | *location contradicted* | the operator's check disagreed with the declared position; shown, level `declared`, no ceiling moves |
+| `location_corroboration` present, no trusted key verifies it | *location corroboration not verified* | a signer this verifier does not follow, or a statement about another proof — the same bytes |
+| `location_corroboration` present, unknown `method`, no log key held, or no position to corroborate | *location corroboration not evaluated* | evidence this verifier cannot read |
+| `location.evidence` non-empty | *location evidence not evaluated* | device-side kinds arrive with a later minor; this version weighs none |
+| `location.level` claimed above the level reached | *location claimed above evidence* | the claim is the device's; the level is the evidence's |
+| `policy.retention_ref` | nothing shown | reserved; no storage or retention claim (§6.1) |
+| `time.device_clock` | *capture time not declared* | nothing in the core dates the capture; the registration cannot be placed before it and the ceiling is amber (§7) |
+| `registry` present, tree head after a valid token's `genTime` | *registered after the trusted time* | the key was logged after an instant the device does not choose (§6.2) |
+| `attestation` present, not holding up | *attestation evidence invalid* | with *origin not hardware-attested*: a chain that fails a rule of §7 other than verified boot or level |
+| `attestation` valid, registry verified, app digests do not match | *attestation app not admitted* | the key was made by an app the log does not declare (§7) |
+| `attestation` valid, registry verified, nothing to compare | *attestation app not checked* | the log declares no digests, or the leaf names no app (§7) |
+| `attestation_status` absent, unreadable, `unknown` or incomplete | *chain revocation not checked* | the chain's certificates were not all shown valid while the chain was current (§6.2) |
+| an iOS level from a registry leaf | *level from registry records* | the registry's word that the key is in a Secure Enclave; nothing in the file shows it (§7) |
 
 **An attachment that is present and does not hold up carries two labels: the
 absent label above, and its own *… evidence invalid*.** So a broken `registry`
@@ -1071,18 +1322,6 @@ An attachment a verifier cannot *read* is not that case. A `log_id` outside the
 trust set, a chain it has no client for: that is absent evidence, a weaker
 verdict and never an error, and it carries the absent label or its own
 *not verified* label alone.
-| `attestation` (Android) | *origin not hardware-attested* | proven level `none` |
-| `integrity` | *integrity unevaluated* | no statement about the device's state |
-| `watermark` | *no watermark* | the detector did not run, or no mark was looked for |
-| `location` | nothing shown | absence is not a claim about place: `location.level` is `none` (§7.1) |
-| `location` present, no valid corroboration | *location declared only* | the device signed the coordinates and nothing else vouches for them |
-| `location_corroboration` present and valid, `match` | *location corroborated* | the registry attests the operator's answer, to the stated method and radius; the position level is `corroborated` and no ceiling moves |
-| `location_corroboration` present and valid, `no-match` | *location contradicted* | the operator's check disagreed with the declared position; shown, level `declared`, no ceiling moves |
-| `location_corroboration` present, no trusted key verifies it | *location corroboration not verified* | a signer this verifier does not follow, or a statement about another proof — the same bytes |
-| `location_corroboration` present, unknown `method`, no log key held, or no position to corroborate | *location corroboration not evaluated* | evidence this verifier cannot read |
-| `location.evidence` non-empty | *location evidence not evaluated* | device-side kinds arrive with a later minor; this version weighs none |
-| `location.level` claimed above the level reached | *location claimed above evidence* | the claim is the device's; the level is the evidence's |
-| `policy.retention_ref` | nothing shown | reserved; no storage or retention claim (§6.1) |
 
 **A declared watermark that does not come back.** `watermark` is the writer
 saying a mark was embedded; it is not a promise that a reader will find it, and
@@ -1184,8 +1423,11 @@ checked*. A verifier that is offline says so and caps at amber; a server-side
 validator with no list fails closed. Same fact, two contexts, both written here.
 
 **Invalidating — red.** `sig` invalid over `JCS(core)`; attestation leaf key
-different from `sig.pub`; a present segment whose `content_hash` recomputed from the container
-differs from the signed one (§5); a watermark payload that **decodes** to an id other
+different from `sig.pub`; a located segment whose `content_hash` recomputed
+from the container differs from the signed one, and every other failure of
+§5's *Locating segments* — a GOP no signed segment accounts for, a duplicated
+or out-of-order index, a malformed vcap SEI — or a container whose NAL units
+do not tile its samples (§5); a watermark payload that **decodes** to an id other
 than the one the proof declares (`capture_id` for `photo-bch-v3`,
 `watermark.mark_id` for `video-rep-v1`) — a payload that fails to decode is
 *watermark not recovered*, above, and not this, and **a `video-rep-v1` block
@@ -1196,7 +1438,9 @@ contiguity; footer structurally valid with a CRC mismatch (*corrupted proof*,
 distinct from *no proof found*).
 
 **Not red.** `media.hash` not matching the recomputed canonical bytes on a video
-whose present segments verify → *verified clip* (§5). On a photo, a `media.hash`
+whose present segments verify and are located in the file → *verified clip*
+(§5); on a video in which no segment can be located → *frames not compared*
+(§5, *Locating segments*). On a photo, a `media.hash`
 mismatch with a valid `sig` means the file was altered after sealing: **red**.
 
 **The rule that outranks the table.** A watermark match with no valid signature is
@@ -1323,17 +1567,20 @@ says.
       revocation snapshot on either side of the instant): **45** in `vectors/`
       when this item closed, **73** with the registry, anchor, timestamp,
       integrity, iOS, C2PA co-existence and sidecar slices since,
-      **84** with the position level (74–84) and **85** with the iOS sealed
-      clip, which is the corpus today,
-      checked by the reference verifier in `tools/` (steps 4–5). The §7 vectors
+      **84** with the position level (74–84), **85** with the iOS sealed
+      clip, and **121** in corpus 2.0.0 with the video binding (86–94), the
+      time, revocation and attestation rules (96–110), the JSON reading rules
+      (111–120) and the extensible identifiers (95, 121),
+      checked by the reference verifier in `tools/`. The §7 vectors
       trust the anchors in `vectors/_trust/`, whose attestation root is a test
       root: they prove the level logic, not that an implementation can walk a
       real Google chain — for which the real device chains in the two verifier
       repositories exist
 - [x] `REVIEW (BE)` the remaining proof-level vectors: registry inclusion with
       a signed tree head (49–54), an RFC 3161 token (59–63), an anchor with a
-      recomputed root (55–58). The reference verifier evaluates all three, and
-      vector 54 is the corpus's green
+      recomputed root (55–58). The reference verifier evaluates all three;
+      vector 100 is the corpus's green, and 54 — the same proof with only the
+      device clock for an instant — is amber
 - [~] `REVIEW (mobile)` container-level video vectors: real MP4/MOV from each
       encoder, with `content_hash` recomputed from the NAL units and audio
       frames — Android H.264 and HEVC done (vectors 36–39, `kind: container`);
@@ -1350,4 +1597,4 @@ says.
 - [x] Vectors for `timestamp` and `anchor` attachments — 59–63 and 55–58,
       with committed tokens in `_timestamps/` and the chain read as an input
 - [x] JSON Schema validates every vector, and rejects each malformed case:
-      `schema/vcap-proof-1.0.schema.json`, run by `tools` in CI (step 6)
+      `schema/vcap-proof-1.0.schema.json`, run by `tools` in CI

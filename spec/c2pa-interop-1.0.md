@@ -50,7 +50,7 @@ and that the key was on a public log before the capture.
 | Trusted time | RFC 3161 token over `core_hash`, inside the proof, checked offline against a pinned TSA root (§6.2) | RFC 3161 token over the claim signature, inside the COSE structure (10.3.2.5 *Time-stamps*; 15.8 *Validate the Time-Stamp*) |
 | Key on a public log | `registry`: RFC 6962 inclusion proof against a signed tree head, carried inline, checked offline (§6.2) | none. Trust is a list of signers (14.4) plus revocation by OCSP (14.5.2, 15.9) |
 | Existence before an instant nobody controls | `anchor`: Merkle path to a root recorded on a public chain (§6.2) | none |
-| Device state | `integrity`: Play Integrity / App Attest verdict, relayed and signed by the registry, shown and never a ceiling (§6.2) | none |
+| Device state | `integrity`: Play Integrity / App Attest verdict, relayed and signed by the registry; shown, and `failed` caps the ceiling at amber (§6.2, §7) | none |
 | Watermark | `watermark`: layout named in the signed core, payload bound to `capture_id` (§6.1, `watermark-layouts-1.0.md`) | `c2pa.soft-binding` naming an algorithm from a public list (18.10, 9.3 *Soft Bindings*) |
 | What the verifier says when something is missing | one exact label per absent or unreadable piece of evidence (§8) | status codes (15.2.2 *Standard Status Codes*) and three manifest states, *Well-Formed*, *Valid*, *Trusted* (14.3) |
 | Verification without a server | always (invariant) | offline for the signature and binding; the trust list and OCSP are fetched or shipped |
@@ -74,9 +74,10 @@ to the three roots of trust inside vcap.
 The whole proof travels as **one custom assertion**, so a C2PA validator that
 knows nothing of vcap carries it intact and a vcap verifier finds it whole.
 
-- **Label**: `com.gregoriogalante.vcap.proof`. An entity namespace is the
+- **Label**: `io.github.vcap-org.vcap.proof`. An entity namespace is the
   entity's Internet domain in reverse (6.2.1 *Namespacing*) — ours is
-  `vcap.gregoriogalante.com` — followed by the label components
+  `vcap-org.github.io`, the domain of the organization that publishes this
+  specification — followed by the label components
   (6.2.2 *Label Naming*). The codename, never the brand: a label in a signed
   manifest is as permanent as trailer magic. No version suffix: an unsuffixed
   label is version 1 (6.2.2), a compatible change adds fields without
@@ -127,7 +128,7 @@ assertion names an algorithm in `alg`, which "should" be an entry in the
 Our algorithm is not on that list. Registration is a C2PA process and belongs
 to the deferred C2PA work. Until
 then the `alg` value would be an entity-namespaced string — for example
-`com.gregoriogalante.vcap.photo-bch-v3`, one per layout as
+`io.github.vcap-org.vcap.photo-bch-v3`, one per layout as
 `watermark-layouts-1.0.md` numbers them — which a C2PA validator cannot
 resolve and treats as an algorithm it does not have. The two carry different
 things anyway: a C2PA soft binding is a **value** a resolver looks up; ours is
@@ -266,7 +267,7 @@ travelled with what it binds.
 ### 3.4 When we sign C2PA
 
 The day a signing credential exists, the pipeline is fixed by the above:
-seal, then write the manifest with the proof as `com.gregoriogalante.vcap.proof`,
+seal, then write the manifest with the proof as `io.github.vcap-org.vcap.proof`,
 a `c2pa.created` action with a digital-capture `digitalSourceType`, a
 `c2pa.soft-binding` when the algorithm is registered, and the hard binding
 covering the trailer in its final form. On video the manifest is written
@@ -341,8 +342,8 @@ canonical bytes.
 | EXIF/XMP/APPn stripped or rewritten, pixels intact | kept | lost | — | kept | *tampered* (§8: photo hash mismatch, valid `sig`) | *tampered* | 04, 71 |
 | Re-encode by a platform (recompressed, resized, every header dropped) | lost | lost | lost | survives within the layout's budget | *no proof found*; with a detector: *origin traced*, *watermark matched* | *tampered*; with a detector the same *origin traced* | 71 (header), layouts doc (mark) |
 | Crop, rotate, filter, screenshot, re-photograph | lost | lost | lost | `photo-bch-v3` may decode within its budget; beyond it *watermark not recovered* | *no proof found* → at most *origin traced* | *tampered* → at most *origin traced* | — |
-| Video trimmed or remuxed without re-encoding (NAL units and vcap SEIs intact) | lost | — | lost or kept | kept | *no proof found* | *verified clip*, amber: `media.hash` differs, present segments verify, the chain says where it was cut (§5) | 38 for the embedded case; the sidecar case is in `vectors/README.md`, *Not here yet* |
-| Video re-encoded | lost | lost | lost | `video-rep-v1` usually survives | *no proof found* → *origin traced* | *verified clip* at most, with *segment content not recomputed* or with no GOP a SEI identifies (§5): the signature layer holds, nothing ties the frames to it | — |
+| Video trimmed or remuxed without re-encoding (NAL units and vcap SEIs intact) | lost | — | lost or kept | kept | *no proof found* | *verified clip*, amber: `media.hash` differs, the segments still in the file are located and verify, the chain says where it was cut (§5) | 89 for the embedded case; the sidecar case is in `vectors/README.md`, *Not here yet* |
+| Video re-encoded | lost | lost | lost | `video-rep-v1` usually survives | *no proof found* → *origin traced* | *frames not compared* when no GOP keeps a vcap SEI naming the capture (§5, *Locating segments*): the signature layer holds, nothing ties the frames to it; *tampered* when SEIs survive over re-encoded bytes | 86, 87 |
 
 Reading the table:
 
@@ -379,7 +380,7 @@ Reading the table:
 - Registration of the watermark algorithm on the C2PA Soft Binding Algorithm
   List (18.10.4) — a C2PA process, deferred with the rest of the C2PA track.
 - A C2PA signing credential. The custom assertion label,
-  `com.gregoriogalante.vcap.proof`, and the pipeline order of §3.4 are fixed
+  `io.github.vcap-org.vcap.proof`, and the pipeline order of §3.4 are fixed
   here so that the day does not reopen them.
 - A reader rule for a trailing C2PA update box on a sealed BMFF file
   (§3.2, `vcap-proof-1.0.md` §11).

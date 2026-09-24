@@ -1,0 +1,36 @@
+{
+  "kind": "file",
+  "verifier_clock": 1757419200000,
+  "key_status": {
+    "log_id": "n86HEwJWvHOhbryJkD8Q18_41VkQcVInSIqNa1EaBVs",
+    "at": 1757332890000,
+    "tree_size": 7,
+    "status": 1,
+    "signature": "oNcXlVKnIOqDpn0JGKUx_Sl5jmhfdEmj1VB-1t9AkKghZ4_V0S4GY3qAOoMg3Yi-YVPkaH9jwewNV_vq_YMviA"
+  },
+  "chain_read": {
+    "root": "7-QyevOyMjXTbuR-SZJzAllgYy7vrpDcgFJivIu_7CI",
+    "tree_size": 3,
+    "block_time": 1757332890000
+  },
+  "outcome": "authentic",
+  "labels": [
+    "integrity unevaluated",
+    "level from registry records",
+    "location declared only",
+    "no trusted time",
+    "watermark not evaluated"
+  ],
+  "not_evaluated": [],
+  "core_hash": "37f2c2580d1d4d1fdc25cb9bcf2cfdd8c0801951667e6d5d1fe6d37136e8df95",
+  "level": {
+    "claimed": "secureEnclave",
+    "proven": "secureEnclave",
+    "ceiling": "green"
+  },
+  "validated_at": {
+    "instant": "2025-09-08T12:01:30.000Z",
+    "source": "anchor"
+  },
+  "schema_valid": true
+}

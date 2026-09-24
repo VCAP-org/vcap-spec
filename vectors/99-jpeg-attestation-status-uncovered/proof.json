@@ -1,0 +1,56 @@
+{
+  "v": "vcap/1.0",
+  "capture_id": "ABEiM0RVZneImaq7zN3u_w",
+  "media": {
+    "mime": "image/jpeg",
+    "w": 16,
+    "h": 16,
+    "hash": "OAbzVz4A9m1LqjF---miCdM2Bap6wRuTWbiuW41LzRA"
+  },
+  "device": {
+    "platform": "android",
+    "secure_hw": "tee",
+    "key_id": "4aF24UJH_AHu_CuygIW3PB-AMEWVoQy3iaeBh4yDSBM"
+  },
+  "watermark": {
+    "algo": "videoseal",
+    "layout": "photo-bch-v3",
+    "payload_bits": 128,
+    "ecc": "bch-255-131",
+    "strength": 8
+  },
+  "time": {
+    "device_clock": 1757332800000
+  },
+  "location": {
+    "level": "declared",
+    "lat_udeg": 45464664,
+    "lon_udeg": 9188540,
+    "acc_cm": 1250,
+    "evidence": []
+  },
+  "policy": {
+    "pseudonymous": false
+  },
+  "sig": {
+    "alg": "ES256",
+    "value": "qpjuFIpPNSSzyGyo1b0EFM9MdTrtruCI4myP_1RfueUcAGuOsfS78kzwJf1tUoYAz-6JzZwRuDlAYLLWrR6v9g",
+    "pub": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEp2C_SxUua1GBx-6u3KBIJKPwOb6yEYmTqfdbgzJbVJCy1_wvmKAjjmvD-d5EdVWpGx0Jxcduppsd0SspNPHKyA"
+  },
+  "attestation": [
+    "MIICETCCAbagAwIBAgIBAzAKBggqhkjOPQQDAjAtMSswKQYDVQQDEyJ2Y2FwIHRlc3QgYXR0ZXN0YXRpb24gaW50ZXJtZWRpYXRlMB4XDTI1MDkwNzEyMDAwMFoXDTQwMDEwMTAwMDAwMFowHzEdMBsGA1UEAxMUQW5kcm9pZCBLZXlzdG9yZSBLZXkwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAASnYL9LFS5rUYHH7q7coEgko_A5vrIRiZOp91uDMltUkLLX_C-YoCOOa8P53kR1VakbHQnFx26mmx3RKyk08crIo4HUMIHRMAwGA1UdEwEB_wQCMAAwgcAGCisGAQQB1nkCAREEgbEwga4CAgEsCgEBAgIBLAoBAQQDAQIDBAAwRb-FRUEEPzA9MRcwFQQQb3JnLnZjYXAudGVzdGFwcAIBATEiBCABlarB2-7P8lvBTW69WXINuxD0wD6DL53q5XgMfNPR2TBQv4VATDBKBCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEB_woBAAQgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwCgYIKoZIzj0EAwIDSQAwRgIhAMUvmn3_nfjxvbAESMcK7cR--ug_rialq1h9VyGanoRmAiEAuwI7_7R5L8KRvFEzrFZOCBZz-OKU7AEXfQAoagVVVOA",
+    "MIIBYzCCAQqgAwIBAgIBAjAKBggqhkjOPQQDAjAlMSMwIQYDVQQDExp2Y2FwIHRlc3QgYXR0ZXN0YXRpb24gcm9vdDAeFw0yNTA5MDcxMjAwMDBaFw00MDAxMDEwMDAwMDBaMC0xKzApBgNVBAMTInZjYXAgdGVzdCBhdHRlc3RhdGlvbiBpbnRlcm1lZGlhdGUwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAATUpahkYltMV1100b8F3oOrzLIs213PsTiIcrb8PVxbXxJnOG4cnFuaDTtpgwBKDoxwEzr23w2kJ3aUxepSMBNVoyMwITAPBgNVHRMBAf8EBTADAQH_MA4GA1UdDwEB_wQEAwIBBjAKBggqhkjOPQQDAgNHADBEAiAsLRcBspomGUhKM21lsh2yXngWYXT8If-K0gvbCH7b_AIgKfr0MWUMWpNz2R88KKHFtZ7HFJWLbVp_GR1DdhjB7hc",
+    "MIIBXDCCAQKgAwIBAgIBATAKBggqhkjOPQQDAjAlMSMwIQYDVQQDExp2Y2FwIHRlc3QgYXR0ZXN0YXRpb24gcm9vdDAeFw0yNTAxMDEwMDAwMDBaFw00NTAxMDEwMDAwMDBaMCUxIzAhBgNVBAMTGnZjYXAgdGVzdCBhdHRlc3RhdGlvbiByb290MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEn1nAb8JE4N8VEipWD53wV1t69kMRojzX-nBrmTgcfXQBARaqo0RvLa9iaLPxo_-edzsuUWhP0lT-OFKGej29JKMjMCEwDwYDVR0TAQH_BAUwAwEB_zAOBgNVHQ8BAf8EBAMCAQYwCgYIKoZIzj0EAwIDSAAwRQIhALmW6vUZHqcof92IOiaLbz2kBCaX8ZVZmt5GgH_vgMNyAiBnRcn6F5Bsh5uTYc7X6og1yJdH-zaUq2Rd1SmBkd29nA"
+  ],
+  "attestation_status": {
+    "source": "googleStatusList",
+    "fetched_at": 1757334600000,
+    "entries": [
+      {
+        "serial": "02",
+        "status": "valid"
+      }
+    ],
+    "sig": "cQyiJQwwBsoTL-JAi26CTLUO8Vv-21Uj_nsuI7_fEOoI6V5VnsssoOEF05_6G7B5oBQqGs04wdm8joNyroXJUg"
+  }
+}

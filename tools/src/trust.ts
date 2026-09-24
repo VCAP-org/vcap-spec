@@ -13,7 +13,16 @@ import { join } from 'node:path'
  * README), so these vectors prove the logic of §7, not that anyone can walk a
  * real Google chain.
  */
-export interface TrustedLog { log_id: string, spki: string }
+export interface TrustedLog {
+  log_id: string
+  spki: string
+  /**
+   * The signing-certificate digests (SHA-256, lowercase hex) of the app builds
+   * this log admits keys from, as its operator declares them (§7). Absent: the
+   * verifier cannot check a chain's `attestationApplicationId` against this log.
+   */
+  app_signing_digests?: string[]
+}
 
 export interface TrustBundle {
   attestationRoots: X509Certificate[]

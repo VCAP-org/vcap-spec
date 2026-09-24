@@ -7,7 +7,6 @@
     "integrity unevaluated",
     "key not in transparency log",
     "location declared only",
-    "no trusted time",
     "not anchored",
     "watermark not evaluated"
   ],
@@ -19,8 +18,8 @@
     "ceiling": "amber"
   },
   "validated_at": {
-    "instant": "2025-09-08T12:00:00.000Z",
-    "source": "device_clock"
+    "instant": "2025-09-08T12:01:00.000Z",
+    "source": "timestamp"
   },
   "schema_valid": true
 }

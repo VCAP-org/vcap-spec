@@ -14,11 +14,7 @@
   "not_evaluated": [],
   "core_hash": "a0a5680dae390c48471bc2d2a5987acb8104ee0ca1ecdb8df7454bc9d556066c",
   "segments": {
-    "verified": [
-      0,
-      1,
-      2
-    ]
+    "verified": []
   },
   "schema_valid": true
 }

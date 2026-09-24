@@ -1,0 +1,94 @@
+{
+  "v": "vcap/1.0",
+  "capture_id": "ABEiM0RVZneImaq7zN3u_w",
+  "media": {
+    "mime": "image/jpeg",
+    "w": 16,
+    "h": 16,
+    "hash": "OAbzVz4A9m1LqjF---miCdM2Bap6wRuTWbiuW41LzRA"
+  },
+  "device": {
+    "platform": "android",
+    "secure_hw": "tee",
+    "key_id": "4aF24UJH_AHu_CuygIW3PB-AMEWVoQy3iaeBh4yDSBM"
+  },
+  "watermark": {
+    "algo": "videoseal",
+    "layout": "photo-bch-v3",
+    "payload_bits": 128,
+    "ecc": "bch-255-131",
+    "strength": 8
+  },
+  "location": {
+    "level": "declared",
+    "lat_udeg": 45464664,
+    "lon_udeg": 9188540,
+    "acc_cm": 1250,
+    "evidence": []
+  },
+  "policy": {
+    "pseudonymous": false
+  },
+  "sig": {
+    "alg": "ES256",
+    "value": "eH8OgyTm3wzWrGDhbvobMHTKHwj4lOFBEPCk18NvHFxTya5tOlpk1egCs5BVRLdS4pRXy44Dzeii37RMs1jxnw",
+    "pub": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEp2C_SxUua1GBx-6u3KBIJKPwOb6yEYmTqfdbgzJbVJCy1_wvmKAjjmvD-d5EdVWpGx0Jxcduppsd0SspNPHKyA"
+  },
+  "attestation": [
+    "MIICETCCAbagAwIBAgIBAzAKBggqhkjOPQQDAjAtMSswKQYDVQQDEyJ2Y2FwIHRlc3QgYXR0ZXN0YXRpb24gaW50ZXJtZWRpYXRlMB4XDTI1MDkwNzEyMDAwMFoXDTQwMDEwMTAwMDAwMFowHzEdMBsGA1UEAxMUQW5kcm9pZCBLZXlzdG9yZSBLZXkwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAASnYL9LFS5rUYHH7q7coEgko_A5vrIRiZOp91uDMltUkLLX_C-YoCOOa8P53kR1VakbHQnFx26mmx3RKyk08crIo4HUMIHRMAwGA1UdEwEB_wQCMAAwgcAGCisGAQQB1nkCAREEgbEwga4CAgEsCgEBAgIBLAoBAQQDAQIDBAAwRb-FRUEEPzA9MRcwFQQQb3JnLnZjYXAudGVzdGFwcAIBATEiBCABlarB2-7P8lvBTW69WXINuxD0wD6DL53q5XgMfNPR2TBQv4VATDBKBCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEB_woBAAQgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwCgYIKoZIzj0EAwIDSQAwRgIhAMUvmn3_nfjxvbAESMcK7cR--ug_rialq1h9VyGanoRmAiEAuwI7_7R5L8KRvFEzrFZOCBZz-OKU7AEXfQAoagVVVOA",
+    "MIIBYzCCAQqgAwIBAgIBAjAKBggqhkjOPQQDAjAlMSMwIQYDVQQDExp2Y2FwIHRlc3QgYXR0ZXN0YXRpb24gcm9vdDAeFw0yNTA5MDcxMjAwMDBaFw00MDAxMDEwMDAwMDBaMC0xKzApBgNVBAMTInZjYXAgdGVzdCBhdHRlc3RhdGlvbiBpbnRlcm1lZGlhdGUwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAATUpahkYltMV1100b8F3oOrzLIs213PsTiIcrb8PVxbXxJnOG4cnFuaDTtpgwBKDoxwEzr23w2kJ3aUxepSMBNVoyMwITAPBgNVHRMBAf8EBTADAQH_MA4GA1UdDwEB_wQEAwIBBjAKBggqhkjOPQQDAgNHADBEAiAsLRcBspomGUhKM21lsh2yXngWYXT8If-K0gvbCH7b_AIgKfr0MWUMWpNz2R88KKHFtZ7HFJWLbVp_GR1DdhjB7hc",
+    "MIIBXDCCAQKgAwIBAgIBATAKBggqhkjOPQQDAjAlMSMwIQYDVQQDExp2Y2FwIHRlc3QgYXR0ZXN0YXRpb24gcm9vdDAeFw0yNTAxMDEwMDAwMDBaFw00NTAxMDEwMDAwMDBaMCUxIzAhBgNVBAMTGnZjYXAgdGVzdCBhdHRlc3RhdGlvbiByb290MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEn1nAb8JE4N8VEipWD53wV1t69kMRojzX-nBrmTgcfXQBARaqo0RvLa9iaLPxo_-edzsuUWhP0lT-OFKGej29JKMjMCEwDwYDVR0TAQH_BAUwAwEB_zAOBgNVHQ8BAf8EBAMCAQYwCgYIKoZIzj0EAwIDSAAwRQIhALmW6vUZHqcof92IOiaLbz2kBCaX8ZVZmt5GgH_vgMNyAiBnRcn6F5Bsh5uTYc7X6og1yJdH-zaUq2Rd1SmBkd29nA"
+  ],
+  "attestation_status": {
+    "source": "googleStatusList",
+    "fetched_at": 1757334600000,
+    "entries": [
+      {
+        "serial": "03",
+        "status": "valid"
+      },
+      {
+        "serial": "02",
+        "status": "valid"
+      }
+    ],
+    "sig": "xqXw5n9uCJ_vKb7F9DqDVngCFb57xk38B9XhbZG27J5AK2gRaLgp1U3rU-3ZkLSXGPnDaSFOmC6W6BgoyyTBlw"
+  },
+  "registry": {
+    "log_id": "n86HEwJWvHOhbryJkD8Q18_41VkQcVInSIqNa1EaBVs",
+    "leaf_index": 3,
+    "leaf": {
+      "type": "key",
+      "key_id": "e1a176e14247fc01eefc2bb28085b73c1f80304595a10cb789a781878c834813",
+      "public_key": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEp2C/SxUua1GBx+6u3KBIJKPwOb6yEYmTqfdbgzJbVJCy1/wvmKAjjmvD+d5EdVWpGx0Jxcduppsd0SspNPHKyA==",
+      "secure_hw": "tee",
+      "attestation_digest": "8728db8fabd28a775d55e91002b1d09f11b6f31d52b348c48ee4c013e77fb003",
+      "registered_at": 1757246400000
+    },
+    "inclusion_path": [
+      "VZ5aKOffwC1b_3wChsqDl54NZxlI3uTgIHIc9bNXQho",
+      "rOpXt1mpwNdlUMQGAIH6AE0PddZ2Z-1zIlvjNz27-II",
+      "BLtUtiYMIye48PzbPSt8vFz2Bz1HvLH4LuF5Qky5-Tc"
+    ],
+    "tree_head": {
+      "tree_size": 7,
+      "timestamp": 1757329200000,
+      "root_hash": "O3jeIenBjfdRHcEPR29PSJ55UpQyLoC3tOwcOeNWmTY",
+      "signature": "gu9Oce3WC93uq7SwU05Av5j7tZFNWSQYLSCJArxKBS4IxzboXzIn2ZDQEn0IiyhuP5IzR-msgusJkiv4SOa4OA"
+    }
+  },
+  "anchor": {
+    "chain": "base-sepolia",
+    "tx": "0x91ec2a16617008d2b22ab6c31bfcf79cee741cbdca5e1c262d6f9656eef059b4",
+    "block": 46561942,
+    "anchor_id": 0,
+    "index": 2,
+    "tree_size": 5,
+    "root": "T8nN-VQFajXyuG9R5NMTd1A4MKzmAg6dnxpS5o5YbqY",
+    "merkle_path": [
+      "1obtYZ_fOwCR9j6oW0n3ouK0qBnZpNkzjgAa_bX4VOI",
+      "-eydzL94ZxdAwSklGzIYRB0_C2ePdmH2BSbCQGvAlZs",
+      "B2P_LeVhqKgOhVOxego5ZzckSXsXye9aibqABVHOVm8"
+    ]
+  }
+}

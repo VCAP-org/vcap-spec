@@ -1,0 +1,16 @@
+{
+  "kind": "file",
+  "outcome": "authentic",
+  "labels": [
+    "integrity unevaluated",
+    "key not in transparency log",
+    "location declared only",
+    "no trusted time",
+    "not anchored",
+    "origin not hardware-attested",
+    "watermark not evaluated"
+  ],
+  "not_evaluated": [],
+  "core_hash": "e3f5021cd7c8fd6c8b1461f20f45d1f6e2a5cc84ec0aab0e7fab3a5a297289c5",
+  "schema_valid": true
+}

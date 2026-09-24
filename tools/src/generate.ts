@@ -4,19 +4,22 @@ import { join } from 'node:path'
 import { type Json, jcs } from './jcs.js'
 import { type Proof, coreBytes, coreHash, flipS, keyId, p1363ToDer, spkiOf } from './core.js'
 import { mediaHash } from './canonical.js'
-import { Flag, buildTrailer } from './trailer.js'
+import { Flag, buildTrailer, parseTrailer } from './trailer.js'
+import { type Box, boxes, children, codecOf, find, readContainer, samplesOf } from './container.js'
+import { remux } from './remux.js'
 import { type SegmentEntry, SEPARATOR, ZERO_LINK, linkOf, segmentMessage } from './segments.js'
 // Deterministic ES256 (RFC 6979): regenerating an unchanged vector must not
 // change its bytes. See sign.ts.
 import { signChain, signEs256 } from './sign.js'
 import { TEST_KEY_PKCS8_BASE64, TEST_OTHER_KEY_PKCS8_BASE64 } from './testkey.js'
 import { TEST_LOG_KEY_PKCS8_BASE64 } from './testlogkey.js'
-import { type KeyStatusStatement, keyStatusMessage, leafHash, leafKeyId, nodeHash, treeHeadMessage } from './registry.js'
+import { type KeyStatusStatement, integrityMessage, keyStatusMessage, leafHash, leafKeyId, nodeHash, treeHeadMessage } from './registry.js'
 import { type ChainRead } from './anchor.js'
 import { corroborationMessage } from './location.js'
 import { loadTrust } from './trust.js'
 import { type Verdict, verifyFile, verifySegments } from './verify.js'
 import { validateProof } from './schema.js'
+import { isVectorDir } from './corpus-names.js'
 
 /**
  * Writes vectors/. Each vector's expected verdict is decided here, in words,
@@ -103,7 +106,7 @@ const bmffBox = (type: string, payload: Buffer): Buffer => {
 
 // ---- vectors --------------------------------------------------------------
 
-interface FileVector { kind: 'file', name: string, ext: string, file: Buffer, sidecar?: Buffer, proof?: Proof, expected: Partial<Verdict> & { outcome: Verdict['outcome'] }, schemaValid?: boolean, notes: string, verifierClock?: number, keyStatus?: Json, chainRead?: Json }
+interface FileVector { kind: 'file', container?: boolean, name: string, ext: string, file: Buffer, sidecar?: Buffer, proof?: Proof, expected: Partial<Verdict> & { outcome: Verdict['outcome'] }, schemaValid?: boolean, notes: string, verifierClock?: number, keyStatus?: Json, chainRead?: Json }
 interface SegVector { kind: 'segments', name: string, input: { capture_id: string, pub: string, segment_count: number, segments: SegmentEntry[] }, expected: Partial<Verdict> & { outcome: Verdict['outcome'] }, notes: string, debug?: Json }
 interface JcsVector { kind: 'jcs', name: string, input: Json, expected: { core_bytes_hex: string, core_hash: string }, notes: string }
 type Vector = FileVector | SegVector | JcsVector
@@ -115,6 +118,20 @@ const PHOTO_LABELS = ['integrity unevaluated', 'key not in transparency log', 'l
 const jpegProof = sign(photoCore(baseJpeg, 'image/jpeg'))
 const jpegSealed = seal(baseJpeg, jpegProof)
 const hashOf = (p: Proof): string => coreHash(p).toString('hex')
+
+/**
+ * A committed RFC 3161 token from `vectors/_timestamps/`, refused when it is
+ * over another core: see `make-timestamp-tokens.ts`.
+ */
+const tokenNamed = (name: string, coreHashHex: string): { tsr: string, genTime: string } => {
+  const token = JSON.parse(readFileSync(join(VECTORS, '_timestamps', `${name}.json`), 'utf8')) as { core_hash: string, gen_time: string, tsr: string }
+  if (token.core_hash !== coreHashHex) {
+    throw new Error(
+      `_timestamps/${name}.json is a token over ${token.core_hash}, and this vector's core hash is ${coreHashHex}. ` +
+      'Re-mint: npx tsx src/make-timestamp-tokens.ts ' + coreHashHex)
+  }
+  return { tsr: token.tsr, genTime: token.gen_time }
+}
 
 const vectors: Vector[] = []
 const sortedLabels = <T extends { labels?: string[] }>(e: T): T => e.labels ? { ...e, labels: [...e.labels].sort() } : e
@@ -356,8 +373,8 @@ const videoCore = (media: Buffer, extra: Proof = {}): Proof => photoCore(media, 
 {
   const proof = sign(videoCore(baseMp4, { segments: chain as unknown as Json }))
   file({ name: '33-mp4-video-sealed', ext: 'mp4', file: seal(baseMp4, proof), proof,
-    expected: { outcome: 'authentic', labels: [...PHOTO_LABELS, 'segment content not recomputed'], not_evaluated: [], core_hash: hashOf(proof), segments: { verified: [0, 1, 2] } },
-    notes: 'An ISO-BMFF video with media.mime video/mp4, segment_count 3 and the complete chain of vector 25 in the trailer (flag SEGMENTS set). Canonical bytes are the file minus the trailer (§4.1); the chain is verified at message level — content hashes are given, the container is not demuxed by this layer, and the verdict says so with *segment content not recomputed* (§7). Vectors 36-39 are the same question asked of the container.' })
+    expected: { outcome: 'authentic', labels: [...PHOTO_LABELS, 'segment content not recomputed'], not_evaluated: [], core_hash: hashOf(proof), segments: { verified: [] } },
+    notes: 'An ISO-BMFF video with media.mime video/mp4, segment_count 3 and the complete chain of vector 25 in the trailer (flag SEGMENTS set). Canonical bytes are the file minus the trailer (§4.1) and `media.hash` matches, so the file is the one the device sealed: **authentic**. The chain is checked at message level only — this is a `file` vector, the container is not demuxed — and the verdict says so with *segment content not recomputed* (§7).\n\n`segments.verified` is **empty**, and that is the rule of §5 (*Locating segments*): a segment counts as verified only once a GOP of this file has been located and its `content_hash` recomputed. Here the signatures hold and nothing was compared; the file is authentic because `media.hash` covers every byte, not because any segment was checked. Vectors 36-39 and 86-94 are the same question asked of the container.' })
 }
 
 {
@@ -366,6 +383,164 @@ const videoCore = (media: Buffer, extra: Proof = {}): Proof => photoCore(media, 
     expected: { outcome: 'no_proof_found', labels: [], not_evaluated: [] },
     schemaValid: false,
     notes: 'Same video, valid signature, segment_count present, no segments. §8: media.mime starting with video/ makes this a video proof, and segments is required for one — missing required field, no proof found. A verifier that branches on the presence of segments alone would say authentic here.' })
+}
+
+
+// ---- §5 binding: a signed segment is verified only where the file has it ----
+//
+// Until corpus 2.0.0 a segment "verified" when its signature did: a GOP with no
+// vcap SEI, or with an index nobody signed, was skipped, and a proof lifted
+// onto an unrelated clip read *verified clip*. These vectors are edits of the
+// device captures 36 (H.264 with audio) and 37 (HEVC, no audio) — the device
+// signatures untouched — and each one is a way a file can stop being the file
+// the proof describes. `remux.ts` rewrites sample tables only; `npm run
+// generate` rebuilds all of them from the committed 36 and 37.
+{
+  const deviceFile = (name: string): { file: Buffer, media: Buffer, trailer: Buffer, payload: Buffer, proof: Proof } => {
+    const file = readFileSync(join(VECTORS, name, 'input.mp4'))
+    const parsed = parseTrailer(file)
+    if (parsed.kind !== 'ok') throw new Error(`${name}: no readable trailer`)
+    return { file, media: file.subarray(0, parsed.mediaEnd), trailer: file.subarray(parsed.mediaEnd), payload: parsed.payload, proof: JSON.parse(parsed.payload.toString('utf8')) as Proof }
+  }
+  const h264 = deviceFile('36-mp4-container-verified')
+  const hevc = deviceFile('37-mp4-container-hevc')
+  const DEVICE_LABELS = ['integrity unevaluated', 'key not in transparency log', 'no trusted time', 'no watermark', 'not anchored', 'origin not hardware-attested']
+  const provenance = 'Derived by `tools/src/generate.ts` from the device capture in vector 36 or 37 (a Samsung SM-S908B, Android 16, StrongBox, sealed by the reference Android SDK); the device signatures are not touched.'
+  const device = (v: Omit<FileVector, 'kind' | 'container' | 'ext' | 'notes'> & { notes: string }): void =>
+    file({ ...v, container: true, ext: 'mp4', notes: `${v.notes}\n\n${provenance}` })
+
+  // Sample ranges per GOP, from the IDRs `readContainer` found.
+  const gopsOf = (media: Buffer): { first: number, count: number }[] => {
+    const reading = readContainer(media)
+    if (reading.kind !== 'gops') throw new Error('not a readable video')
+    const kids = children(media, find(boxes(media, 0, media.length), 'moov') as Box)
+    const video = kids.filter((b) => b.type === 'trak').map((trak) => {
+      const stbl = find(children(media, find(children(media, find(children(media, trak), 'mdia') as Box), 'minf') as Box), 'stbl') as Box
+      return { stbl, kind: codecOf(media, find(children(media, stbl), 'stsd') as Box).kind }
+    }).find((t) => t.kind === 'video') as { stbl: Box }
+    const samples = samplesOf(media, video.stbl)
+    const starts = reading.gops.map((g) => samples.findIndex((s) => s.offset === g.range.start))
+    return starts.map((first, i) => ({ first, count: (starts[i + 1] ?? samples.length) - first }))
+  }
+  const range = (g: { first: number, count: number }): number[] => Array.from({ length: g.count }, (_, i) => g.first + i)
+
+  // The vcap SEI NAL of a GOP, located in the file: offset of its RBSP-level
+  // index bytes. The index is the last four payload bytes before the trailing
+  // 0x80; in these files emulation prevention inserts one 0x03 into
+  // 00 00 00 0n, so the stored form is 00 00 03 00 0n.
+  const seiIndexAt = (media: Buffer, gop: { range: { start: number } }, index: number): number => {
+    const stored = Buffer.from([0x00, 0x00, 0x03, 0x00, index, 0x80])
+    const at = media.indexOf(stored, gop.range.start)
+    if (at < 0 || at > gop.range.start + 256) throw new Error(`no vcap SEI index ${index} near ${gop.range.start}`)
+    return at + 4
+  }
+
+  {
+    device({ name: '86-mp4-container-stolen-proof-sidecar', file: hevc.media, sidecar: h264.payload, proof: h264.proof,
+      expected: { outcome: 'frames_not_compared', labels: DEVICE_LABELS, not_evaluated: [], core_hash: hashOf(h264.proof), segments: { verified: [] }, location: { claimed: 'none', level: 'none' } },
+      notes: 'The proof of vector 36, as a sidecar, next to an unrelated recording — vector 37\'s frames with its trailer removed. Every signature in the proof holds: the core, the three segments, the chain. None of it is about this file. Each GOP here carries a vcap SEI, and each names **another capture**, so no GOP of this proof\'s capture can be located (§5, *Locating segments*).\n\nThe outcome is **frames not compared**: the signatures hold and nothing ties them to the frames in front of the reader. Never *verified clip* — a clip is frames that were compared — and this is the case that read *verified clip* with segments 0, 1 and 2 before the binding rule existed, because a GOP that no SEI of this capture names was skipped rather than counted against the file.' })
+  }
+
+  {
+    const base = readFileSync(join(MEDIA, 'base.mp4'))
+    device({ name: '87-mp4-container-proof-over-unmarked-video', file: base, sidecar: h264.payload, proof: h264.proof,
+      expected: { outcome: 'frames_not_compared', labels: DEVICE_LABELS, not_evaluated: [], core_hash: hashOf(h264.proof), segments: { verified: [] }, location: { claimed: 'none', level: 'none' } },
+      notes: 'The proof of vector 36 as a sidecar over `_media/base.mp4`, a two-frame H.264 file that carries **no vcap SEI at all** — what a re-encoder or an SEI-stripping remuxer leaves behind. No GOP can be located, so nothing is compared and no segment is credited: **frames not compared**. Vector 86 is the same verdict reached through SEIs that name another capture; here there is nothing to read.\n\nA verifier MUST NOT fall back to position — the first GOP of the file is not segment 0 of a proof just because it comes first (§5).' })
+  }
+
+  {
+    const gops = (readContainer(h264.media) as { kind: 'gops', gops: { range: { start: number } }[] }).gops
+    const edited = Buffer.from(h264.file)
+    const at = seiIndexAt(edited, gops[1] as { range: { start: number } }, 1)
+    edited[at] = 3
+    device({ name: '88-mp4-container-sei-index-altered', file: edited, proof: h264.proof,
+      expected: { outcome: 'tampered', labels: [], not_evaluated: [], core_hash: hashOf(h264.proof), segments: { verified: [0, 2] } },
+      notes: `Vector 36 with one byte changed: the index in the second GOP's vcap SEI, 1 → 3 (file byte ${at}; the stored form is \`00 00 03 00 03\`, so emulation prevention still holds). A vcap SEI is excluded from \`content_hash\`, so the GOP's bytes still hash to segment 1's signed value — and segment 1 is no longer located, while a GOP names segment 3, which the proof does not sign.\n\n**Tampered**, with segments 0 and 2 verified: a GOP whose SEI index is not a signed segment is content no signature covers (§5). Before the binding rule this file read *verified clip* with 0, 1 and 2 — segment 1 counted as verified because its signature held, though no GOP of the file was ever compared with it.` })
+  }
+
+  {
+    // Drop GOP 0 from both tracks, keep every surviving sample at its instant.
+    // The movie timeline moves to 90 kHz so both delays are exact: video is
+    // already 90 kHz, audio's 1024-sample frames at 48 kHz are 1920 ticks.
+    const gops = gopsOf(h264.media)
+    const kids = children(h264.media, find(boxes(h264.media, 0, h264.media.length), 'moov') as Box)
+    const tables = kids.filter((b) => b.type === 'trak').map((trak) => find(children(h264.media, find(children(h264.media, find(children(h264.media, trak), 'mdia') as Box), 'minf') as Box), 'stbl') as Box)
+    const [audioStbl, videoStbl] = tables.map((t) => ({ t, kind: codecOf(h264.media, find(children(h264.media, t), 'stsd') as Box).kind }))
+      .sort((a, b) => a.kind.localeCompare(b.kind)).map((x) => x.t) as [Box, Box]
+    const video = samplesOf(h264.media, videoStbl)
+    const audio = samplesOf(h264.media, audioStbl)
+    const firstKept = (gops[1] as { first: number }).first
+    const cutAt = (video[firstKept] as { dts: bigint }).dts // 90 kHz, media time 0
+    const videoDelay = 4731n * 9n + cutAt // the original 473.1 ms empty edit, at 90 kHz, plus GOP 0
+    // Audio starts at 0 on the movie timeline (no edit): keep what falls at or
+    // after the cut, on the same timeline.
+    const keptAudio = audio.map((s, i) => ({ s, i })).filter(({ s }) => s.dts * 90000n >= videoDelay * 48000n)
+    const audioDelay = (keptAudio[0] as { s: { dts: bigint } }).s.dts * 90000n / 48000n
+    const cut = remux(h264.media, {
+      movieTimescale: 90000,
+      video: { samples: gops.slice(1).flatMap(range), delay: videoDelay, sync: 'keep' },
+      audio: { samples: keptAudio.map(({ i }) => i), delay: audioDelay }
+    })
+    device({ name: '89-mp4-container-cut-clip', file: Buffer.concat([cut, h264.trailer]), proof: h264.proof,
+      expected: { outcome: 'verified_clip', labels: DEVICE_LABELS, not_evaluated: [], core_hash: hashOf(h264.proof), segments: { verified: [1, 2] }, location: { claimed: 'none', level: 'none' } },
+      notes: 'Vector 36 **cut**: its first GOP removed from the video track, the audio frames before the cut removed with it, and the full proof — all three segments — still in the trailer. This is what a clip is: the file lacks segment 0, the proof does not.\n\nEvery surviving sample keeps its instant on the movie timeline (the movie timescale becomes 90 kHz and each track gets an empty edit for the time that was cut), so §5\'s audio rule assigns the same frames to segments 1 and 2 as in the original, and both recompute. **Verified clip**, 1 and 2 of 3. Segment 0 is signed and absent, which is the clip case and never *tampered*; `media.hash` does not match, which is what says this is not the original.\n\nVector 38, which used to be the corpus\'s clip, removed segment 0 from the **proof** and left it in the file; under the binding rule that is a GOP no signature covers, and it now reads *tampered*.' })
+  }
+
+  {
+    const gops = gopsOf(hevc.media)
+    const [g0, g1, g2] = gops as [{ first: number, count: number }, { first: number, count: number }, { first: number, count: number }]
+    device({ name: '90-mp4-container-gops-reordered', file: Buffer.concat([remux(hevc.media, { video: { samples: [...range(g0), ...range(g2), ...range(g1)], sync: 'keep' } }), hevc.trailer]), proof: hevc.proof,
+      expected: { outcome: 'tampered', labels: [], not_evaluated: [], core_hash: hashOf(hevc.proof), segments: { verified: [0, 1, 2] } },
+      notes: 'Vector 37 with its last two GOPs swapped in decode order: segment 0, then 2, then 1. Every GOP is located and every one recomputes to its signed `content_hash` — the bytes of each are untouched, which is why `segments.verified` lists all three.\n\nAnd the file is **tampered**: vcap SEI indices MUST be strictly increasing in decode order (§5). The chain proves the order of the *messages*; only this rule proves the order of the *frames*, and without it a verifier would accept any shuffle of a signed recording as long as each piece was genuine. Vector 26 asked this question at message level, where no file had to be read.' })
+
+    device({ name: '91-mp4-container-gop-duplicated', file: Buffer.concat([remux(hevc.media, { video: { samples: [...range(g0), ...range(g1), ...range(g1), ...range(g2)], sync: 'keep' } }), hevc.trailer]), proof: hevc.proof,
+      expected: { outcome: 'tampered', labels: [], not_evaluated: [], core_hash: hashOf(hevc.proof), segments: { verified: [0, 2] } },
+      notes: 'Vector 37 with its second GOP played twice: 0, 1, 1, 2. Both copies of segment 1 recompute to its signed hash. A signed segment counts only when **exactly one** GOP of the file carries its index (§5), so segment 1 is not verified, and a duplicated index is **tampered** — a recording in which one second of footage appears twice is not the recording that was signed, however genuine each copy is.' })
+
+    device({ name: '94-mp4-container-sync-table-not-idr', file: Buffer.concat([remux(hevc.media, { video: { samples: [...range(g0), ...range(g1), ...range(g2)], sync: 'all' } }), hevc.trailer]), proof: hevc.proof,
+      expected: { outcome: 'verified_clip', labels: DEVICE_LABELS, not_evaluated: [], core_hash: hashOf(hevc.proof), segments: { verified: [0, 1, 2] } },
+      notes: 'Vector 37 with its sync sample table rewritten to mark **every** sample as a sync sample; the frames are untouched. Segment boundaries are IDR access units, read from the NAL unit types (§5), not `stss`: a verifier that cut at sync samples would find seventy GOPs, sixty-seven of them without a vcap SEI, and call the file tampered. Read by IDR, the three GOPs are where they were and all three recompute. **Verified clip**, not authentic, because the rewritten table is inside the canonical bytes and `media.hash` no longer matches.\n\nThe real-world version of this trap is HEVC\'s CRA picture: a random-access point `stss` lists that is not an IDR.' })
+  }
+
+  {
+    // One length prefix in the second GOP made one byte too long.
+    const gops = gopsOf(hevc.media)
+    const kids = children(hevc.media, find(boxes(hevc.media, 0, hevc.media.length), 'moov') as Box)
+    const stbl = find(children(hevc.media, find(children(hevc.media, find(children(hevc.media, kids.find((b) => b.type === 'trak') as Box), 'mdia') as Box), 'minf') as Box), 'stbl') as Box
+    const sample = samplesOf(hevc.media, stbl)[(gops[1] as { first: number }).first + 1] as { offset: number, size: number }
+    const edited = Buffer.from(hevc.file)
+    edited.writeUInt32BE(edited.readUInt32BE(sample.offset) + 1, sample.offset)
+    device({ name: '92-mp4-container-nal-length-overrun', file: edited, proof: hevc.proof,
+      expected: { outcome: 'tampered', labels: [], not_evaluated: [], core_hash: hashOf(hevc.proof), segments: { verified: [] } },
+      notes: `Vector 37 with the first NAL length prefix of the second sample of GOP 1 increased by one (file byte ${sample.offset}), so the units no longer tile the sample. The NAL units of a sample MUST cover it exactly (§5): a verifier that stopped at the first length that does not fit — which the reference verifier used to do — would leave the rest of the sample out of every hash and still call the GOP verified. **Tampered**, and no segment is credited: a malformed container is not a partial answer.` })
+  }
+
+  {
+    // GOP 1's vcap SEI NAL rebuilt with a second user_data_unregistered
+    // message after ours: a NAL that is still "a vcap SEI" to a verifier that
+    // looks for the UUID, and that hides twenty unsigned bytes if it is
+    // excluded whole.
+    const gops = gopsOf(h264.media)
+    const kids = children(h264.media, find(boxes(h264.media, 0, h264.media.length), 'moov') as Box)
+    const videoStbl = kids.filter((b) => b.type === 'trak').map((trak) => find(children(h264.media, find(children(h264.media, find(children(h264.media, trak), 'mdia') as Box), 'minf') as Box), 'stbl') as Box)
+      .find((t) => codecOf(h264.media, find(children(h264.media, t), 'stsd') as Box).kind === 'video') as Box
+    const index = (gops[1] as { first: number }).first
+    const sample = samplesOf(h264.media, videoStbl)[index] as { offset: number, size: number }
+    const bytes = h264.media.subarray(sample.offset, sample.offset + sample.size)
+    const nals: Buffer[] = []
+    for (let at = 0; at < bytes.length;) { const n = bytes.readUInt32BE(at); nals.push(bytes.subarray(at + 4, at + 4 + n)); at += 4 + n }
+    const sei = nals.findIndex((n) => ((n[0] as number) & 0x1f) === 6 && n.includes(Buffer.from('caa653d1ed1763c7af388aea76527336', 'hex')))
+    if (sei < 0) throw new Error('no vcap SEI in the GOP 1 IDR sample')
+    const original = nals[sei] as Buffer
+    // Drop the trailing 0x80, append a second message, restore the stop bit.
+    const hidden = Buffer.concat([Buffer.from([0x05, 20]), Buffer.from('0123456789abcdef', 'ascii'), Buffer.from('HIDE', 'ascii')])
+    nals[sei] = Buffer.concat([original.subarray(0, original.length - 1), hidden, Buffer.from([0x80])])
+    const rebuilt = Buffer.concat(nals.flatMap((n) => { const l = Buffer.alloc(4); l.writeUInt32BE(n.length); return [l, n] }))
+    const video = gops.flatMap(range)
+    device({ name: '93-mp4-container-sei-extra-message', file: Buffer.concat([remux(h264.media, { video: { samples: video, delay: 4731n, sync: 'keep', replace: new Map([[index, rebuilt]]) } }), h264.trailer]), proof: h264.proof,
+      expected: { outcome: 'tampered', labels: [], not_evaluated: [], core_hash: hashOf(h264.proof), segments: { verified: [0, 2] } },
+      notes: 'Vector 36 with the vcap SEI NAL of GOP 1 rebuilt to carry a **second** SEI message after ours: another `user_data_unregistered` with twenty bytes nobody signed. A vcap SEI NAL carries exactly one message, the 36-byte vcap one, followed by `rbsp_trailing_bits` (§5). A verifier that excluded any SEI NAL containing the vcap UUID — the reference verifier did — would hash GOP 1 exactly as the device did and call it verified, with those twenty bytes inside it and outside every hash.\n\n**Tampered**, 0 and 2 verified. The sample is rewritten through `remux.ts` (it grew by twenty-two bytes) and the audio track is untouched.' })
+  }
 }
 
 // ---- media.w/h are required (§8) ---------------------------------------------
@@ -492,9 +667,22 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
       notes: 'The intermediate lives twelve days, the life of a real RKP intermediate, and the verifier reads the proof a year later. §7: the path is validated at the proven instant of the capture, so the level **stands** — an expired chain says the verifier is late, not that the capture is forged. What is missing is an independent instant: with only `time.device_clock` nothing but the device places the capture inside the chain\'s validity, so the label says so and the ceiling stays amber. `verifier_clock` is pinned in `expected.json` because otherwise this vector would answer differently as the calendar moves.' })
   }
 
+  // Every certificate of the chain but the pinned root has an entry (§6.2):
+  // the leaf is serial 03, the intermediate 02.
+  const VALID = [{ serial: '03', status: 'valid' }, { serial: '02', status: 'valid' }]
+  const revokedIntermediate = (o: { reason: string, revokedAt?: number }): Json =>
+    [{ serial: '03', status: 'valid' }, { serial: '02', status: 'revoked', reason: o.reason, ...(o.revokedAt !== undefined ? { revoked_at: o.revokedAt } : {}) }]
+  // The standard photo core is the one `_timestamps/valid.json` stamps: an
+  // attachment is outside the core, so adding a chain does not move it.
+  const withToken = (proof: Proof): { proof: Proof, genTime: string } => {
+    const token = tokenNamed('valid', hashOf(proof))
+    return { proof: { ...proof, timestamp: { tsr: token.tsr } }, genTime: token.genTime }
+  }
+  const STAMPED_LABELS = ATTESTED_LABELS.filter((l) => l !== 'no trusted time')
+
   {
     const base = attested({ chain: chainOf('tee') })
-    const status = statusAttachment(base, CAPTURE - 3600000, [{ serial: '02', status: 'revoked', reason: 'KEY_COMPROMISE' }])
+    const status = statusAttachment(base, CAPTURE - 3600000, revokedIntermediate({ reason: 'KEY_COMPROMISE', revokedAt: CAPTURE - 7200000 }))
     const proof = { ...base, attestation_status: status }
     file({ name: '44-jpeg-attestation-revoked-before-capture', ext: 'jpg', file: seal(baseJpeg, proof), proof,
       verifierClock: CAPTURE + day,
@@ -506,24 +694,120 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
         level: { claimed: 'tee', proven: 'none', ceiling: 'red' },
         validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
       },
-      notes: 'The frozen snapshot (§6.2) says the intermediate was already revoked an hour before the declared capture. The chain therefore proves nothing at that instant: `proven` drops to `none` and the level is **red**. The outcome stays `authentic` — the file is intact and the core signature is valid — which is the distinction §7 exists to keep: what the bytes are, and what the origin is worth, are two answers.' })
+      notes: 'The frozen snapshot (§6.2) says the intermediate is revoked, for `KEY_COMPROMISE`, with a revocation date two hours before the declared capture. The chain therefore proves nothing: `proven` drops to `none` and the level is **red**. Nothing here could save it — the only instant is the device\'s clock, and a compromise reaches back to the key\'s first use whatever the date says. The outcome stays `authentic` — the file is intact and the core signature is valid — which is the distinction §7 exists to keep: what the bytes are, and what the origin is worth, are two answers.' })
   }
 
   {
     const base = attested({ chain: chainOf('tee') })
-    const status = statusAttachment(base, CAPTURE + 30 * day, [{ serial: '02', status: 'revoked', reason: 'SUPERSEDED' }])
-    const proof = { ...base, attestation_status: status }
+    const status = statusAttachment(base, CAPTURE + 30 * day, revokedIntermediate({ reason: 'SUPERSEDED', revokedAt: CAPTURE + 30 * day }))
+    const { proof, genTime } = withToken({ ...base, attestation_status: status })
     file({ name: '45-jpeg-attestation-revoked-after-capture', ext: 'jpg', file: seal(baseJpeg, proof), proof,
       verifierClock: CAPTURE + 60 * day,
       expected: {
         outcome: 'authentic',
-        labels: [...ATTESTED_LABELS, 'attestation key revoked after the capture'],
+        labels: [...STAMPED_LABELS, 'attestation key revoked after the capture'],
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
+        validated_at: { instant: genTime, source: 'timestamp' }
+      },
+      notes: 'The intermediate is revoked, for `SUPERSEDED`, and the source gives the revocation date: thirty days after the capture. A timestamp token over this core places the capture one minute after the declared time — an instant the device does not choose — and that is before the revocation date, so the level at the proven instant **stands**, and the revocation is shown rather than applied: a batch key withdrawn later does not un-attest what it attested (§6.2).\n\nAll three conditions are needed and each has a vector that lacks it: an instant nobody can move (96 has only the device clock), a revocation date the source gives (97 has only `fetched_at`), and a reason that does not reach back (44). Amber for an unrelated reason: the key is not in the transparency log.' })
+  }
+
+  {
+    const base = attested({ chain: chainOf('tee') })
+    const status = statusAttachment(base, CAPTURE + 30 * day, revokedIntermediate({ reason: 'SUPERSEDED', revokedAt: CAPTURE + 30 * day }))
+    const proof = { ...base, attestation_status: status }
+    file({ name: '96-jpeg-attestation-revoked-after-device-clock', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + 60 * day,
+      expected: {
+        outcome: 'authentic',
+        labels: [...ATTESTED_LABELS, 'attestation key revoked'],
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'none', ceiling: 'red' },
+        validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+      },
+      notes: 'Vector 45 without the timestamp token. The revocation date is thirty days after `time.device_clock` — and the device clock is set by whoever holds the device key, which after a leaked keybox is exactly the person the revocation is about. A thief who signs today with the clock set to last month would read *revoked after the capture* and keep the level. So a device clock never places a capture before a revocation: **red** (§6.2, §7).' })
+  }
+
+  {
+    const base = attested({ chain: chainOf('tee') })
+    const status = statusAttachment(base, CAPTURE + 30 * day, revokedIntermediate({ reason: 'SUPERSEDED' }))
+    const { proof, genTime } = withToken({ ...base, attestation_status: status })
+    file({ name: '97-jpeg-attestation-revoked-without-date', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + 60 * day,
+      expected: {
+        outcome: 'authentic',
+        labels: [...STAMPED_LABELS, 'attestation key revoked'],
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'none', ceiling: 'red' },
+        validated_at: { instant: genTime, source: 'timestamp' }
+      },
+      notes: 'A revoked intermediate with no `revoked_at`, in a snapshot the registry took thirty days after the capture, and a timestamp token that places the capture firmly before that. Still **red**: `fetched_at` is when the registry read the list, not when anything was revoked, and a revocation first seen a month late may have happened a year early. Only a date the source itself gives can place a revocation after the capture (§6.2).' })
+  }
+
+  {
+    const base = attested({ chain: chainOf('tee') })
+    const status = statusAttachment(base, CAPTURE + 1800000, [{ serial: '03', status: 'valid' }, { serial: '02', status: 'unknown' }])
+    const proof = { ...base, attestation_status: status }
+    file({ name: '98-jpeg-attestation-status-unknown', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: {
+        outcome: 'authentic',
+        labels: [...ATTESTED_LABELS, 'chain revocation not checked'],
         not_evaluated: [],
         core_hash: hashOf(proof),
         level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
         validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
       },
-      notes: 'The same snapshot, taken thirty days later: the certificate was revoked **after** the capture. Revocation is temporal (§6.2), so the level at the proven instant stands and the revocation is shown rather than applied — a batch key withdrawn later does not un-attest what it attested. The pair 44/45 is the whole rule: the same entries, two verdicts, decided by the instant.' })
+      notes: 'The snapshot says `unknown` for the intermediate. That is the registry not knowing, and a verifier that read it as revoked — the reference verifier did — would turn silence into an accusation. **Amber**, *chain revocation not checked*, the level stands (§6.2).' })
+  }
+
+  {
+    const base = attested({ chain: chainOf('tee') })
+    const status = statusAttachment(base, CAPTURE + 1800000, [{ serial: '02', status: 'valid' }])
+    const proof = { ...base, attestation_status: status }
+    file({ name: '99-jpeg-attestation-status-uncovered', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: {
+        outcome: 'authentic',
+        labels: [...ATTESTED_LABELS, 'chain revocation not checked'],
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
+        validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+      },
+      notes: 'A correctly signed snapshot that says the intermediate (serial 02) is valid and says nothing about the leaf (serial 03). A snapshot answers for the certificates it names and no others: every certificate of the chain but the pinned root needs an entry, and one without is *chain revocation not checked*, **amber** (§6.2). A verifier that checked only the entries present would call a chain clean on the strength of one certificate.' })
+  }
+
+  {
+    // An attested key that signs a leaf of its own, claiming StrongBox.
+    const proof = attested({ chain: chainOf('forged-leaf'), secureHw: 'strongbox' })
+    file({ name: '105-jpeg-attestation-forged-leaf', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: {
+        outcome: 'authentic',
+        labels: [...PHOTO_LABELS, 'attestation evidence invalid'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'strongbox', proven: 'none', ceiling: 'amber' },
+        validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+      },
+      notes: 'A four-certificate chain in which a genuine attested TEE key — its own leaf, KeyDescription and all, under the real intermediate — has signed a **fifth-column leaf**: this proof\'s key, with a KeyDescription that says StrongBox. Every signature in the chain verifies and it ends in the pinned root.\n\n§7 refuses it twice. The key attestation extension belongs to the leaf and only the leaf, and certificate 1 carries one; and every certificate above the leaf MUST be a CA with `keyCertSign`, which an attested key is not. Proven level **none**, with both labels of §8 for a present attachment that does not hold up. Without those two rules a single genuine hardware key could mint "StrongBox" for any key it liked.' })
+  }
+
+  {
+    // The chain is about the test key; the proof is signed by another one.
+    const otherSpki = spkiOf(otherKey)
+    const core = photoCore(baseJpeg, 'image/jpeg', { device: { platform: 'android', secure_hw: 'tee', key_id: keyId(otherSpki) } })
+    const signed = { ...core, sig: { alg: 'ES256', value: signEs256(coreBytes(core), otherKey).toString('base64url'), pub: otherSpki.toString('base64url') } }
+    const proof = { ...signed, attestation: chainOf('tee') }
+    file({ name: '108-jpeg-attestation-leaf-not-signing-key', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: { outcome: 'tampered', labels: [], not_evaluated: [], core_hash: hashOf(proof) },
+      notes: 'A proof signed by one key carrying the genuine attestation chain of another. The core signature is valid under `sig.pub`, and the chain is perfect — for a different key. §6.2: the leaf\'s SubjectPublicKeyInfo MUST equal `sig.pub`, otherwise **tampered**. This is the signature swap of `threat-model.md` §5.1: re-sign a file with your own key and borrow somebody\'s hardware evidence. Weak evidence would be amber; evidence about someone else attached to your signature is red.' })
   }
 }
 
@@ -624,9 +908,9 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
   }
 
   /** An attested photo with a registry attachment and a clean status list. */
-  const registered = (o: Parameters<typeof registryFor>[0] = {}, statusEntries: Json = [{ serial: '02', status: 'valid' }]): Proof => {
-    const base = { ...sign(photoCore(baseJpeg, 'image/jpeg')), attestation: chainOf('tee') }
-    return { ...base, attestation_status: statusAttachment(base, CAPTURE - 1800000, statusEntries), registry: registryFor(o) }
+  const registered = (o: Parameters<typeof registryFor>[0] = {}, statusEntries: Json = [{ serial: '03', status: 'valid' }, { serial: '02', status: 'valid' }], chain = 'tee', core: Proof = {}): Proof => {
+    const base = { ...sign(photoCore(baseJpeg, 'image/jpeg', core)), attestation: chainOf(chain) }
+    return { ...base, attestation_status: statusAttachment(base, CAPTURE + 1800000, statusEntries), registry: registryFor(o) }
   }
 
   // Every absence label except the three this vector answers.
@@ -715,10 +999,216 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
         labels: GREEN_LABELS,
         not_evaluated: [],
         core_hash: hashOf(proof),
-        level: { claimed: 'tee', proven: 'tee', ceiling: 'green' },
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
         validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
       },
-      notes: 'The corpus\'s first **green**, and it takes one more input than vector 49: the log\'s signed answer about this key at the instant the capture is validated at.\n\n`key_status` in `expected.json` is an **input**, like `verifier_clock` — the verifier fetched it, the corpus declares what it fetched. It has to be, because §6.2 makes revocation an online question: the proof cannot carry the absence of a later revocation leaf, so no file on its own can be green. A conformance corpus that pretended otherwise would be testing a verdict no verifier can reach.\n\nThe statement is bound to **this key and this instant** — `"vcap/1.0/status" ‖ key_id ‖ at ‖ tree_size ‖ status`, signed by the log\'s tree-head key — so a statement about last week, correctly signed, is a valid answer to the wrong question and is refused as one. Everything §7 asks for is now present: `tee` proven by a chain to the pinned root, the chain\'s certificates valid in a signed status list, the key in the log before the capture, and the key not revoked at that instant. Change any one and the ceiling drops, which is what the four vectors around this one are for.' })
+      notes: 'Everything §7 asks for except one thing, and the one thing is time. `tee` proven by a chain to the pinned root, every certificate of the chain valid in a signed status snapshot, the key in the log before the declared capture, the app that made the key one the log admits, and the log\'s signed answer that the key was not revoked at that instant — `key_status` in `expected.json` is an **input**, like `verifier_clock`, because §6.2 makes revocation an online question.\n\nAnd the ceiling is **amber**. The only instant is `time.device_clock`, and a device clock caps the verdict at amber whatever else holds (§7): it is set by whoever holds the device, so every check made "at the capture" is a check made at a moment the signer chose. This vector used to be the corpus\'s green, in contradiction with that sentence; the text was right and the vector was not. Vector 100 is this proof with an instant nobody can move, and it is green.' })
+  }
+
+  // The standard core is the one `_timestamps/valid.json` stamps; every
+  // attachment here is outside it.
+  const stampedRegistered = (o: Parameters<typeof registryFor>[0] = {}, statusEntries?: Json, chain?: string): { proof: Proof, genTime: string } => {
+    const proof = registered(o, statusEntries, chain)
+    const token = tokenNamed('valid', hashOf(proof))
+    return { proof: { ...proof, timestamp: { tsr: token.tsr } }, genTime: token.genTime }
+  }
+  const STAMPED_GREEN = GREEN_LABELS.filter((l) => l !== 'no trusted time')
+
+  {
+    const { proof, genTime } = stampedRegistered()
+    file({ name: '100-jpeg-registry-green-timestamped', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      keyStatus: statusStatement(Date.parse(genTime), 1),
+      expected: {
+        outcome: 'authentic',
+        labels: STAMPED_GREEN,
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'green' },
+        validated_at: { instant: genTime, source: 'timestamp' }
+      },
+      notes: 'The corpus\'s **green**: vector 54 with an RFC 3161 token over its core. The token\'s `genTime` becomes the proven instant (§7), every certificate path is validated there, the log\'s signed status answers for that instant, and the tree head predates both the declared capture and the token (§6.2).\n\nWhat green says here, and only here: the key is in secure hardware of a device whose boot was verified, created by an app the log admits, registered in the log before the capture and not revoked at the instant a time-stamping authority vouches for; the chain\'s certificates were not revoked when the registry looked; and the bytes are the ones that key signed. Change any one input and one of the vectors around this one says which.' })
+  }
+
+  {
+    // No `time` in the core, so no declared capture time; a verified anchor
+    // supplies the instant, so the time cap is not what stops green here.
+    const base = registered({}, undefined, 'tee', { time: undefined as unknown as Json })
+    delete (base as Record<string, unknown>).time
+    const core = { ...base }
+    const leafIndex = 2
+    const size = 5
+    let level = Array.from({ length: size }, (_, i) => i === leafIndex ? leafHash(coreHash(core)) : leafHash(createHash('sha256').update(`another capture ${i}`).digest()))
+    const path: Buffer[] = []
+    let position = leafIndex
+    while (level.length > 1) {
+      if (position % 2 === 1) path.push(level[position - 1] as Buffer)
+      else if (position + 1 < level.length) path.push(level[position + 1] as Buffer)
+      const next: Buffer[] = []
+      for (let i = 0; i < level.length; i += 2) next.push(i + 1 < level.length ? nodeHash(level[i] as Buffer, level[i + 1] as Buffer) : level[i] as Buffer)
+      level = next
+      position = Math.floor(position / 2)
+    }
+    const root = level[0] as Buffer
+    const BLOCK = CAPTURE + 90_000
+    const proof = { ...core, anchor: { chain: 'base-sepolia', tx: '0x' + createHash('sha256').update('the anchoring transaction').digest('hex'), block: 46561942, anchor_id: 0, index: leafIndex, tree_size: size, root: root.toString('base64url'), merkle_path: path.map((h) => h.toString('base64url')) } }
+    file({ name: '101-jpeg-registry-no-device-clock', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      keyStatus: statusStatement(BLOCK, 1),
+      chainRead: { root: root.toString('base64url'), tree_size: size, block_time: BLOCK },
+      expected: {
+        outcome: 'authentic',
+        labels: [...GREEN_LABELS.filter((l) => l !== 'not anchored'), 'capture time not declared'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
+        validated_at: { instant: new Date(BLOCK).toISOString(), source: 'anchor' }
+      },
+      notes: 'A core with **no `time`**, everything else of vector 100, and a verified anchor for the instant. The reference verifier used to read a missing `device_clock` as "registered before the capture" — an absent field giving a *stronger* verdict than a present one, since a declared time can at least be late.\n\nNow the absence is shown, *capture time not declared*, and nothing that needs a declared capture time is established: the log\'s tree head cannot be placed before a capture nobody dated, so the ceiling is **amber**. The block time is an upper bound on the capture and says nothing about how long before it the key was registered.' })
+  }
+
+  {
+    const { proof, genTime } = stampedRegistered({ headTimestamp: CAPTURE + 120_000 })
+    file({ name: '102-jpeg-registry-after-trusted-time', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      keyStatus: statusStatement(Date.parse(genTime), 1),
+      expected: {
+        outcome: 'authentic',
+        labels: [...STAMPED_GREEN, 'registered after the declared capture', 'registered after the trusted time'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
+        validated_at: { instant: genTime, source: 'timestamp' }
+      },
+      notes: 'Vector 100 with a tree head signed two minutes after the capture — after the declared time **and** after the token\'s `genTime`. §6.2 requires `tree_head.timestamp` to exceed neither; the reference verifier used to check only the first. The second is the one that matters: the token is an instant the device does not choose, and a key logged after it was not in the log when the capture was stamped. Both labels, **amber**.' })
+  }
+
+  {
+    // A token one minute after the capture, and an anchor half a minute after.
+    const proof0 = sign(photoCore(baseJpeg, 'image/jpeg'))
+    const token = tokenNamed('valid', hashOf(proof0))
+    const anchorOf = (block: number): { anchor: Proof, read: Json } => {
+      const leafIndex = 1
+      const size = 3
+      const leaves = Array.from({ length: size }, (_, i) => i === leafIndex ? leafHash(coreHash(proof0)) : leafHash(createHash('sha256').update(`another capture ${i}`).digest()))
+      const left = nodeHash(leaves[0] as Buffer, leaves[1] as Buffer)
+      const root = nodeHash(left, leaves[2] as Buffer)
+      return {
+        anchor: { chain: 'base-sepolia', tx: '0x' + createHash('sha256').update(`block ${block}`).digest('hex'), block: 46561942, anchor_id: 1, index: leafIndex, tree_size: size, root: root.toString('base64url'), merkle_path: [leaves[0] as Buffer, leaves[2] as Buffer].map((h) => h.toString('base64url')) },
+        read: { root: root.toString('base64url'), tree_size: size, block_time: block }
+      }
+    }
+    const TS_ANCHOR_LABELS = PHOTO_LABELS.filter((l) => l !== 'not anchored' && l !== 'no trusted time')
+    {
+      const early = CAPTURE + 30_000
+      const { anchor, read } = anchorOf(early)
+      const proof = { ...proof0, timestamp: { tsr: token.tsr }, anchor }
+      file({ name: '103-jpeg-timestamp-after-anchor-block', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+        verifierClock: CAPTURE + day,
+        chainRead: read,
+        expected: {
+          outcome: 'authentic',
+          labels: [...TS_ANCHOR_LABELS, 'no trusted time', 'timestamp evidence invalid'].sort(),
+          not_evaluated: [],
+          core_hash: hashOf(proof),
+          level: { claimed: 'tee', proven: 'none', ceiling: 'amber' },
+          validated_at: { instant: new Date(early).toISOString(), source: 'anchor' }
+        },
+        notes: 'A valid token and a verified anchor over the same core, and the token\'s `genTime` is **after** the block that already anchors it. A token is validated at its own `genTime`, which whoever holds the TSA key chooses; the block time is chosen by nobody. When both are present the token must predate the block, and its signer certificate must still have been valid at the block (§6.2). This one fails the first: both labels of §8 for the token, and the block dates the capture.' })
+    }
+    {
+      const late = CAPTURE + 400 * day
+      const { anchor, read } = anchorOf(late)
+      const proof = { ...proof0, timestamp: { tsr: token.tsr }, anchor }
+      file({ name: '104-jpeg-timestamp-signer-expired-at-anchor', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+        verifierClock: CAPTURE + 500 * day,
+        chainRead: read,
+        expected: {
+          outcome: 'authentic',
+          labels: [...TS_ANCHOR_LABELS, 'no trusted time', 'timestamp evidence invalid'].sort(),
+          not_evaluated: [],
+          core_hash: hashOf(proof),
+          level: { claimed: 'tee', proven: 'none', ceiling: 'amber' },
+          validated_at: { instant: new Date(late).toISOString(), source: 'anchor' }
+        },
+        notes: 'The same token, and an anchor mined **400 days** after the capture — after the TSA signer\'s certificate expired (it lives a year). The token\'s `genTime` is inside that certificate\'s life and predates the block, so validated at `genTime` alone it holds. But a core first anchored after the certificate expired was stamped, as far as anything can show, by a key that was no longer valid: exactly what a TSA key leaked after its expiry would produce, backdated into the window. With an anchor, the signer must also be valid at the block time (§6.2); without one nothing bounds that risk, and `threat-model.md` §5.4 says so.' })
+    }
+  }
+
+  {
+    const { proof, genTime } = stampedRegistered({}, undefined, 'other-app')
+    file({ name: '106-jpeg-attestation-app-not-admitted', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      keyStatus: statusStatement(Date.parse(genTime), 1),
+      expected: {
+        outcome: 'authentic',
+        labels: [...STAMPED_GREEN, 'attestation app not admitted'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
+        validated_at: { instant: genTime, source: 'timestamp' }
+      },
+      notes: 'Vector 100 with a chain whose leaf says the key was created by an app signed with a certificate the log does not admit: `attestationApplicationId.signature_digests` holds no digest from the log\'s `app_signing_digests` in `_trust/logs.json` (§7). The hardware is genuine and the key is in the log, so the level stands; the app is not one the registry vouches for, so the ceiling is **amber**, *attestation app not admitted*. Not red: this is a claim the evidence does not reach, not a forgery.' })
+  }
+
+  {
+    const { proof, genTime } = stampedRegistered({}, undefined, 'no-app-id')
+    file({ name: '107-jpeg-attestation-app-not-checked', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      keyStatus: statusStatement(Date.parse(genTime), 1),
+      expected: {
+        outcome: 'authentic',
+        labels: [...STAMPED_GREEN, 'attestation app not checked'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
+        validated_at: { instant: genTime, source: 'timestamp' }
+      },
+      notes: 'Vector 100 with a chain whose leaf carries no `attestationApplicationId`. There is nothing to compare with the log\'s declared digests, and a verifier holding no declaration for the log is in the same place: *attestation app not checked*, **amber**, never red (§7). Green claims the key was created by a known app build (`threat-model.md` §1), so a verifier that cannot check it does not say green.' })
+  }
+
+  {
+    const { proof: stamped, genTime } = stampedRegistered()
+    const body: { [key: string]: Json } = { source: 'playIntegrity', verdict: 'failed', evaluated_at: CAPTURE + 1000 }
+    const proof = { ...stamped, integrity: { ...body, sig: signEs256(integrityMessage(coreHash(stamped), body), logKey).toString('base64url') } }
+    file({ name: '109-jpeg-integrity-failed-caps-green', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      keyStatus: statusStatement(Date.parse(genTime), 1),
+      expected: {
+        outcome: 'authentic',
+        labels: [...STAMPED_GREEN.filter((l) => l !== 'integrity unevaluated'), 'integrity failed'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
+        validated_at: { instant: genTime, source: 'timestamp' }
+      },
+      notes: 'Vector 100, the green, with a registry-signed integrity verdict of `failed`. §7: a valid `failed` caps the ceiling at **amber** and is shown prominently — the chain proves where the key lives, and Google\'s word that this device failed its integrity check is a reason not to say green however good the chain is. The level stands (`tee`): the verdict is about the device\'s state, not about the key.\n\nThe cap works in one direction only. Deleting the attachment gives *integrity unevaluated*, which caps nothing — so no integrity verdict can be a condition *for* green, and the format does not pretend it is. What a present `failed` can do is refuse green, and a relabelling cannot fake that away: the verdict is inside the signed message.' })
+  }
+
+  {
+    // iOS: no chain in the proof; the level comes from the registry's leaf.
+    const signed = sign(photoCore(baseJpeg, 'image/jpeg', { device: { platform: 'ios', secure_hw: 'secureEnclave', key_id: KEY_ID } }))
+    const leaves = [0, 1, 2].map((i) => i === 1 ? leafHash(coreHash(signed)) : leafHash(createHash('sha256').update(`another capture ${i}`).digest()))
+    const root = nodeHash(nodeHash(leaves[0] as Buffer, leaves[1] as Buffer), leaves[2] as Buffer)
+    const BLOCK = CAPTURE + 90_000
+    const proof = {
+      ...signed,
+      registry: registryFor({ secureHw: 'secureEnclave' }),
+      anchor: { chain: 'base-sepolia', tx: '0x' + createHash('sha256').update('the ios anchoring transaction').digest('hex'), block: 46561942, anchor_id: 2, index: 1, tree_size: 3, root: root.toString('base64url'), merkle_path: [leaves[0] as Buffer, leaves[2] as Buffer].map((h) => h.toString('base64url')) }
+    }
+    file({ name: '110-jpeg-secure-enclave-from-registry', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      keyStatus: statusStatement(BLOCK, 1),
+      chainRead: { root: root.toString('base64url'), tree_size: 3, block_time: BLOCK },
+      expected: {
+        outcome: 'authentic',
+        labels: [...GREEN_LABELS.filter((l) => l !== 'not anchored'), 'level from registry records'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'secureEnclave', proven: 'secureEnclave', ceiling: 'green' },
+        validated_at: { instant: new Date(BLOCK).toISOString(), source: 'anchor' }
+      },
+      notes: 'An iOS capture: no attestation chain in the proof, a `registry` attachment whose leaf records `secureEnclave` for this key, a verified anchor for the instant and the log\'s signed status at it. §7, *The Secure Enclave level*: this version defines no offline binding between a proof and an App Attest attestation, so the level is reachable **only through the registry**, and it is shown as what it is — *level from registry records*, the registry\'s word, like *corroborated* for a position. The inclusion proof shows the log recorded it; nothing in the file shows the Secure Enclave. A verifier that presented this level as checkable without the registry would be claiming a check it did not make.' })
   }
 
   {
@@ -881,15 +1371,6 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
   const day = 86_400_000
   const chainOf = (name: string): string[] => (JSON.parse(readFileSync(join(VECTORS, '_chains', `${name}.json`), 'utf8')) as { chain: string[] }).chain
 
-  const tokenNamed = (name: string, coreHashHex: string): { tsr: string, genTime: string } => {
-    const file = JSON.parse(readFileSync(join(VECTORS, '_timestamps', `${name}.json`), 'utf8')) as { core_hash: string, gen_time: string, tsr: string }
-    if (file.core_hash !== coreHashHex) {
-      throw new Error(
-        `_timestamps/${name}.json is a token over ${file.core_hash}, and this vector's core hash is ${coreHashHex}. ` +
-        'Re-mint: npx tsx src/make-timestamp-tokens.ts ' + coreHashHex)
-    }
-    return { tsr: file.tsr, genTime: file.gen_time }
-  }
 
   const stamped = (name: string, extra: Proof = {}): { proof: Proof, genTime: string } => {
     const base = { ...sign(photoCore(baseJpeg, 'image/jpeg')), ...extra }
@@ -998,16 +1479,15 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
   const day = 86_400_000
   const logKey = createPrivateKey({ key: Buffer.from(TEST_LOG_KEY_PKCS8_BASE64, 'base64'), format: 'der', type: 'pkcs8' })
 
-  /** §6.2: `core_hash ‖ UTF-8(verdict)`, signed by the registry's key. */
+  /** §6.2: `"vcap/1.0/integrity" ‖ core_hash ‖ JCS(body)`, signed by the registry's key. */
   const integrityFor = (proof: Proof, o: { verdict?: string, source?: string, forge?: boolean, otherKey?: boolean } = {}): Proof => {
-    const verdict = o.verdict ?? 'hardware'
-    const message = Buffer.concat([coreHash(proof), Buffer.from(verdict, 'utf8')])
+    const body: { [key: string]: Json } = { source: o.source ?? 'playIntegrity', verdict: o.verdict ?? 'hardware', evaluated_at: CAPTURE + 1000 }
     const key = o.otherKey ? otherKey : logKey
     const signature = o.forge
       // A signature over another verdict: the bytes are real, the claim is not.
-      ? signEs256(Buffer.concat([coreHash(proof), Buffer.from('basic', 'utf8')]), key)
-      : signEs256(message, key)
-    return { source: o.source ?? 'playIntegrity', verdict, evaluated_at: CAPTURE + 1000, sig: signature.toString('base64url') }
+      ? signEs256(integrityMessage(coreHash(proof), { ...body, verdict: 'basic' }), key)
+      : signEs256(integrityMessage(coreHash(proof), body), key)
+    return { ...body, sig: signature.toString('base64url') }
   }
 
   const withIntegrity = (o: Parameters<typeof integrityFor>[1] = {}): Proof => {
@@ -1075,6 +1555,31 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
         validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
       },
       notes: 'A verdict of `green`, correctly signed by the registry over `core_hash ‖ UTF-8("green")`. §6.2 lists four verdicts and this is not one of them, so the attachment is **readable, genuine and meaningless**.\n\nThis is where *integrity evidence invalid* belongs and where the relabelled vector 66 could not reach it: a signature nobody recognises is indistinguishable from absence, while a value outside the enumeration is present evidence that does not parse into anything a reader can be told. Both labels of §8.\n\nAlso schema-invalid, which is the point of having both gates: the schema refuses it on the shape and the verifier refuses it on the meaning, and a proof that passed one and not the other would say the two disagree about the format.' })
+  }
+}
+
+{
+  const CAPTURE = 1757332800000
+  const day = 86_400_000
+  const logKey = createPrivateKey({ key: Buffer.from(TEST_LOG_KEY_PKCS8_BASE64, 'base64'), format: 'der', type: 'pkcs8' })
+  {
+    const proof0 = sign(photoCore(baseJpeg, 'image/jpeg'))
+    const body: { [key: string]: Json } = { source: 'deviceCheck', verdict: 'hardware', evaluated_at: CAPTURE + 1000 }
+    const proof = { ...proof0, integrity: { ...body, sig: signEs256(integrityMessage(coreHash(proof0), body), logKey).toString('base64url') } }
+    file({ name: '121-jpeg-integrity-unknown-source', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: {
+        outcome: 'authentic', labels: PHOTO_LABELS, not_evaluated: [], core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'none', ceiling: 'amber' },
+        validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+      },
+      notes: 'A correctly signed integrity statement whose `source` is `deviceCheck`, a value this version does not define. `integrity.source` is extensible (§9), so this is a verifier meeting a later minor: it cannot weigh a verdict from a source it does not know, and reads the attachment as absent — *integrity unevaluated*, and not *integrity evidence invalid*. The schema accepts it: an identifier is an identifier. Until corpus 2.0.0 both the schema and the reference verifier refused the value §9 declares extensible.' })
+  }
+  {
+    const proof = sign(photoCore(baseJpeg, 'image/jpeg', { watermark: { algo: 'videoseal', layout: 'photo-bch-v4', payload_bits: 128, ecc: 'bch-255-131', strength: 8 } }))
+    file({ name: '95-jpeg-watermark-unknown-layout', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      expected: { outcome: 'authentic', labels: PHOTO_LABELS, not_evaluated: [], core_hash: hashOf(proof) },
+      notes: 'A core declaring `watermark.layout: photo-bch-v4`, a layout this version does not define. The field is extensible (§9): the proof is schema-valid and the verdict is the ordinary one, with *watermark not evaluated* — the answer §8 gives for a layout a verifier does not implement, never a refusal of the file.' })
   }
 }
 
@@ -1200,7 +1705,7 @@ file({ name: '72-jpeg-footer-crc-mismatch-sidecar', ext: 'jpg', file: seal(baseJ
     file({ name: '75-jpeg-location-corroborated', ext: 'jpg', file: seal(baseJpeg, proof), proof,
       verifierClock: CAPTURE + day,
       expected: { outcome: 'authentic', labels: CORROBORATED_LABELS, not_evaluated: [], core_hash: hashOf(proof), ...at({}), location: { claimed: 'declared', level: 'corroborated' } },
-      notes: 'A `location_corroboration` attachment: the registry called the operator\'s CAMARA Location Verification about a 2 km circle around the declared position, the operator answered `TRUE`, and the registry signed `match` with the key that signs its tree heads, over `"vcap/1.0/location" ‖ core_hash ‖ JCS(body)`. The level is **corroborated**.\n\nWhat a verifier must say about it, in these words or ones that keep their meaning: *the registry attests that the operator confirmed the zone, radius 2000 m*. Not "verified by the operator" — the operator\'s answer is JSON over TLS with no transportable signature, so the only thing a proof can carry is the registry\'s countersignature of what the registry saw (§6.2, D12). That is trust in the registry, stated, and it is the same construction as `integrity`.\n\nAnd it is orthogonal to the verdict. The ceiling is amber for the reason every unattested photo\'s is, and it would be amber with the attachment deleted: the position level says how much the coordinates are worth, never how much the file is.' })
+      notes: 'A `location_corroboration` attachment: the registry called the operator\'s CAMARA Location Verification about a 2 km circle around the declared position, the operator answered `TRUE`, and the registry signed `match` with the key that signs its tree heads, over `"vcap/1.0/location" ‖ core_hash ‖ JCS(body)`. The level is **corroborated**.\n\nWhat a verifier must say about it, in these words or ones that keep their meaning: *the registry attests that the operator confirmed the zone, radius 2000 m*. Not "verified by the operator" — the operator\'s answer is JSON over TLS with no transportable signature, so the only thing a proof can carry is the registry\'s countersignature of what the registry saw (§6.2). That is trust in the registry, stated, and it is the same construction as `integrity`.\n\nAnd it is orthogonal to the verdict. The ceiling is amber for the reason every unattested photo\'s is, and it would be amber with the attachment deleted: the position level says how much the coordinates are worth, never how much the file is.' })
   }
 
   {
@@ -1286,12 +1791,92 @@ file({ name: '72-jpeg-footer-crc-mismatch-sidecar', ext: 'jpg', file: seal(baseJ
   }
 }
 
+// ---- reading the JSON and the trailer: one proof, one reading --------------
+//
+// Each of these is a proof two correct JSON parsers can read two ways, or a
+// file two readers can walk two ways. §6.1 and §3 now decide each one, and the
+// decision is always the conservative one: *no proof found* for a proof that
+// is not well formed, *unsupported format version* for a footer this version
+// predates.
+{
+  const text = jcs(jpegProof as Json).toString('utf8')
+  const withPayload = (payload: string | Buffer): Buffer => seal(baseJpeg, jpegProof, { payload: Buffer.isBuffer(payload) ? payload : Buffer.from(payload, 'utf8') })
+  const NOT_FOUND = { outcome: 'no_proof_found' as const, labels: [], not_evaluated: [] }
+
+  {
+    // A second `capture_id` ahead of the real one: JavaScript keeps the last.
+    const payload = text.replace('{"capture_id":', '{"capture_id":"AAAAAAAAAAAAAAAAAAAAAA","capture_id":')
+    file({ name: '111-jpeg-duplicate-key', ext: 'jpg', file: withPayload(payload), expected: NOT_FOUND,
+      notes: 'Vector 01\'s payload with `capture_id` written twice, a zero id first and the signed one second. JSON leaves duplicate member names undefined, and parsers split: JavaScript keeps the last and verifies the signature, others keep the first and see a different core. One file, two verdicts, depending on the library. §6.1: a proof with a duplicate member name, at any depth, is not well formed — **no proof found**, the same answer everywhere.' })
+  }
+
+  {
+    const big = text.replace('"acc_cm":1250', '"acc_cm":9007199254740993')
+    file({ name: '112-jpeg-integer-above-2-53', ext: 'jpg', file: withPayload(big), expected: NOT_FOUND,
+      notes: 'Vector 01\'s payload with `location.acc_cm` set to 2^53 + 1. An IEEE 754 double cannot hold it: JavaScript reads 9007199254740992, a 64-bit integer parser reads the number written, and JCS of the two cores differs by one digit. §6.1: every integer in a proof lies within ±(2^53 − 1), the range every JSON implementation reads exactly — outside it, **no proof found**. The schema bounds `acc_cm` to uint32 as well.' })
+  }
+
+  {
+    // A core signed over 1250, written as 1.25e3: JavaScript reads the same
+    // number, so the signature would verify.
+    const exponent = text.replace('"acc_cm":1250', '"acc_cm":1.25e3')
+    file({ name: '113-jpeg-exponent-literal', ext: 'jpg', file: withPayload(exponent), expected: NOT_FOUND,
+      notes: 'Vector 01\'s payload with `acc_cm` written as `1.25e3`. JavaScript\'s `JSON.parse` reads 1250, JCS re-serializes it as `1250`, and the signature over the core verifies — a reference verifier built on it said *authentic*. A parser that keeps number types reads a float and refuses the core. §6.1: integers are written as integer literals, `-?(0|[1-9][0-9]*)`, and nothing else — no exponent, no fraction, no `4032.0`. **No proof found**.' })
+  }
+
+  {
+    file({ name: '114-jpeg-payload-bom', ext: 'jpg', file: withPayload(Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(text, 'utf8')])), expected: NOT_FOUND,
+      notes: 'Vector 01\'s payload preceded by a UTF-8 byte-order mark. §3: the payload is UTF-8 with no BOM; some readers skip one and some do not. **No proof found**, whatever the rest says.' })
+  }
+
+  {
+    const trailer = buildTrailer(jcs(jpegProof as Json), { major: 2, flags: flagsFor(jpegProof) })
+    file({ name: '115-jpeg-footer-major-2', ext: 'jpg', file: Buffer.concat([baseJpeg, trailer]), expected: { outcome: 'unsupported_format_version', labels: [], not_evaluated: [] },
+      notes: 'A trailer whose footer says major version 2. The magic says a vcap trailer is here; the major says it is not one this reader implements. **Unsupported format version** (§3, §9) — not *no proof found*, which would tell a reader the platform stripped a proof that is sitting at the end of the file in a format this verifier predates. A v1 reader does not interpret the rest of a footer whose major it does not know.' })
+  }
+
+  {
+    // APP0's length made to run past the end of the file.
+    const broken = Buffer.from(baseJpeg)
+    broken.writeUInt16BE(0xfff0, 4)
+    const core = photoCore(baseJpeg, 'image/jpeg', { media: { mime: 'image/jpeg', w: 16, h: 16, hash: createHash('sha256').update(broken).digest('base64url') } })
+    const proof = sign(core)
+    file({ name: '116-jpeg-malformed-segment-length', ext: 'jpg', file: seal(broken, proof), proof, expected: NOT_FOUND,
+      notes: 'A JPEG whose APP0 length runs past the end of the file, sealed with a `media.hash` over its raw bytes. §4.1\'s walk cannot find the segments, so the file has no canonical bytes and the proof covers nothing a verifier can compute: **no proof found**. The reference verifier used to throw out of `verifyFile` here; a verifier that crashes on hostile input has given the attacker a verdict of their choosing, which is none.' })
+  }
+
+  file({ name: '117-empty-file', ext: 'jpg', file: Buffer.alloc(0), expected: NOT_FOUND,
+    notes: 'Zero bytes. No footer, no sidecar: **no proof found**, and no exception on the way there.' })
+
+  {
+    const sealed = Buffer.from(jpegSealed)
+    sealed.writeUInt32BE(0xffffffff, sealed.length - 8)
+    file({ name: '118-jpeg-payload-len-max', ext: 'jpg', file: sealed, expected: NOT_FOUND,
+      notes: 'Vector 01 with `payload_len` set to 2^32 − 1. `8 + payload_len + 16` then exceeds 2^32, and a reader computing it in 32 bits wraps to 23 and looks for a box header inside the footer. §3: the sum is computed without overflow and compared with the file length first — **no proof found**.' })
+  }
+
+  file({ name: '119-jpeg-reserved-flags', ext: 'jpg', file: seal(baseJpeg, jpegProof, { flags: 0xfff8 }), proof: jpegProof,
+    expected: { outcome: 'authentic', labels: PHOTO_LABELS, not_evaluated: [], core_hash: hashOf(jpegProof) },
+    notes: 'Vector 01 with footer bits 3–15 set. They are reserved and written as zero, and a reader ignores them (§3): they carry nothing, and refusing a file for them would make a later minor that assigns one unreadable. **Authentic**, and not *flags disagree* — bits 1 and 2 still agree with the JSON.' })
+
+  {
+    // Integer-like member names and a `__proto__` member, in the one place a
+    // core may carry object members nobody enumerated: an evidence entry.
+    const messy: Json = JSON.parse('{"v":"vcap/1.0","capture_id":"' + CAPTURE_ID.toString('base64url') + '","media":{"mime":"image/jpeg","w":16,"h":16,"hash":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"},"device":{"platform":"android","secure_hw":"tee","key_id":"' + KEY_ID + '"},"location":{"level":"declared","lat_udeg":1,"lon_udeg":2,"evidence":[{"kind":"x","b":1,"10":2,"9":3,"__proto__":4}]}}') as Json
+    const bytes = coreBytes(messy as Proof)
+    if (!bytes.toString('utf8').includes('{"10":2,"9":3,"__proto__":4,"b":1,"kind":"x"}')) throw new Error('JCS member order regressed')
+    vectors.push({ kind: 'jcs', name: '120-jcs-integer-like-and-proto-keys', input: messy,
+      expected: { core_bytes_hex: bytes.toString('hex'), core_hash: createHash('sha256').update(bytes).digest('hex') },
+      notes: 'A core whose evidence entry has members named `b`, `10`, `9`, `__proto__` and `kind`. RFC 8785 sorts member names by UTF-16 code units: `10`, `9`, `__proto__`, `b`, `kind`. Two things get in the way in JavaScript, and the reference implementation fell for both: an object enumerates integer-like keys first in numeric order (`9` before `10`) whatever order they were added in, and assigning a `__proto__` member sets the prototype instead of adding the member, which then vanishes from the output. A canonicalizer that builds a sorted object and hands it to `JSON.stringify` produces neither the order nor the member; one that writes members itself produces both.' })
+  }
+}
+
 // what it can rebuild is the difference between a generator and a broom.
 const owned = new Set(vectors.map((v) => v.name))
 if (existsSync(VECTORS)) {
   const foreign: string[] = []
   for (const entry of readdirSync(VECTORS)) {
-    if (!/^\d\d-/.test(entry)) continue
+    if (!isVectorDir(entry)) continue
     if (owned.has(entry)) rmSync(join(VECTORS, entry), { recursive: true })
     else foreign.push(entry)
   }
@@ -1311,7 +1896,7 @@ for (const vector of vectors) {
     if (vector.proof) writeFileSync(join(dir, 'proof.json'), JSON.stringify(vector.proof, null, 2) + '\n')
     const schemaValid = vector.schemaValid ?? true
     writeFileSync(join(dir, 'expected.json'), JSON.stringify({
-      kind: 'file',
+      kind: vector.container ? 'container' : 'file',
       // An input, not an expectation: a §7 verdict depends on when the verifier
       // runs (a chain expires), so a vector that did not pin the clock would
       // change its own answer with the calendar.
@@ -1323,7 +1908,7 @@ for (const vector of vectors) {
       ...vector.expected,
       ...(vector.proof ? { schema_valid: schemaValid } : {})
     }, null, 2) + '\n')
-    actual = pick(verifyFile({ file: vector.file, sidecar: vector.sidecar, trust, clock: vector.verifierClock ? new Date(vector.verifierClock) : undefined, keyStatus: vector.keyStatus as KeyStatusStatement | undefined, chainRead: vector.chainRead as ChainRead | undefined }), vector.expected)
+    actual = pick(verifyFile({ file: vector.file, sidecar: vector.sidecar, recomputeSegments: vector.container === true, trust, clock: vector.verifierClock ? new Date(vector.verifierClock) : undefined, keyStatus: vector.keyStatus as KeyStatusStatement | undefined, chainRead: vector.chainRead as ChainRead | undefined }), vector.expected)
     // The schema must agree with the review too: a proof the review calls
     // conforming that the schema refuses is a bug in one of the two.
     if (vector.proof) {
@@ -1341,7 +1926,10 @@ for (const vector of vectors) {
     writeFileSync(join(dir, 'core.json'), JSON.stringify(vector.input, null, 2) + '\n')
     writeFileSync(join(dir, 'expected.json'), JSON.stringify({ kind: 'jcs', ...vector.expected }, null, 2) + '\n')
   }
-  writeFileSync(join(dir, 'NOTES.md'), `# ${vector.name}\n\n${vector.notes}\n\nGenerated by \`tools/src/generate.ts\` with the test key in \`tools/src/testkey.ts\`.\n`)
+  // A container vector carries a device's signature, not the test key's: its
+  // notes say where it came from instead.
+  const footer = vector.kind === 'file' && vector.container ? '' : '\n\nGenerated by `tools/src/generate.ts` with the test key in `tools/src/testkey.ts`.'
+  writeFileSync(join(dir, 'NOTES.md'), `# ${vector.name}\n\n${vector.notes}${footer}\n`)
 
   if (actual && JSON.stringify(actual) !== JSON.stringify(vector.expected)) {
     failures++

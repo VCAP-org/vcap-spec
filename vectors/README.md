@@ -6,7 +6,7 @@ its input:
 | `kind` | Input | What it exercises |
 |---|---|---|
 | `file` | `input.<ext>`, optional `input.<ext>.vcap` sidecar, `proof.json` for reading | trailer, canonical bytes, core signature, key binding, version policy, absence labels |
-| `container` | `input.mp4` or `input.mov`, `proof.json` for reading | everything `file` does **plus** §5: every present segment's `content_hash` recomputed from the NAL units and audio frames of the received container |
+| `container` | `input.mp4` or `input.mov`, optional `input.mp4.vcap` sidecar, `proof.json` for reading | everything `file` does **plus** §5: every GOP of the received container located by its vcap SEI and bound to a signed segment (*Locating segments*), and every located segment's `content_hash` recomputed from its NAL units and audio frames |
 | `segments` | `segments.json` — `capture_id`, `pub`, `segment_count`, `segments[]` | the §5 chain at message level: content hashes given, no container |
 | `jcs` | `core.json` | canonicalization: expected `core_bytes_hex` and `core_hash` |
 
@@ -26,7 +26,7 @@ can exercise because this repository ships no detector
 (`_watermark/README.md`).
 
 `expected.json` for `file` and `segments` vectors carries the fields a verifier
-must reproduce: `outcome` (`authentic`, `verified_clip`, `tampered`,
+must reproduce: `outcome` (`authentic`, `verified_clip`, `frames_not_compared`, `tampered`,
 `nested_proof`, `corrupted_proof`, `no_proof_found`, `unsupported_format_version`),
 `labels` (the §8 labels, sorted), `not_evaluated` (unknown top-level keys,
 sorted), `core_hash` (hex, when a core was read) and `segments.verified` (the
@@ -92,7 +92,11 @@ every numbered directory before rewriting, which for these was not a rewrite
 but a loss. Two scripts rebuild them instead, each pointed at the artifacts a
 device produced: `tools/src/derive-container-vectors.ts` for 36-39 (Android) and
 `tools/src/derive-ios-vectors.ts` for 47-48 and 85 (iOS). That is what keeps the
-edited cases (38, 39) auditable rather than asserted.
+edited cases (38, 39) auditable rather than asserted. The later edits of
+those captures — 86-94, a stolen proof, a cut clip, reordered and duplicated
+GOPs, a relabelled SEI — need no device: `npm run generate` derives them from
+the committed 36 and 37 through `tools/src/remux.ts`, which rewrites sample
+tables and leaves every device signature as it was.
 
 They are not all the same weight of evidence, and each `NOTES.md` says which it
 is. 36-39, 47 and 85 carry a **real device signature**: an implementation that
@@ -118,7 +122,7 @@ The numbered corpus (`vectors/NN-*`) has its own version, in `vectors/VERSION`
 — separate from `vcap/1.0`, the proof format version. The format version says
 what a proof looks like; the corpus version says which exact vectors an
 implementation checked itself against, so a third party can claim "conformant
-with vcap-spec corpus 1.3.0" and mean something a consumer can check.
+with vcap-spec corpus 2.0.0" and mean something a consumer can check.
 
 `vectors/MANIFEST.json` is that check: for every `vectors/NN-*` directory, its
 `kind`, its `outcome`, and a SHA-256 over its files (name and length included,
@@ -134,7 +138,7 @@ npm run manifest:check   # exits 1 if the committed file is stale — CI runs th
 ```
 
 `vectors/CONFORMANCE.md` says what the sentence "conformant with corpus
-1.3.0" has to contain to be checkable — corpus version, manifest hash, and
+2.0.0" has to contain to be checkable — corpus version, manifest hash, and
 how many vectors actually ran — and why a suite that ran zero vectors must be
 red. `vectors/conformance-report.json` is this repository's own claim in that
 format, regenerated and checked by CI (`npm run conformance:report` /
@@ -148,6 +152,10 @@ something outside `vectors/` (there is not expected to be one, since the
 manifest is a pure function of the directory and `VERSION`). A major bump
 would mean an existing vector's bytes moved — the one thing this corpus does
 not do — so seeing one asks the same question a breaking spec change does.
+**2.0.0 is one**, and the answer is in `CHANGELOG.md`: the review of
+24 September 2026 changed verdicts the format had got wrong (a stolen proof
+reading *verified clip*, a device clock reaching green) while the format is
+still a draft, which is the one time §9 allows it.
 
 `vectors/edge-cases/` (below) is not in the manifest and not part of the
 versioned corpus: it is regenerated on demand by its own tool, not hand-curated
@@ -232,11 +240,12 @@ corroboration of a `location` with no coordinates).
 
 - **Watermark-only match, cropped photo beyond the correction budget**:
   detector vectors, ML review.
-- **A remuxed or trimmed video with its proof in a sidecar**: the trailer is
-  gone, the NAL units and vcap SEIs survive, and §5 should read *verified clip*
-  over the whole received file. It needs a real remuxer's output and belongs
-  with the container vectors that come off a device (36–39, 48, 85), not with
-  the generator.
+- **A video trimmed by a third-party remuxer, with its proof in a sidecar**:
+  the trailer is gone, the NAL units and vcap SEIs survive, and §5 reads
+  *verified clip* over the whole received file. Vector 89 is the same cut made
+  by this repository's own sample-table rewrite with the proof in the
+  trailer; the case with another tool's output, whose `moov` and interleaving
+  are its own, still wants that tool's file.
 - **A JPEG carrying a C2PA manifest with a real claim signature** next to a
   vcap trailer, validated by a C2PA validator as well as by ours. Both halves
   of `spec/c2pa-interop-1.0.md` §3 are argued from the C2PA text; the C2PA

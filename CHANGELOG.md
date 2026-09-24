@@ -12,6 +12,136 @@ else.
 
 ## Unreleased
 
+### Review fixes — corpus 1.3.0 → **2.0.0**
+
+A major corpus bump: existing vectors changed bytes or verdict (33, 38, 44,
+45, 54, 64–67 and every attested vector, whose chains were re-minted), which
+the bump policy in `vectors/README.md` reserves for a major. 36 vectors are
+new (86–121), 121 in all.
+
+**Video binding (§5)**
+
+- **Breaking. A signed segment is verified only where the file has it.**
+  *Locating segments*: a segment counts as verified only if exactly one GOP
+  of the received file carries a vcap SEI with its index and the proof's
+  `capture_id`, and that GOP recomputes to the signed `content_hash`. Once any
+  GOP names this capture, every GOP is accounted for in decode order: a GOP
+  with no vcap SEI, one naming another capture, an index the proof does not
+  sign, a duplicated index, indices not strictly increasing, or more than one
+  vcap SEI in a GOP is *tampered*. Before, GOPs without an SEI were skipped
+  and a segment verified on its signature alone: a stolen proof next to an
+  unrelated clip read *verified clip* (vector 86), and so did a file with one
+  SEI index edited (88). Vector 38 — segment 0 dropped from the proof, left in
+  the file — changes from *verified clip* to **tampered**; vector 89 is the
+  genuine cut clip.
+- **Breaking. New outcome `frames_not_compared`**, amber: a video whose
+  signatures hold and in which no GOP of the capture can be located, or whose
+  verifier did not recompute. Never *verified clip*. `segments.verified` is
+  empty whenever nothing was located, so vector 33 (a `file` vector, not
+  demuxed) keeps *authentic* on `media.hash` and now reports no verified
+  segment. `expected.schema.json` gains the value.
+- **Breaking. Segment boundaries are IDR access units** by NAL type, not
+  `stss` (vector 94). **Writers MUST emit exactly one vcap SEI per segment**,
+  in its IDR access unit.
+- **A vcap SEI NAL carries exactly one message**, `payloadSize` exactly 36,
+  then only `rbsp_trailing_bits`; any other shape with the vcap UUID is
+  *tampered* (vector 93). Emulation prevention is stated: the payload is read
+  from the RBSP, the NAL is excluded as stored.
+- **The NAL units of a sample tile it exactly**; a bad length prefix is
+  *tampered*, not a silent stop (vector 92).
+- Container vectors 86–94 are edits of the device captures 36 and 37,
+  derived by `npm run generate` through a sample-table remuxer
+  (`tools/src/remux.ts`); the device signatures are untouched.
+
+**Time and revocation (§6.2, §7)**
+
+- **Breaking. `time.device_clock` alone caps at amber.** Green needs a valid
+  timestamp token or a verified anchor for the proven instant. Vector 54
+  changes from green to **amber**; vector 100 is the green, with a token.
+- **Breaking. A missing `device_clock` never strengthens a verdict**: new
+  label *capture time not declared*, and the registration cannot be placed
+  before the capture (vector 101). The reference verifier read it as "before".
+- **`tree_head.timestamp` MUST NOT exceed a valid token's `genTime`**: new
+  label *registered after the trusted time* (vector 102).
+- **Breaking. Chain revocation.** `attestation_status` entries gain optional
+  `revoked_at`, the revocation date as the source gives it; `fetched_at` is
+  never used as one. A `revoked` chain certificate is red unless a token or a
+  verified anchor places the capture before `revoked_at` and the reason is
+  not `KEY_COMPROMISE`/`CA_COMPROMISE` (vectors 44, 45, 96, 97). `unknown`, or
+  a chain certificate without an entry, is *chain revocation not checked*,
+  amber, never red (98, 99). Every certificate but the pinned root needs an
+  entry; serials compare with leading zeros stripped.
+- **A token must agree with a verified anchor**: `genTime` not after the
+  block, and the TSA signer valid at the block time; otherwise both timestamp
+  labels and the anchor dates the capture (vectors 103, 104). The residual
+  risk of a leaked TSA key is in `threat-model.md` §5.4.
+- The online key status is asked at the proven instant, not at the device
+  clock when a trusted instant exists.
+
+**Attestation (§7)**
+
+- **Breaking. Android chain MUSTs**: every certificate above the leaf is a CA
+  with `keyCertSign`; the key attestation extension is in the leaf only
+  (vector 105, a genuine attested key signing a forged "StrongBox" leaf);
+  verified boot on a locked device, as the reference verifier already
+  enforced. A chain that fails is *origin not hardware-attested* **and** new
+  *attestation evidence invalid*.
+- **Breaking. `attestationApplicationId`** is compared with the app signing
+  digests a trusted log declares (`app_signing_digests` in the trust list,
+  `_trust/logs.json`); new labels *attestation app not admitted* and
+  *attestation app not checked*, both amber (vectors 106, 107).
+- **Attestation leaf ≠ `sig.pub` is *tampered***, as §8 always said; the
+  reference verifier used to drop the level silently (vector 108).
+- **iOS `secureEnclave`** is reachable only through a verified registry leaf
+  that records it, and is labelled *level from registry records* (vector
+  110). No offline App Attest binding is defined in this version.
+- `vectors/_chains/` re-minted with `keyUsage` on the CAs and an
+  `attestationApplicationId` in each leaf; three new chains (`forged-leaf`,
+  `other-app`, `no-app-id`).
+
+**Integrity (§6.2, §7)**
+
+- **Breaking. One rule**: a valid `integrity` verdict of `failed` caps the
+  ceiling at amber, prominently flagged; nothing else and no absence caps
+  (vector 109). The contradicting sentences in §6.2, §8 and the threat model
+  are gone.
+- **Breaking. The integrity signature** is over
+  `"vcap/1.0/integrity" ‖ core_hash ‖ JCS(attachment without sig)`, like
+  `location_corroboration`: `source` and `evaluated_at` are now signed, and
+  the separator isolates the message. Vectors 64–67 change bytes.
+- `integrity.source` and `watermark.layout` are extensible identifiers in the
+  schema and read as *not evaluated* when unknown (vectors 95, 121).
+
+**JSON, JCS and the trailer (§3, §4.1, §6.1)**
+
+- **Breaking. Reading the JSON**: no BOM, no duplicate member names at any
+  depth, every number an integer literal within ±(2^53 − 1); otherwise *no
+  proof found* (vectors 111–114).
+- **The reference JCS** wrote integer-like member names in numeric order and
+  dropped a `__proto__` member (vector 120).
+- **Breaking. A `VCAP` footer with major ≠ 1 is *unsupported format
+  version***, not *no proof found* (vector 115). `8 + payload_len + 16` is
+  computed without overflow (118); reserved flags are ignored (119).
+- **The container is chosen by magic bytes**, never by `media.mime`; a
+  malformed JPEG is *no proof found*, never an exception (vector 116); an empty
+  file is *no proof found* (117).
+- The schema bounds uint32 fields (`w`, `h`, `duration_ms`, `segment_count`,
+  `gop`, `acc_cm`, `radius_m`, …) and caps every other integer at 2^53 − 1.
+
+**Documents**
+
+- §8 defines outcome and ceiling and lists the eight outcomes; the labels
+  table no longer has prose inside it.
+- `watermark-layouts-1.0.md`: the `photo-bch-v3` radius is 18 **bit** errors;
+  the repetition code's guaranteed radius is 3 flips and beyond it recovery is
+  a curve, not a ≈ 51-flip radius. `watermark-robustness-1.0.md` corrected to
+  match, and the photo break point is marked unmeasured between 7 and 30
+  flipped bits.
+- `c2pa-interop-1.0.md`: the custom assertion label is
+  `io.github.vcap-org.vcap.proof`.
+- Private references removed from the tools, the trust README, the watermark
+  fixtures and the notes of vectors 36–39 and 75.
+
 ### Watermark
 
 - **Photo strength default 1.5 → 1.2** (`watermark-layouts-1.0.md` § Strength).

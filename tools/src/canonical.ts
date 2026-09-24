@@ -4,6 +4,11 @@ import { createHash } from 'node:crypto'
  * §4.1 canonical bytes. The trailer is already stripped by the caller; this is
  * the container normalization: JPEG loses its C2PA APP11 segments, ISO-BMFF is
  * taken as is.
+ *
+ * The container is decided by the first bytes of the file, never by
+ * `media.mime` (§4.1): the MIME type is a claim inside the proof, and letting
+ * a claim choose how the bytes it describes are hashed would let a writer pick
+ * the rule its file passes.
  */
 export type Container = 'jpeg' | 'bmff' | 'unknown'
 
@@ -31,6 +36,10 @@ export const stripC2paFromJpeg = (jpeg: Buffer): Buffer => {
     if (marker === 0xff || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) { kept.push(jpeg.subarray(pos, pos + 1 + (marker === 0xff ? 0 : 1))); pos += marker === 0xff ? 1 : 2; continue }
     if (marker === SOS) break
     const length = jpeg.readUInt16BE(pos + 2)
+    // The length counts itself, so it is at least 2, and the segment ends
+    // inside the file. A walker that let `subarray` clip an overrun would hash
+    // a file it had misread.
+    if (length < 2 || pos + 2 + length > jpeg.length) throw new Error('JPEG: a segment length runs past the end of the file')
     const segment = jpeg.subarray(pos, pos + 2 + length)
     const payload = segment.subarray(4)
     const isC2pa = marker === APP11 && payload.subarray(0, 2).equals(JUMBF_ID)

@@ -1,0 +1,76 @@
+{
+  "v": "vcap/1.0",
+  "capture_id": "ABEiM0RVZneImaq7zN3u_w",
+  "media": {
+    "mime": "image/jpeg",
+    "w": 16,
+    "h": 16,
+    "hash": "OAbzVz4A9m1LqjF---miCdM2Bap6wRuTWbiuW41LzRA"
+  },
+  "device": {
+    "platform": "ios",
+    "secure_hw": "secureEnclave",
+    "key_id": "4aF24UJH_AHu_CuygIW3PB-AMEWVoQy3iaeBh4yDSBM"
+  },
+  "watermark": {
+    "algo": "videoseal",
+    "layout": "photo-bch-v3",
+    "payload_bits": 128,
+    "ecc": "bch-255-131",
+    "strength": 8
+  },
+  "time": {
+    "device_clock": 1757332800000
+  },
+  "location": {
+    "level": "declared",
+    "lat_udeg": 45464664,
+    "lon_udeg": 9188540,
+    "acc_cm": 1250,
+    "evidence": []
+  },
+  "policy": {
+    "pseudonymous": false
+  },
+  "sig": {
+    "alg": "ES256",
+    "value": "CdxjUI8DL4bODBHOOaB3C_xH4E5bugR26NFgIZesZo5hgZ3mDw-xXxDCtOUh2m08J5KbrpBrj2tn91q9kNwIEg",
+    "pub": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEp2C_SxUua1GBx-6u3KBIJKPwOb6yEYmTqfdbgzJbVJCy1_wvmKAjjmvD-d5EdVWpGx0Jxcduppsd0SspNPHKyA"
+  },
+  "registry": {
+    "log_id": "n86HEwJWvHOhbryJkD8Q18_41VkQcVInSIqNa1EaBVs",
+    "leaf_index": 3,
+    "leaf": {
+      "type": "key",
+      "key_id": "e1a176e14247fc01eefc2bb28085b73c1f80304595a10cb789a781878c834813",
+      "public_key": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEp2C/SxUua1GBx+6u3KBIJKPwOb6yEYmTqfdbgzJbVJCy1/wvmKAjjmvD+d5EdVWpGx0Jxcduppsd0SspNPHKyA==",
+      "secure_hw": "secureEnclave",
+      "attestation_digest": "8728db8fabd28a775d55e91002b1d09f11b6f31d52b348c48ee4c013e77fb003",
+      "registered_at": 1757246400000
+    },
+    "inclusion_path": [
+      "VZ5aKOffwC1b_3wChsqDl54NZxlI3uTgIHIc9bNXQho",
+      "rOpXt1mpwNdlUMQGAIH6AE0PddZ2Z-1zIlvjNz27-II",
+      "BLtUtiYMIye48PzbPSt8vFz2Bz1HvLH4LuF5Qky5-Tc"
+    ],
+    "tree_head": {
+      "tree_size": 7,
+      "timestamp": 1757329200000,
+      "root_hash": "mSkA44lTRaxVjUJz6HQ7PFIBpYpGZ91fC61kaKJS8fM",
+      "signature": "qsuzDIFjD0MaxUaWau_5-ZUFFiRDxB0RR30P4pbV1cJZjzEzUzYZn5GTC13vXHWSniFWgUgdAs8Cml6UnPq2SA"
+    }
+  },
+  "anchor": {
+    "chain": "base-sepolia",
+    "tx": "0xb446bdd3ff00c43617c26a7ef17ff8d2a1bbd6bb92b316003700d3efbdb82de3",
+    "block": 46561942,
+    "anchor_id": 2,
+    "index": 1,
+    "tree_size": 3,
+    "root": "7-QyevOyMjXTbuR-SZJzAllgYy7vrpDcgFJivIu_7CI",
+    "merkle_path": [
+      "fScsmxgA88V1xa_heFln0KpPNQjgL2-674uAXOkVnSQ",
+      "R-Sz7kjNUmGzT4ZFfDY8tk3j1tWkEzLammYfmO-2P5M"
+    ]
+  }
+}

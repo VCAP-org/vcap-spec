@@ -106,8 +106,9 @@ Boundaries, each enforced by code and tested:
 | Pixel or metadata edit | changes bytes after sealing | `media.hash` over canonical bytes, in the signed core (§4) | none: red |
 | Claim edit | changes location, time, level, capture id in the JSON | the core is signed (§4.2); `key_id` derived from `sig.pub`; proven level from attestation, claimed level capped | none: red / flagged |
 | Signature swap | re-signs the file with own key and attaches a genuine attestation chain | attestation leaf SPKI must equal `sig.pub` (§6.2) | none: red |
-| Proof transplant | moves a genuine trailer onto another file | `media.hash` mismatch; on video, segments do not match | none: red |
+| Proof transplant | moves a genuine trailer or sidecar onto another file | `media.hash` mismatch; on video, a signed segment counts only where a GOP of the received file names it and recomputes (§5, *Locating segments*) | none: red on a photo; *frames not compared* on a video whose GOPs name no segment of the proof, never *verified clip* |
 | Clip from a genuine video | cuts segments, keeps the trailer | per-segment chain over messages; `segment_count`; `media.hash` mismatch → *verified clip*, amber, ranges shown | accepted and **labelled**: a clip is a clip, never an original |
+| Reassembled video | reorders, repeats or relabels genuine GOPs, or inserts a foreign one next to them | every GOP of the file is accounted for in decode order: one vcap SEI naming this capture and a signed segment, indices strictly increasing, each at most once (§5) | none: red |
 | Audio replacement on a clip | keeps verified frames, swaps sound | audio frames inside the segment hash (§5) | none on originals and clips |
 | Signature malleability | flips `s` to break or forge chains | chain over messages, not signatures; P1363; both `s` halves accepted | none |
 | Nested trailer | wraps a hardware-sealed original in a weaker proof | nested trailer detected and reported; writers refuse | none: *nested proof* |
@@ -124,7 +125,7 @@ Boundaries, each enforced by code and tested:
 | Key extraction | reads the private key out of the device | secure hardware; not our control | accepted: the platform's promise, not ours |
 | Compromised app | a modified build of our app, or another app, uses the key | `attestationApplicationId` (package + signing digest) / App ID, per tenant; token rotation stops a leaked build | low; a re-signed app has a different digest |
 | Imported key | key created elsewhere, imported into the TEE | `origin` must be `GENERATED` | none |
-| Unlocked bootloader / rooted device with virtual camera | genuine hardware signs an injected frame | verified boot state and locked device required in the attestation; integrity statement (Play Integrity / App Attest) signed by the registry as an attachment; both prominent on the verdict | **high and accepted**: see §2. The verdict names it; no green without hardware integrity |
+| Unlocked bootloader / rooted device with virtual camera | genuine hardware signs an injected frame | verified boot state and locked device required in the attestation; integrity statement (Play Integrity / App Attest) signed by the registry as an attachment; both prominent on the verdict | **high and accepted**: see §2. The verdict names it; a registry-signed integrity verdict of `failed` caps the ceiling at amber (`vcap-proof-1.0.md` §7). An absent verdict caps nothing — whoever strips it would otherwise decide — so *integrity unevaluated* is shown instead |
 | Cloned Secure Enclave key (theoretical) | two devices with one key | App Attest counter must increase on every assertion; the receipt (future) | low |
 
 ### 5.3 Against the registry and the log
@@ -144,7 +145,9 @@ Boundaries, each enforced by code and tested:
 | Threat | Mitigation | Residual |
 |---|---|---|
 | Google or Apple attestation root compromised or an attestation key leaked (older provisioning) | pinned roots; Google's revocation list checked, fail closed server-side; RKP preferred | accepted at the platform level; verifiers degrade, never fail silently |
-| QTSP compromised | two providers, failover; token chain validated offline | a false time from a compromised QTSP is a false time; the token names the issuer |
+| QTSP compromised | two providers, failover; token chain validated offline; with an anchor, the token must predate the block and its signer be valid at the block time (§6.2) | a false time from a compromised QTSP is a false time; the token names the issuer |
+| TSA signing key leaked | a token is validated at its own `genTime`, which the key holder chooses; with a verified anchor the token must predate the block and the signer certificate must be valid at the block time, so a key leaked after its certificate expired cannot stamp a proof first anchored afterwards | **accepted and named**: a leaked TSA key can backdate a token to any instant inside its certificate's life, and a token that has no anchor has no bound at all. A verifier cannot tell that token from an honest one; the TSA's revocation is the only remedy |
+| Attestation key leaked (keybox) | a revoked chain certificate is red unless a trusted instant predates the revocation date the source gives, and never for a compromise; `fetched_at` is not a date and a device clock never places a capture before a revocation (§6.2) | low: what remains is a capture stamped by an honest TSA before the date a non-compromise revocation took effect |
 | Chain reorganization or censorship | anchoring is optional evidence; *not anchored* is a label | accepted |
 
 ### 5.5 Privacy
@@ -253,6 +256,13 @@ like, and it is the true one.
   *authenticated* level waits for a smartphone chipset with OSNMA.
 
 ## 7. Change log
+
+- 2026-09-24 — Review fixes. §5.1: proof transplant onto a video and a
+  reassembled video close on the binding rule of §5 (*Locating segments*).
+  §5.2: an integrity verdict of `failed` caps amber, absence caps nothing —
+  the earlier "no green without hardware integrity" contradicted §6.2 and §7.
+  §5.4: a leaked TSA key and a leaked attestation key, with the anchor bound
+  on tokens and the revocation-date rule on chains.
 
 - 2026-09-20 — §5.8's splice item closes as a policy: §8 now **requires** a
   verifier reporting a clip recovery to say how many sampled frames carried

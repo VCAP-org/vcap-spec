@@ -5,6 +5,7 @@ import { coreBytes } from './core.js'
 import { validateExpected, validateProof } from './schema.js'
 import { loadTrust } from './trust.js'
 import { verifyFile, verifySegments } from './verify.js'
+import { byNumber, isVectorDir } from './corpus-names.js'
 
 /**
  * The corpus as a *runnable contract*, shared by the reference verifier's own
@@ -39,7 +40,7 @@ export interface Corpus {
 /** Read the corpus metadata, or throw. Never returns an empty corpus. */
 export const corpus = (): Corpus => {
   if (!existsSync(VECTORS)) throw new Error(`[vcap] no corpus at ${VECTORS}: nothing to be conformant with`)
-  const names = readdirSync(VECTORS).filter((d) => /^\d\d-/.test(d)).sort()
+  const names = readdirSync(VECTORS).filter(isVectorDir).sort(byNumber)
   if (names.length === 0) throw new Error(`[vcap] the corpus at ${VECTORS} holds no vectors: a run of zero vectors is a failure, not a pass`)
   const versionFile = join(VECTORS, 'VERSION')
   const manifestFile = join(VECTORS, 'MANIFEST.json')
