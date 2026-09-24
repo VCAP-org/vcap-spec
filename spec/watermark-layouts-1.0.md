@@ -243,9 +243,12 @@ readings of a clip disagree.
 multiplier, so the convention is that **the multiplier travels in tenths**: 1.5
 is written `15`, 2.0 is `20`.
 
-Defaults are 1.5 for photos and 2.0 for video. A clip is marked harder because
+Defaults are 1.2 for photos and 2.0 for video. A clip is marked harder because
 the codec eats the signal; a photo is looked at closely and survives
-compression anyway.
+compression anyway. The photo default was 1.5 until a sweep on real 12 MP
+stills found every strength from 1.0 to 2.0 decoding after the common
+messaging and social recompressions, with 1.2 about 2 dB less visible than
+1.5; the figures in `watermark-robustness-1.0.md` were measured at 1.5.
 
 A reader needs `strength` only to explain a weak recovery. It never changes how
 a decoder reads bits, and it is **not part of the layout** — two files with

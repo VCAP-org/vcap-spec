@@ -28,6 +28,12 @@ have wanted to change it.
 
 ## Unreleased
 
+### Photo strength default: 1.5 → 1.2
+
+`watermark-layouts-1.0.md` § Strength. A default, not a layout change: strength
+is a capture-time parameter and a decoder reads both the same way. No vector
+changes; `vectors/VERSION` stays **1.3.0**.
+
 ### The corpus-drift check ships from here
 
 No spec, schema or vector change; `vectors/VERSION` stays **1.3.0** and
