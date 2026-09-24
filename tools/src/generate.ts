@@ -4,7 +4,9 @@ import { join } from 'node:path'
 import { type Json, jcs } from './jcs.js'
 import { type Proof, coreBytes, coreHash, flipS, keyId, p1363ToDer, spkiOf } from './core.js'
 import { mediaHash } from './canonical.js'
-import { Flag, buildTrailer } from './trailer.js'
+import { Flag, buildTrailer, parseTrailer } from './trailer.js'
+import { type Box, boxes, children, codecOf, find, readContainer, samplesOf } from './container.js'
+import { remux } from './remux.js'
 import { type SegmentEntry, SEPARATOR, ZERO_LINK, linkOf, segmentMessage } from './segments.js'
 // Deterministic ES256 (RFC 6979): regenerating an unchanged vector must not
 // change its bytes. See sign.ts.
@@ -103,7 +105,7 @@ const bmffBox = (type: string, payload: Buffer): Buffer => {
 
 // ---- vectors --------------------------------------------------------------
 
-interface FileVector { kind: 'file', name: string, ext: string, file: Buffer, sidecar?: Buffer, proof?: Proof, expected: Partial<Verdict> & { outcome: Verdict['outcome'] }, schemaValid?: boolean, notes: string, verifierClock?: number, keyStatus?: Json, chainRead?: Json }
+interface FileVector { kind: 'file', container?: boolean, name: string, ext: string, file: Buffer, sidecar?: Buffer, proof?: Proof, expected: Partial<Verdict> & { outcome: Verdict['outcome'] }, schemaValid?: boolean, notes: string, verifierClock?: number, keyStatus?: Json, chainRead?: Json }
 interface SegVector { kind: 'segments', name: string, input: { capture_id: string, pub: string, segment_count: number, segments: SegmentEntry[] }, expected: Partial<Verdict> & { outcome: Verdict['outcome'] }, notes: string, debug?: Json }
 interface JcsVector { kind: 'jcs', name: string, input: Json, expected: { core_bytes_hex: string, core_hash: string }, notes: string }
 type Vector = FileVector | SegVector | JcsVector
@@ -356,8 +358,8 @@ const videoCore = (media: Buffer, extra: Proof = {}): Proof => photoCore(media, 
 {
   const proof = sign(videoCore(baseMp4, { segments: chain as unknown as Json }))
   file({ name: '33-mp4-video-sealed', ext: 'mp4', file: seal(baseMp4, proof), proof,
-    expected: { outcome: 'authentic', labels: [...PHOTO_LABELS, 'segment content not recomputed'], not_evaluated: [], core_hash: hashOf(proof), segments: { verified: [0, 1, 2] } },
-    notes: 'An ISO-BMFF video with media.mime video/mp4, segment_count 3 and the complete chain of vector 25 in the trailer (flag SEGMENTS set). Canonical bytes are the file minus the trailer (§4.1); the chain is verified at message level — content hashes are given, the container is not demuxed by this layer, and the verdict says so with *segment content not recomputed* (§7). Vectors 36-39 are the same question asked of the container.' })
+    expected: { outcome: 'authentic', labels: [...PHOTO_LABELS, 'segment content not recomputed'], not_evaluated: [], core_hash: hashOf(proof), segments: { verified: [] } },
+    notes: 'An ISO-BMFF video with media.mime video/mp4, segment_count 3 and the complete chain of vector 25 in the trailer (flag SEGMENTS set). Canonical bytes are the file minus the trailer (§4.1) and `media.hash` matches, so the file is the one the device sealed: **authentic**. The chain is checked at message level only — this is a `file` vector, the container is not demuxed — and the verdict says so with *segment content not recomputed* (§7).\n\n`segments.verified` is **empty**, and that is the rule of §5 (*Locating segments*): a segment counts as verified only once a GOP of this file has been located and its `content_hash` recomputed. Here the signatures hold and nothing was compared; the file is authentic because `media.hash` covers every byte, not because any segment was checked. Vectors 36-39 and 86-94 are the same question asked of the container.' })
 }
 
 {
@@ -366,6 +368,164 @@ const videoCore = (media: Buffer, extra: Proof = {}): Proof => photoCore(media, 
     expected: { outcome: 'no_proof_found', labels: [], not_evaluated: [] },
     schemaValid: false,
     notes: 'Same video, valid signature, segment_count present, no segments. §8: media.mime starting with video/ makes this a video proof, and segments is required for one — missing required field, no proof found. A verifier that branches on the presence of segments alone would say authentic here.' })
+}
+
+
+// ---- §5 binding: a signed segment is verified only where the file has it ----
+//
+// Until corpus 2.0.0 a segment "verified" when its signature did: a GOP with no
+// vcap SEI, or with an index nobody signed, was skipped, and a proof lifted
+// onto an unrelated clip read *verified clip*. These vectors are edits of the
+// device captures 36 (H.264 with audio) and 37 (HEVC, no audio) — the device
+// signatures untouched — and each one is a way a file can stop being the file
+// the proof describes. `remux.ts` rewrites sample tables only; `npm run
+// generate` rebuilds all of them from the committed 36 and 37.
+{
+  const deviceFile = (name: string): { file: Buffer, media: Buffer, trailer: Buffer, payload: Buffer, proof: Proof } => {
+    const file = readFileSync(join(VECTORS, name, 'input.mp4'))
+    const parsed = parseTrailer(file)
+    if (parsed.kind !== 'ok') throw new Error(`${name}: no readable trailer`)
+    return { file, media: file.subarray(0, parsed.mediaEnd), trailer: file.subarray(parsed.mediaEnd), payload: parsed.payload, proof: JSON.parse(parsed.payload.toString('utf8')) as Proof }
+  }
+  const h264 = deviceFile('36-mp4-container-verified')
+  const hevc = deviceFile('37-mp4-container-hevc')
+  const DEVICE_LABELS = ['integrity unevaluated', 'key not in transparency log', 'no trusted time', 'no watermark', 'not anchored', 'origin not hardware-attested']
+  const provenance = 'Derived by `tools/src/generate.ts` from the device capture in vector 36 or 37 (a Samsung SM-S908B, Android 16, StrongBox, sealed by the reference Android SDK); the device signatures are not touched.'
+  const device = (v: Omit<FileVector, 'kind' | 'container' | 'ext' | 'notes'> & { notes: string }): void =>
+    file({ ...v, container: true, ext: 'mp4', notes: `${v.notes}\n\n${provenance}` })
+
+  // Sample ranges per GOP, from the IDRs `readContainer` found.
+  const gopsOf = (media: Buffer): { first: number, count: number }[] => {
+    const reading = readContainer(media)
+    if (reading.kind !== 'gops') throw new Error('not a readable video')
+    const kids = children(media, find(boxes(media, 0, media.length), 'moov') as Box)
+    const video = kids.filter((b) => b.type === 'trak').map((trak) => {
+      const stbl = find(children(media, find(children(media, find(children(media, trak), 'mdia') as Box), 'minf') as Box), 'stbl') as Box
+      return { stbl, kind: codecOf(media, find(children(media, stbl), 'stsd') as Box).kind }
+    }).find((t) => t.kind === 'video') as { stbl: Box }
+    const samples = samplesOf(media, video.stbl)
+    const starts = reading.gops.map((g) => samples.findIndex((s) => s.offset === g.range.start))
+    return starts.map((first, i) => ({ first, count: (starts[i + 1] ?? samples.length) - first }))
+  }
+  const range = (g: { first: number, count: number }): number[] => Array.from({ length: g.count }, (_, i) => g.first + i)
+
+  // The vcap SEI NAL of a GOP, located in the file: offset of its RBSP-level
+  // index bytes. The index is the last four payload bytes before the trailing
+  // 0x80; in these files emulation prevention inserts one 0x03 into
+  // 00 00 00 0n, so the stored form is 00 00 03 00 0n.
+  const seiIndexAt = (media: Buffer, gop: { range: { start: number } }, index: number): number => {
+    const stored = Buffer.from([0x00, 0x00, 0x03, 0x00, index, 0x80])
+    const at = media.indexOf(stored, gop.range.start)
+    if (at < 0 || at > gop.range.start + 256) throw new Error(`no vcap SEI index ${index} near ${gop.range.start}`)
+    return at + 4
+  }
+
+  {
+    device({ name: '86-mp4-container-stolen-proof-sidecar', file: hevc.media, sidecar: h264.payload, proof: h264.proof,
+      expected: { outcome: 'frames_not_compared', labels: DEVICE_LABELS, not_evaluated: [], core_hash: hashOf(h264.proof), segments: { verified: [] }, location: { claimed: 'none', level: 'none' } },
+      notes: 'The proof of vector 36, as a sidecar, next to an unrelated recording — vector 37\'s frames with its trailer removed. Every signature in the proof holds: the core, the three segments, the chain. None of it is about this file. Each GOP here carries a vcap SEI, and each names **another capture**, so no GOP of this proof\'s capture can be located (§5, *Locating segments*).\n\nThe outcome is **frames not compared**: the signatures hold and nothing ties them to the frames in front of the reader. Never *verified clip* — a clip is frames that were compared — and this is the case that read *verified clip* with segments 0, 1 and 2 before the binding rule existed, because a GOP that no SEI of this capture names was skipped rather than counted against the file.' })
+  }
+
+  {
+    const base = readFileSync(join(MEDIA, 'base.mp4'))
+    device({ name: '87-mp4-container-proof-over-unmarked-video', file: base, sidecar: h264.payload, proof: h264.proof,
+      expected: { outcome: 'frames_not_compared', labels: DEVICE_LABELS, not_evaluated: [], core_hash: hashOf(h264.proof), segments: { verified: [] }, location: { claimed: 'none', level: 'none' } },
+      notes: 'The proof of vector 36 as a sidecar over `_media/base.mp4`, a two-frame H.264 file that carries **no vcap SEI at all** — what a re-encoder or an SEI-stripping remuxer leaves behind. No GOP can be located, so nothing is compared and no segment is credited: **frames not compared**. Vector 86 is the same verdict reached through SEIs that name another capture; here there is nothing to read.\n\nA verifier MUST NOT fall back to position — the first GOP of the file is not segment 0 of a proof just because it comes first (§5).' })
+  }
+
+  {
+    const gops = (readContainer(h264.media) as { kind: 'gops', gops: { range: { start: number } }[] }).gops
+    const edited = Buffer.from(h264.file)
+    const at = seiIndexAt(edited, gops[1] as { range: { start: number } }, 1)
+    edited[at] = 3
+    device({ name: '88-mp4-container-sei-index-altered', file: edited, proof: h264.proof,
+      expected: { outcome: 'tampered', labels: [], not_evaluated: [], core_hash: hashOf(h264.proof), segments: { verified: [0, 2] } },
+      notes: `Vector 36 with one byte changed: the index in the second GOP's vcap SEI, 1 → 3 (file byte ${at}; the stored form is \`00 00 03 00 03\`, so emulation prevention still holds). A vcap SEI is excluded from \`content_hash\`, so the GOP's bytes still hash to segment 1's signed value — and segment 1 is no longer located, while a GOP names segment 3, which the proof does not sign.\n\n**Tampered**, with segments 0 and 2 verified: a GOP whose SEI index is not a signed segment is content no signature covers (§5). Before the binding rule this file read *verified clip* with 0, 1 and 2 — segment 1 counted as verified because its signature held, though no GOP of the file was ever compared with it.` })
+  }
+
+  {
+    // Drop GOP 0 from both tracks, keep every surviving sample at its instant.
+    // The movie timeline moves to 90 kHz so both delays are exact: video is
+    // already 90 kHz, audio's 1024-sample frames at 48 kHz are 1920 ticks.
+    const gops = gopsOf(h264.media)
+    const kids = children(h264.media, find(boxes(h264.media, 0, h264.media.length), 'moov') as Box)
+    const tables = kids.filter((b) => b.type === 'trak').map((trak) => find(children(h264.media, find(children(h264.media, find(children(h264.media, trak), 'mdia') as Box), 'minf') as Box), 'stbl') as Box)
+    const [audioStbl, videoStbl] = tables.map((t) => ({ t, kind: codecOf(h264.media, find(children(h264.media, t), 'stsd') as Box).kind }))
+      .sort((a, b) => a.kind.localeCompare(b.kind)).map((x) => x.t) as [Box, Box]
+    const video = samplesOf(h264.media, videoStbl)
+    const audio = samplesOf(h264.media, audioStbl)
+    const firstKept = (gops[1] as { first: number }).first
+    const cutAt = (video[firstKept] as { dts: bigint }).dts // 90 kHz, media time 0
+    const videoDelay = 4731n * 9n + cutAt // the original 473.1 ms empty edit, at 90 kHz, plus GOP 0
+    // Audio starts at 0 on the movie timeline (no edit): keep what falls at or
+    // after the cut, on the same timeline.
+    const keptAudio = audio.map((s, i) => ({ s, i })).filter(({ s }) => s.dts * 90000n >= videoDelay * 48000n)
+    const audioDelay = (keptAudio[0] as { s: { dts: bigint } }).s.dts * 90000n / 48000n
+    const cut = remux(h264.media, {
+      movieTimescale: 90000,
+      video: { samples: gops.slice(1).flatMap(range), delay: videoDelay, sync: 'keep' },
+      audio: { samples: keptAudio.map(({ i }) => i), delay: audioDelay }
+    })
+    device({ name: '89-mp4-container-cut-clip', file: Buffer.concat([cut, h264.trailer]), proof: h264.proof,
+      expected: { outcome: 'verified_clip', labels: DEVICE_LABELS, not_evaluated: [], core_hash: hashOf(h264.proof), segments: { verified: [1, 2] }, location: { claimed: 'none', level: 'none' } },
+      notes: 'Vector 36 **cut**: its first GOP removed from the video track, the audio frames before the cut removed with it, and the full proof — all three segments — still in the trailer. This is what a clip is: the file lacks segment 0, the proof does not.\n\nEvery surviving sample keeps its instant on the movie timeline (the movie timescale becomes 90 kHz and each track gets an empty edit for the time that was cut), so §5\'s audio rule assigns the same frames to segments 1 and 2 as in the original, and both recompute. **Verified clip**, 1 and 2 of 3. Segment 0 is signed and absent, which is the clip case and never *tampered*; `media.hash` does not match, which is what says this is not the original.\n\nVector 38, which used to be the corpus\'s clip, removed segment 0 from the **proof** and left it in the file; under the binding rule that is a GOP no signature covers, and it now reads *tampered*.' })
+  }
+
+  {
+    const gops = gopsOf(hevc.media)
+    const [g0, g1, g2] = gops as [{ first: number, count: number }, { first: number, count: number }, { first: number, count: number }]
+    device({ name: '90-mp4-container-gops-reordered', file: Buffer.concat([remux(hevc.media, { video: { samples: [...range(g0), ...range(g2), ...range(g1)], sync: 'keep' } }), hevc.trailer]), proof: hevc.proof,
+      expected: { outcome: 'tampered', labels: [], not_evaluated: [], core_hash: hashOf(hevc.proof), segments: { verified: [0, 1, 2] } },
+      notes: 'Vector 37 with its last two GOPs swapped in decode order: segment 0, then 2, then 1. Every GOP is located and every one recomputes to its signed `content_hash` — the bytes of each are untouched, which is why `segments.verified` lists all three.\n\nAnd the file is **tampered**: vcap SEI indices MUST be strictly increasing in decode order (§5). The chain proves the order of the *messages*; only this rule proves the order of the *frames*, and without it a verifier would accept any shuffle of a signed recording as long as each piece was genuine. Vector 26 asked this question at message level, where no file had to be read.' })
+
+    device({ name: '91-mp4-container-gop-duplicated', file: Buffer.concat([remux(hevc.media, { video: { samples: [...range(g0), ...range(g1), ...range(g1), ...range(g2)], sync: 'keep' } }), hevc.trailer]), proof: hevc.proof,
+      expected: { outcome: 'tampered', labels: [], not_evaluated: [], core_hash: hashOf(hevc.proof), segments: { verified: [0, 2] } },
+      notes: 'Vector 37 with its second GOP played twice: 0, 1, 1, 2. Both copies of segment 1 recompute to its signed hash. A signed segment counts only when **exactly one** GOP of the file carries its index (§5), so segment 1 is not verified, and a duplicated index is **tampered** — a recording in which one second of footage appears twice is not the recording that was signed, however genuine each copy is.' })
+
+    device({ name: '94-mp4-container-sync-table-not-idr', file: Buffer.concat([remux(hevc.media, { video: { samples: [...range(g0), ...range(g1), ...range(g2)], sync: 'all' } }), hevc.trailer]), proof: hevc.proof,
+      expected: { outcome: 'verified_clip', labels: DEVICE_LABELS, not_evaluated: [], core_hash: hashOf(hevc.proof), segments: { verified: [0, 1, 2] } },
+      notes: 'Vector 37 with its sync sample table rewritten to mark **every** sample as a sync sample; the frames are untouched. Segment boundaries are IDR access units, read from the NAL unit types (§5), not `stss`: a verifier that cut at sync samples would find seventy GOPs, sixty-seven of them without a vcap SEI, and call the file tampered. Read by IDR, the three GOPs are where they were and all three recompute. **Verified clip**, not authentic, because the rewritten table is inside the canonical bytes and `media.hash` no longer matches.\n\nThe real-world version of this trap is HEVC\'s CRA picture: a random-access point `stss` lists that is not an IDR.' })
+  }
+
+  {
+    // One length prefix in the second GOP made one byte too long.
+    const gops = gopsOf(hevc.media)
+    const kids = children(hevc.media, find(boxes(hevc.media, 0, hevc.media.length), 'moov') as Box)
+    const stbl = find(children(hevc.media, find(children(hevc.media, find(children(hevc.media, kids.find((b) => b.type === 'trak') as Box), 'mdia') as Box), 'minf') as Box), 'stbl') as Box
+    const sample = samplesOf(hevc.media, stbl)[(gops[1] as { first: number }).first + 1] as { offset: number, size: number }
+    const edited = Buffer.from(hevc.file)
+    edited.writeUInt32BE(edited.readUInt32BE(sample.offset) + 1, sample.offset)
+    device({ name: '92-mp4-container-nal-length-overrun', file: edited, proof: hevc.proof,
+      expected: { outcome: 'tampered', labels: [], not_evaluated: [], core_hash: hashOf(hevc.proof), segments: { verified: [] } },
+      notes: `Vector 37 with the first NAL length prefix of the second sample of GOP 1 increased by one (file byte ${sample.offset}), so the units no longer tile the sample. The NAL units of a sample MUST cover it exactly (§5): a verifier that stopped at the first length that does not fit — which the reference verifier used to do — would leave the rest of the sample out of every hash and still call the GOP verified. **Tampered**, and no segment is credited: a malformed container is not a partial answer.` })
+  }
+
+  {
+    // GOP 1's vcap SEI NAL rebuilt with a second user_data_unregistered
+    // message after ours: a NAL that is still "a vcap SEI" to a verifier that
+    // looks for the UUID, and that hides twenty unsigned bytes if it is
+    // excluded whole.
+    const gops = gopsOf(h264.media)
+    const kids = children(h264.media, find(boxes(h264.media, 0, h264.media.length), 'moov') as Box)
+    const videoStbl = kids.filter((b) => b.type === 'trak').map((trak) => find(children(h264.media, find(children(h264.media, find(children(h264.media, trak), 'mdia') as Box), 'minf') as Box), 'stbl') as Box)
+      .find((t) => codecOf(h264.media, find(children(h264.media, t), 'stsd') as Box).kind === 'video') as Box
+    const index = (gops[1] as { first: number }).first
+    const sample = samplesOf(h264.media, videoStbl)[index] as { offset: number, size: number }
+    const bytes = h264.media.subarray(sample.offset, sample.offset + sample.size)
+    const nals: Buffer[] = []
+    for (let at = 0; at < bytes.length;) { const n = bytes.readUInt32BE(at); nals.push(bytes.subarray(at + 4, at + 4 + n)); at += 4 + n }
+    const sei = nals.findIndex((n) => ((n[0] as number) & 0x1f) === 6 && n.includes(Buffer.from('caa653d1ed1763c7af388aea76527336', 'hex')))
+    if (sei < 0) throw new Error('no vcap SEI in the GOP 1 IDR sample')
+    const original = nals[sei] as Buffer
+    // Drop the trailing 0x80, append a second message, restore the stop bit.
+    const hidden = Buffer.concat([Buffer.from([0x05, 20]), Buffer.from('0123456789abcdef', 'ascii'), Buffer.from('HIDE', 'ascii')])
+    nals[sei] = Buffer.concat([original.subarray(0, original.length - 1), hidden, Buffer.from([0x80])])
+    const rebuilt = Buffer.concat(nals.flatMap((n) => { const l = Buffer.alloc(4); l.writeUInt32BE(n.length); return [l, n] }))
+    const video = gops.flatMap(range)
+    device({ name: '93-mp4-container-sei-extra-message', file: Buffer.concat([remux(h264.media, { video: { samples: video, delay: 4731n, sync: 'keep', replace: new Map([[index, rebuilt]]) } }), h264.trailer]), proof: h264.proof,
+      expected: { outcome: 'tampered', labels: [], not_evaluated: [], core_hash: hashOf(h264.proof), segments: { verified: [0, 2] } },
+      notes: 'Vector 36 with the vcap SEI NAL of GOP 1 rebuilt to carry a **second** SEI message after ours: another `user_data_unregistered` with twenty bytes nobody signed. A vcap SEI NAL carries exactly one message, the 36-byte vcap one, followed by `rbsp_trailing_bits` (§5). A verifier that excluded any SEI NAL containing the vcap UUID — the reference verifier did — would hash GOP 1 exactly as the device did and call it verified, with those twenty bytes inside it and outside every hash.\n\n**Tampered**, 0 and 2 verified. The sample is rewritten through `remux.ts` (it grew by twenty-two bytes) and the audio track is untouched.' })
+  }
 }
 
 // ---- media.w/h are required (§8) ---------------------------------------------
@@ -1311,7 +1471,7 @@ for (const vector of vectors) {
     if (vector.proof) writeFileSync(join(dir, 'proof.json'), JSON.stringify(vector.proof, null, 2) + '\n')
     const schemaValid = vector.schemaValid ?? true
     writeFileSync(join(dir, 'expected.json'), JSON.stringify({
-      kind: 'file',
+      kind: vector.container ? 'container' : 'file',
       // An input, not an expectation: a §7 verdict depends on when the verifier
       // runs (a chain expires), so a vector that did not pin the clock would
       // change its own answer with the calendar.
@@ -1323,7 +1483,7 @@ for (const vector of vectors) {
       ...vector.expected,
       ...(vector.proof ? { schema_valid: schemaValid } : {})
     }, null, 2) + '\n')
-    actual = pick(verifyFile({ file: vector.file, sidecar: vector.sidecar, trust, clock: vector.verifierClock ? new Date(vector.verifierClock) : undefined, keyStatus: vector.keyStatus as KeyStatusStatement | undefined, chainRead: vector.chainRead as ChainRead | undefined }), vector.expected)
+    actual = pick(verifyFile({ file: vector.file, sidecar: vector.sidecar, recomputeSegments: vector.container === true, trust, clock: vector.verifierClock ? new Date(vector.verifierClock) : undefined, keyStatus: vector.keyStatus as KeyStatusStatement | undefined, chainRead: vector.chainRead as ChainRead | undefined }), vector.expected)
     // The schema must agree with the review too: a proof the review calls
     // conforming that the schema refuses is a bug in one of the two.
     if (vector.proof) {
@@ -1341,7 +1501,10 @@ for (const vector of vectors) {
     writeFileSync(join(dir, 'core.json'), JSON.stringify(vector.input, null, 2) + '\n')
     writeFileSync(join(dir, 'expected.json'), JSON.stringify({ kind: 'jcs', ...vector.expected }, null, 2) + '\n')
   }
-  writeFileSync(join(dir, 'NOTES.md'), `# ${vector.name}\n\n${vector.notes}\n\nGenerated by \`tools/src/generate.ts\` with the test key in \`tools/src/testkey.ts\`.\n`)
+  // A container vector carries a device's signature, not the test key's: its
+  // notes say where it came from instead.
+  const footer = vector.kind === 'file' && vector.container ? '' : '\n\nGenerated by `tools/src/generate.ts` with the test key in `tools/src/testkey.ts`.'
+  writeFileSync(join(dir, 'NOTES.md'), `# ${vector.name}\n\n${vector.notes}${footer}\n`)
 
   if (actual && JSON.stringify(actual) !== JSON.stringify(vector.expected)) {
     failures++

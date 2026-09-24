@@ -319,34 +319,86 @@ prev_link(n)    = SHA-256( message(n-1) )
 sig(n)          = ECDSA-P256-SHA256( message(n) ), P1363, low s (§4.2)
 ```
 
+- **Segment boundaries are IDR access units**, decided by NAL unit type —
+  H.264 `nal_unit_type` 5, H.265 `IDR_W_RADL` (19) and `IDR_N_LP` (20) — and
+  **not** by the container's sync sample table. `stss` lists random-access
+  points, and in H.265 those include CRA pictures that are not IDRs: a reader
+  that cut there would split a writer's segment in two and check half of it
+  against the whole one's signature (vector 94). Video samples before the
+  first IDR belong to no segment.
 - **A vcap SEI NAL unit** is an SEI NAL (type 6 in H.264, 39 or 40 in H.265)
-  carrying a `user_data_unregistered` payload (payloadType 5) whose 16-byte UUID
-  is the vcap SEI UUID, `SHA-256("vcap/1.0/sei")[0:16]` =
-  `caa653d1ed1763c7af388aea76527336`, and whose `payloadSize` is therefore 36:
-  the 16 UUID bytes are inside the payload that size counts, so a parser that
-  reads it as 20 over-reads the SEI. Derived, not registered:
-  `user_data_unregistered` UUIDs are unregistered by definition (H.264 §D.2.6
-  asks only that they be unlikely to collide), and anyone can recompute this
-  one from a single ASCII string; a future layout takes a new string, as the
-  segment separator does. The payload after the UUID is
-  `capture_id (16 B) || uint32 BE n`, 20 bytes. A writer SHOULD emit one vcap
-  SEI per segment, as a prefix SEI immediately before the segment's IDR, so a
-  demuxed or re-muxed elementary stream still says which capture and which
-  segment a GOP belongs to. A verifier MAY use it to locate segments and MUST
-  NOT treat it as evidence: `content_hash`, the chain and the signatures are.
-  Where no vcap SEI names a GOP, a verifier **MUST NOT infer that GOP's index
-  from its position in the file**, and recomputes nothing for it: position is
-  the index only in a file nobody cut, which is the one assumption a clip
-  breaks. Refusing to guess costs a verifier nothing it can use — a file whose
-  SEIs were stripped no longer matches `media.hash` either, so its ceiling is
-  amber whatever the segments say — while guessing wrong checks one GOP's bytes
-  against another GOP's signature and calls an authentic clip forged. Two
-  implementations of §5 disagreed here, one guessing and one refusing, before
-  this sentence existed.
+  that carries **exactly one** SEI message: a `user_data_unregistered` payload
+  (payloadType 5) whose 16-byte UUID is the vcap SEI UUID,
+  `SHA-256("vcap/1.0/sei")[0:16]` = `caa653d1ed1763c7af388aea76527336`, whose
+  `payloadSize` is **exactly 36**, and after which the NAL holds nothing but
+  `rbsp_trailing_bits` (the byte `0x80`, then only zero bytes). The 16 UUID
+  bytes are inside the payload that size counts, so a parser that reads it as
+  20 over-reads the SEI. The payload after the UUID is
+  `capture_id (16 B) || uint32 BE n`, 20 bytes.
+  - **Emulation prevention.** The SEI header and payload are read from the
+    RBSP: every `emulation_prevention_three_byte` (a `0x03` that follows two
+    zero bytes, H.264 §7.4.1, H.265 §7.4.2) is removed first, and the zero
+    count restarts after it. `capture_id` and `n` routinely contain `00 00`,
+    so a writer MUST apply emulation prevention to the payload and a reader
+    MUST undo it before comparing; `payloadSize` counts RBSP bytes. What
+    `content_hash` excludes is the NAL unit **as stored**, emulation
+    prevention bytes included.
+  - **Shape.** An SEI NAL that carries the vcap UUID in any other shape — a
+    second message beside it, a `payloadSize` other than 36, bytes after the
+    message — is malformed, and the GOP holding it is *tampered*. Excluding a
+    whole NAL because one of its messages is ours would leave every other
+    message in it unsigned inside a verified segment (vector 93).
+  - **Writers MUST emit exactly one vcap SEI in each segment**, in the
+    segment's IDR access unit ahead of its first VCL NAL unit, so a demuxed or
+    re-muxed stream still says which capture and which segment a GOP belongs
+    to. The UUID is derived, not registered: `user_data_unregistered` UUIDs are
+    unregistered by definition (H.264 §D.2.6 asks only that they be unlikely
+    to collide), and anyone can recompute this one from a single ASCII
+    string; a future layout takes a new string, as the segment separator does.
+
   Only vcap SEI NAL units are excluded from `content_hash`: a signature cannot
   cover the bytes that contain it. Every other SEI — registered or not — is
   content and is covered. Excluding by NAL type, as an earlier draft did, would
   have left unsigned bytes inside "verified" segments.
+- **Locating segments.** The vcap SEI locates a segment and is never evidence
+  on its own: `content_hash`, the chain and the signatures are. The binding
+  between the proof and the frames of the received file is this rule, and a
+  verifier that recomputes applies it whole:
+
+  > A signed segment `n` counts as **verified** only if the container yields
+  > exactly one GOP whose vcap SEI carries index `n` and a `capture_id` equal
+  > to the proof's, and that GOP's recomputed `content_hash` matches the signed
+  > one. Once any GOP of the file carries a vcap SEI naming the proof's
+  > `capture_id`, every GOP of the file is accounted for, in decode order: a
+  > GOP whose SEI index is not a signed segment of the proof, an index carried
+  > by more than one GOP, indices not strictly increasing in decode order, a
+  > GOP with no vcap SEI or with one naming another capture, and a GOP with
+  > more than one vcap SEI are each **tampered**. If no GOP can be located —
+  > no vcap SEI names this capture, the file is not ISO-BMFF or has no
+  > H.264/H.265 track, or the verifier did not recompute — there is no segment
+  > credit: `segments.verified` is empty, and unless `media.hash` matches, the
+  > outcome is **frames not compared** — the signatures hold, the frames were
+  > not compared — and it is never *verified clip*.
+
+  A verifier **MUST NOT infer a GOP's index from its position in the file**:
+  position is the index only in a file nobody cut, which is the one
+  assumption a clip breaks, and guessing wrong checks one GOP's bytes against
+  another GOP's signature. And a verifier MUST NOT skip a GOP it cannot
+  place: before this rule both of the implementations that existed did, and a
+  stolen proof next to an unrelated clip read *verified clip* (vector 86), a
+  file with one SEI index edited read *verified clip* with the edited segment
+  counted (vector 88), and a genuine clip with a forged GOP prepended read
+  *verified clip* too (vector 38). Order, duplication and insertion are
+  checked here and not by the chain, because the chain proves the order of
+  the *messages*: only the SEI indices in decode order say where the frames
+  are (vectors 90, 91).
+- **The NAL units of a sample tile it exactly.** In a length-prefixed sample
+  each prefix is followed by that many bytes and the next prefix starts where
+  they end; the last unit ends at the end of the sample. A prefix that is cut
+  short, a zero length, or a unit that overruns the sample makes the container
+  malformed and the verdict *tampered*, never a silent stop: stopping would
+  leave the rest of the sample out of every hash while the GOP still read as
+  verified (vector 92). A sample that lies outside the file is the same case.
 - **A NAL unit is exactly the bytes the container stores for it.** In a
   length-prefixed sample it is the `lengthSizeMinusOne + 1`-byte prefix's whole
   extent; in an Annex-B stream it is everything from the end of a three-byte
@@ -424,25 +476,30 @@ sig(n)          = ECDSA-P256-SHA256( message(n) ), P1363, low s (§4.2)
   - `media.hash` matches, every segment verifies, chain unbroken, first index 0,
     `segment_count` segments present → eligible for **green** (subject to §7);
   - `media.hash` does not match, or segments are missing, but every present
-    segment verifies and the chain holds wherever two consecutive segments are
-    both present → **verified clip**, amber, reporting which segment indexes
-    verified out of `segment_count`;
+    segment signature verifies, the chain holds wherever two consecutive
+    segments are both present, and at least one GOP is located and verified
+    under *Locating segments* → **verified clip**, amber, reporting which
+    segment indexes verified out of `segment_count`;
   - a segment signature fails, or a present segment's `prev` differs from
     `SHA-256(message(n−1))` while segment n−1 is present (the chain breaks where
     the file claims contiguity) → **tampered**, red;
-  - **a present segment whose `content_hash`, recomputed from the container,
+  - **a located segment whose `content_hash`, recomputed from the container,
     differs from the signed one → tampered**, red, reporting which segments do
-    verify. Recomputation is optional — a verifier without a demuxer verifies
-    the signature layer and nothing here changes that — but a verifier that
-    holds the file and skips it has checked that somebody signed some hashes,
-    not that the frames in front of the reader are those frames. A verifier
-    that skips it stays conformant and **MUST** say so, with *segment content
-    not recomputed* (§7): the two answers differ — on vector 39 the same file
-    reads *verified_clip* without the recomputation and *tampered* with it — so
-    a reader who is not told which one ran cannot know what the verdict means. A contradicted
+    verify; so is every other failure *Locating segments* lists. A contradicted
     segment is not a missing one: a clip lacks segments, this file *has* the
     segment and its bytes are not the bytes that were signed, which is
     substitution inside a signed range and never amber (vector 39);
+  - `media.hash` does not match and no GOP is located → **frames not
+    compared**, amber: the core and segment signatures hold, and nothing ties
+    them to these frames (vectors 86, 87). Recomputation is optional — a
+    verifier without a demuxer verifies the signature layer and nothing here
+    changes that — but a verifier that skips it has checked that somebody
+    signed some hashes, not that the frames in front of the reader are those
+    frames. It stays conformant, **MUST** say so with *segment content not
+    recomputed* (§7), and never reaches *verified clip*: on vector 39 the same
+    file reads *frames not compared* without the recomputation and *tampered*
+    with it, and a reader who is not told which one ran cannot know what the
+    verdict means;
   - `segments[].range` is **deprecated**: writers MUST NOT emit it, and
     verifiers MUST ignore it where an older file carries it. It was a byte
     range in the received file, unsigned, and a verifier was already forbidden
@@ -1196,7 +1253,9 @@ contiguity; footer structurally valid with a CRC mismatch (*corrupted proof*,
 distinct from *no proof found*).
 
 **Not red.** `media.hash` not matching the recomputed canonical bytes on a video
-whose present segments verify → *verified clip* (§5). On a photo, a `media.hash`
+whose present segments verify and are located in the file → *verified clip*
+(§5); on a video in which no segment can be located → *frames not compared*
+(§5, *Locating segments*). On a photo, a `media.hash`
 mismatch with a valid `sig` means the file was altered after sealing: **red**.
 
 **The rule that outranks the table.** A watermark match with no valid signature is

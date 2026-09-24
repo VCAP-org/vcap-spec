@@ -4,7 +4,7 @@ import { type Proof, coreBytes, coreHash, keyId, publicKeyFromSpki, verifyEs256 
 import { canonicalBytes, mediaHash } from './canonical.js'
 import { Flag, parseTrailer } from './trailer.js'
 import { type SegmentEntry, verifyChain } from './segments.js'
-import { type Segment, containerSegments } from './container.js'
+import { type ContainerReading, ContainerMalformed, readContainer } from './container.js'
 import { RANK, validateChain } from './attestation.js'
 import { type TrustBundle } from './trust.js'
 import { type IntegrityAttachment, type KeyStatusStatement, type RegistryAttachment, verifyIntegrity, verifyKeyStatus, verifyRegistry } from './registry.js'
@@ -26,7 +26,7 @@ import { jcs } from './jcs.js'
  */
 export type Outcome =
   | 'no_proof_found' | 'corrupted_proof' | 'nested_proof' | 'unsupported_format_version'
-  | 'tampered' | 'verified_clip' | 'authentic'
+  | 'tampered' | 'frames_not_compared' | 'verified_clip' | 'authentic'
 
 export interface Verdict {
   outcome: Outcome
@@ -255,54 +255,47 @@ export const verifyFile = ({ file, sidecar, recomputeSegments, trust, clock = ne
   }
 
   let segments: Verdict['segments']
-  const contradicted = new Set<number>()
   if ('segments' in proof) {
     const entries = proof.segments as unknown as SegmentEntry[]
+    const captureId = Buffer.from(proof.capture_id as string, 'base64url')
 
-    // §7: a verifier that did not recompute says so. Skipping the recomputation
-    // stays conformant — a sidecar without a demuxable container, a light
-    // library — but the two answers differ: on vector 39 the same file reads
-    // *verified_clip* without the recomputation and *tampered* with it. An
-    // unevaluated check is a weaker verdict, never a silence.
+    // The signature layer first: every present segment's signature and the
+    // chain wherever two consecutive segments are present (§5).
+    const chain = verifyChain(captureId, mediaObj.segment_count as number, entries, publicKey)
+
+    // §5, *Locating segments*: a signature proves that somebody signed a
+    // hash; only a GOP located in this file and recomputed proves that the
+    // frames in front of the reader are those frames. A verifier that did not
+    // recompute says so, and gives no segment credit.
     if (!recomputeSegments) labels.push('segment content not recomputed')
-
-    // §5: the bytes must be the bytes that were signed. A mismatch here is not
-    // a clip — a clip is missing segments, this is a present segment whose
-    // content was replaced inside a range a signature covers.
+    let binding: Binding = { located: false, reason: 'segment content not recomputed' }
     if (recomputeSegments) {
-      let recomputed: Segment[]
       try {
-        recomputed = containerSegments(media)
+        binding = bindSegments(readContainer(media), captureId, entries)
       } catch (e) {
-        return tampered(`the container could not be read: ${(e as Error).message}`)
-      }
-      // Only GOPs a vcap SEI identified take part: an unidentified GOP is
-      // evidence of nothing, and matching it by position is how a clip gets
-      // called forged (§5).
-      const byIndex = new Map(
-        recomputed
-          .filter((segment): segment is Segment & { index: number } => segment.index !== null)
-          .map((segment) => [segment.index, segment.contentHash.toString('base64url')])
-      )
-      for (const entry of entries) {
-        const actual = byIndex.get(entry.gop)
-        // A segment the file no longer contains is the clip case, not this one:
-        // it is absent, not contradicted.
-        if (actual !== undefined && actual !== entry.hash) contradicted.add(entry.gop)
+        if (!(e instanceof ContainerMalformed)) throw e
+        return { ...tampered(`the container is malformed: ${e.message}`), segments: { verified: [] } }
       }
     }
-
-    const chain = verifyChain(Buffer.from(proof.capture_id as string, 'base64url'), mediaObj.segment_count as number, entries, publicKey)
-    // A contradicted segment is not a verified one, whatever its signature
-    // says: the signature covers a hash the file no longer produces.
-    segments = { verified: chain.verified.filter((index) => !contradicted.has(index)) }
-    if (contradicted.size > 0) {
-      const which = [...contradicted].sort((a, b) => a - b).join(', ')
-      return { ...tampered(`segment ${which}: content recomputed from the container does not match the signed content_hash`), segments }
-    }
+    // A segment whose signature fails is not verified, whatever its bytes.
+    segments = { verified: binding.located ? binding.verified.filter((index) => chain.verified.includes(index)) : [] }
     if (chain.status === 'tampered') return { ...tampered(chain.reason ?? 'segment chain'), segments }
-    if (!mediaMatches || chain.status === 'clip') {
-      return { outcome: 'verified_clip', labels: labels.sort(), not_evaluated: notEvaluated, core_hash: hash, segments, location, reason: mediaMatches ? 'segments missing' : 'media.hash does not match the received file' }
+    if (binding.located && binding.problems.length > 0) return { ...tampered(binding.problems.join('; ')), segments }
+
+    if (!mediaMatches) {
+      // A file that is not the original, and in which no GOP of this capture
+      // could be found: the signatures hold, and nothing ties them to these
+      // frames. Never a clip — a clip is frames that were compared.
+      if (!binding.located) {
+        return { outcome: 'frames_not_compared', labels: labels.sort(), not_evaluated: notEvaluated, core_hash: hash, segments, location, reason: `media.hash does not match and ${binding.reason}` }
+      }
+      return { outcome: 'verified_clip', labels: labels.sort(), not_evaluated: notEvaluated, core_hash: hash, segments, location, reason: 'media.hash does not match the received file' }
+    }
+    // media.hash matches: these are the bytes the device sealed. A chain with
+    // segments missing from the proof is still a clip of the proof, and says
+    // so even over the original file.
+    if (chain.status === 'clip') {
+      return { outcome: 'verified_clip', labels: labels.sort(), not_evaluated: notEvaluated, core_hash: hash, segments, location, reason: 'segments missing' }
     }
   } else if (!mediaMatches) {
     return tampered('media.hash does not match the canonical bytes')
@@ -630,6 +623,55 @@ const frozenRevocation = (
   if (!signed) return { checked: false, revokedAt: null }
   const revoked = (entries as { status?: string }[]).some((e) => e.status !== 'valid')
   return { checked: true, revokedAt: revoked ? fetchedAt : null }
+}
+
+/**
+ * §5, *Locating segments*: which signed segments this file really contains.
+ *
+ * `located: false` means no GOP of this capture could be found — the file is
+ * not ISO-BMFF, has no video track, or no GOP carries a vcap SEI naming this
+ * `capture_id`. Then nothing is compared and nothing is credited.
+ *
+ * Once one GOP is located the file claims to be (part of) this capture, and
+ * every GOP in it has to be accounted for, in decode order: exactly one vcap
+ * SEI naming this capture and a segment the proof signs, indices strictly
+ * increasing, each index at most once. Anything else is a GOP no signature
+ * covers — inserted, duplicated, moved or relabelled — and the verdict is
+ * *tampered*. Before this rule a GOP without an SEI, or with an index nobody
+ * signed, was skipped, and a stolen proof read *verified clip* over a file it
+ * had never seen.
+ */
+type Binding =
+  | { located: false, reason: string }
+  | { located: true, verified: number[], problems: string[] }
+
+const bindSegments = (reading: ContainerReading, captureId: Buffer, entries: SegmentEntry[]): Binding => {
+  if (reading.kind === 'unreadable') return { located: false, reason: `no GOP can be located: ${reading.reason}` }
+  const ours = (gop: { captureId: Buffer | null }): boolean => gop.captureId !== null && gop.captureId.equals(captureId)
+  if (!reading.gops.some(ours)) return { located: false, reason: 'no GOP carries a vcap SEI naming this capture' }
+
+  const signed = new Map(entries.map((entry) => [entry.gop, entry.hash]))
+  const problems: string[] = []
+  const seen = new Map<number, number>()
+  const matched = new Set<number>()
+  let previous = -1
+  reading.gops.forEach((gop, position) => {
+    const where = `GOP ${position} of the file`
+    if (gop.problem !== null) { problems.push(`${where}: ${gop.problem}`); return }
+    if (gop.index === null) { problems.push(`${where} carries no vcap SEI`); return }
+    if (!ours(gop)) { problems.push(`${where} names another capture`); return }
+    if (gop.seiCount > 1) problems.push(`${where} carries ${gop.seiCount} vcap SEIs`)
+    if (!signed.has(gop.index)) { problems.push(`${where} names segment ${gop.index}, which the proof does not sign`); return }
+    if (gop.index <= previous) problems.push(`${where} names segment ${gop.index} after segment ${previous}: indices not strictly increasing`)
+    previous = Math.max(previous, gop.index)
+    seen.set(gop.index, (seen.get(gop.index) ?? 0) + 1)
+    if (gop.contentHash.toString('base64url') === signed.get(gop.index)) matched.add(gop.index)
+    else problems.push(`segment ${gop.index}: content recomputed from the container does not match the signed content_hash`)
+  })
+  for (const [index, count] of seen) if (count > 1) problems.push(`segment ${index} appears ${count} times`)
+  // A segment counts once it is located exactly once and its bytes match.
+  const verified = [...matched].filter((index) => seen.get(index) === 1).sort((a, b) => a - b)
+  return { located: true, verified, problems }
 }
 
 /** Message-layer vectors: a chain given as content hashes, no container. */
