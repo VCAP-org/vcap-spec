@@ -1578,8 +1578,9 @@ says.
       repositories exist
 - [x] `REVIEW (BE)` the remaining proof-level vectors: registry inclusion with
       a signed tree head (49–54), an RFC 3161 token (59–63), an anchor with a
-      recomputed root (55–58). The reference verifier evaluates all three, and
-      vector 54 is the corpus's green
+      recomputed root (55–58). The reference verifier evaluates all three;
+      vector 100 is the corpus's green, and 54 — the same proof with only the
+      device clock for an instant — is amber
 - [~] `REVIEW (mobile)` container-level video vectors: real MP4/MOV from each
       encoder, with `content_hash` recomputed from the NAL units and audio
       frames — Android H.264 and HEVC done (vectors 36–39, `kind: container`);

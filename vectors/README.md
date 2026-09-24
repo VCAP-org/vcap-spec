@@ -240,11 +240,12 @@ corroboration of a `location` with no coordinates).
 
 - **Watermark-only match, cropped photo beyond the correction budget**:
   detector vectors, ML review.
-- **A remuxed or trimmed video with its proof in a sidecar**: the trailer is
-  gone, the NAL units and vcap SEIs survive, and §5 should read *verified clip*
-  over the whole received file. It needs a real remuxer's output and belongs
-  with the container vectors that come off a device (36–39, 48, 85), not with
-  the generator.
+- **A video trimmed by a third-party remuxer, with its proof in a sidecar**:
+  the trailer is gone, the NAL units and vcap SEIs survive, and §5 reads
+  *verified clip* over the whole received file. Vector 89 is the same cut made
+  by this repository's own sample-table rewrite with the proof in the
+  trailer; the case with another tool's output, whose `moov` and interleaving
+  are its own, still wants that tool's file.
 - **A JPEG carrying a C2PA manifest with a real claim signature** next to a
   vcap trailer, validated by a C2PA validator as well as by ours. Both halves
   of `spec/c2pa-interop-1.0.md` §3 are argued from the C2PA text; the C2PA

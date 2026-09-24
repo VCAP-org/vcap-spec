@@ -50,7 +50,7 @@ and that the key was on a public log before the capture.
 | Trusted time | RFC 3161 token over `core_hash`, inside the proof, checked offline against a pinned TSA root (§6.2) | RFC 3161 token over the claim signature, inside the COSE structure (10.3.2.5 *Time-stamps*; 15.8 *Validate the Time-Stamp*) |
 | Key on a public log | `registry`: RFC 6962 inclusion proof against a signed tree head, carried inline, checked offline (§6.2) | none. Trust is a list of signers (14.4) plus revocation by OCSP (14.5.2, 15.9) |
 | Existence before an instant nobody controls | `anchor`: Merkle path to a root recorded on a public chain (§6.2) | none |
-| Device state | `integrity`: Play Integrity / App Attest verdict, relayed and signed by the registry, shown and never a ceiling (§6.2) | none |
+| Device state | `integrity`: Play Integrity / App Attest verdict, relayed and signed by the registry; shown, and `failed` caps the ceiling at amber (§6.2, §7) | none |
 | Watermark | `watermark`: layout named in the signed core, payload bound to `capture_id` (§6.1, `watermark-layouts-1.0.md`) | `c2pa.soft-binding` naming an algorithm from a public list (18.10, 9.3 *Soft Bindings*) |
 | What the verifier says when something is missing | one exact label per absent or unreadable piece of evidence (§8) | status codes (15.2.2 *Standard Status Codes*) and three manifest states, *Well-Formed*, *Valid*, *Trusted* (14.3) |
 | Verification without a server | always (invariant) | offline for the signature and binding; the trust list and OCSP are fetched or shipped |
@@ -342,8 +342,8 @@ canonical bytes.
 | EXIF/XMP/APPn stripped or rewritten, pixels intact | kept | lost | — | kept | *tampered* (§8: photo hash mismatch, valid `sig`) | *tampered* | 04, 71 |
 | Re-encode by a platform (recompressed, resized, every header dropped) | lost | lost | lost | survives within the layout's budget | *no proof found*; with a detector: *origin traced*, *watermark matched* | *tampered*; with a detector the same *origin traced* | 71 (header), layouts doc (mark) |
 | Crop, rotate, filter, screenshot, re-photograph | lost | lost | lost | `photo-bch-v3` may decode within its budget; beyond it *watermark not recovered* | *no proof found* → at most *origin traced* | *tampered* → at most *origin traced* | — |
-| Video trimmed or remuxed without re-encoding (NAL units and vcap SEIs intact) | lost | — | lost or kept | kept | *no proof found* | *verified clip*, amber: `media.hash` differs, present segments verify, the chain says where it was cut (§5) | 38 for the embedded case; the sidecar case is in `vectors/README.md`, *Not here yet* |
-| Video re-encoded | lost | lost | lost | `video-rep-v1` usually survives | *no proof found* → *origin traced* | *verified clip* at most, with *segment content not recomputed* or with no GOP a SEI identifies (§5): the signature layer holds, nothing ties the frames to it | — |
+| Video trimmed or remuxed without re-encoding (NAL units and vcap SEIs intact) | lost | — | lost or kept | kept | *no proof found* | *verified clip*, amber: `media.hash` differs, the segments still in the file are located and verify, the chain says where it was cut (§5) | 89 for the embedded case; the sidecar case is in `vectors/README.md`, *Not here yet* |
+| Video re-encoded | lost | lost | lost | `video-rep-v1` usually survives | *no proof found* → *origin traced* | *frames not compared* when no GOP keeps a vcap SEI naming the capture (§5, *Locating segments*): the signature layer holds, nothing ties the frames to it; *tampered* when SEIs survive over re-encoded bytes | 86, 87 |
 
 Reading the table:
 
