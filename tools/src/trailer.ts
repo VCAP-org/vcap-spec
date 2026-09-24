@@ -38,6 +38,8 @@ export const buildTrailer = (payload: Buffer, o: TrailerOptions = {}): Buffer =>
 export type ParsedTrailer =
   | { kind: 'none' }
   | { kind: 'corrupted' }
+  /** `VCAP` magic with a major this reader does not implement (§3, §9). */
+  | { kind: 'unsupported', major: number }
   | { kind: 'ok', payload: Buffer, flags: number, minor: number, mediaEnd: number }
 
 /**
@@ -48,7 +50,13 @@ export const parseTrailer = (file: Buffer): ParsedTrailer => {
   if (file.length < FOOTER_LEN + BOX_HEADER_LEN) return { kind: 'none' }
   const footer = file.subarray(file.length - FOOTER_LEN)
   if (!footer.subarray(0, 4).equals(MAGIC)) return { kind: 'none' }
-  if (footer.readUInt8(4) !== 1) return { kind: 'none' }
+  // The magic says "a vcap trailer" and the major says "not this version".
+  // A v1 reader does not interpret the rest of a footer it does not
+  // implement, and it does not call it absent either: *no proof found* would
+  // tell a reader the platform stripped the proof, when the proof is there in
+  // a format this verifier predates.
+  const major = footer.readUInt8(4)
+  if (major !== 1) return { kind: 'unsupported', major }
 
   const payloadLen = footer.readUInt32BE(8)
   const total = BOX_HEADER_LEN + payloadLen + FOOTER_LEN

@@ -12,6 +12,7 @@ import { type AnchorAttachment, type ChainRead, verifyAnchor } from './anchor.js
 import { verifyTimestampToken } from './rfc3161.js'
 import { LOCATION_LEVELS, LOCATION_RANK, verifyLocationCorroboration } from './location.js'
 import { jcs } from './jcs.js'
+import { ProofSyntaxError, parseProofJson } from './json.js'
 
 /**
  * Reference verifier for the signature layer of the format: trailer, canonical
@@ -167,6 +168,7 @@ export const verifyFile = ({ file, sidecar, recomputeSegments, trust, clock = ne
   // 1. Trailer, sidecar, nesting (§3).
   const trailer = parseTrailer(file)
   if (trailer.kind === 'corrupted') return fail('corrupted_proof', 'footer valid, CRC mismatch')
+  if (trailer.kind === 'unsupported') return fail('unsupported_format_version', `footer major ${trailer.major}`)
 
   const labels: string[] = []
   let payload: Buffer
@@ -188,11 +190,12 @@ export const verifyFile = ({ file, sidecar, recomputeSegments, trust, clock = ne
   // 2. JSON and version (§9).
   let proof: Proof
   try {
-    const parsed: unknown = JSON.parse(payload.toString('utf8'))
-    if (!isObject(parsed)) throw new Error('not an object')
+    const parsed: unknown = parseProofJson(payload)
+    if (!isObject(parsed)) throw new ProofSyntaxError('not an object')
     proof = parsed
-  } catch {
-    return fail('no_proof_found', 'payload is not a JSON object')
+  } catch (e) {
+    if (!(e instanceof ProofSyntaxError)) throw e
+    return fail('no_proof_found', `payload is not a well-formed proof: ${e.message}`)
   }
   const version = typeof proof.v === 'string' ? /^vcap\/(\d+)\.(\d+)$/.exec(proof.v) : null
   if (!version) return fail('no_proof_found', 'v missing or malformed')
@@ -228,7 +231,15 @@ export const verifyFile = ({ file, sidecar, recomputeSegments, trust, clock = ne
 
   // 5. Media (§4.1) and, for video, the chain (§5).
   const mediaObj = proof.media as { hash: string, segment_count?: number }
-  const mediaMatches = mediaHash(media) === mediaObj.hash
+  // §4.1: media the container rule cannot walk has no canonical bytes, and a
+  // proof about bytes nobody can canonicalize is not a proof of anything —
+  // never a crash, which is what a malformed JPEG used to produce.
+  let mediaMatches: boolean
+  try {
+    mediaMatches = mediaHash(media) === mediaObj.hash
+  } catch {
+    return fail('no_proof_found', 'the media cannot be read as its container')
+  }
   for (const [key, label] of ABSENT_LABELS) if (!(key in proof)) labels.push(label)
   // §6.2 `registry`, evaluated here and not inside `level` because a clip
   // returns before the level is computed and still has to say whether the key

@@ -1,0 +1,29 @@
+{
+  "v": "vcap/1.0",
+  "capture_id": "ABEiM0RVZneImaq7zN3u_w",
+  "media": {
+    "mime": "image/jpeg",
+    "w": 16,
+    "h": 16,
+    "hash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  },
+  "device": {
+    "platform": "android",
+    "secure_hw": "tee",
+    "key_id": "4aF24UJH_AHu_CuygIW3PB-AMEWVoQy3iaeBh4yDSBM"
+  },
+  "location": {
+    "level": "declared",
+    "lat_udeg": 1,
+    "lon_udeg": 2,
+    "evidence": [
+      {
+        "9": 3,
+        "10": 2,
+        "kind": "x",
+        "b": 1,
+        "__proto__": 4
+      }
+    ]
+  }
+}

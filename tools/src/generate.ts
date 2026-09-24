@@ -1765,6 +1765,86 @@ file({ name: '72-jpeg-footer-crc-mismatch-sidecar', ext: 'jpg', file: seal(baseJ
   }
 }
 
+// ---- reading the JSON and the trailer: one proof, one reading --------------
+//
+// Each of these is a proof two correct JSON parsers can read two ways, or a
+// file two readers can walk two ways. §6.1 and §3 now decide each one, and the
+// decision is always the conservative one: *no proof found* for a proof that
+// is not well formed, *unsupported format version* for a footer this version
+// predates.
+{
+  const text = jcs(jpegProof as Json).toString('utf8')
+  const withPayload = (payload: string | Buffer): Buffer => seal(baseJpeg, jpegProof, { payload: Buffer.isBuffer(payload) ? payload : Buffer.from(payload, 'utf8') })
+  const NOT_FOUND = { outcome: 'no_proof_found' as const, labels: [], not_evaluated: [] }
+
+  {
+    // A second `capture_id` ahead of the real one: JavaScript keeps the last.
+    const payload = text.replace('{"capture_id":', '{"capture_id":"AAAAAAAAAAAAAAAAAAAAAA","capture_id":')
+    file({ name: '111-jpeg-duplicate-key', ext: 'jpg', file: withPayload(payload), expected: NOT_FOUND,
+      notes: 'Vector 01\'s payload with `capture_id` written twice, a zero id first and the signed one second. JSON leaves duplicate member names undefined, and parsers split: JavaScript keeps the last and verifies the signature, others keep the first and see a different core. One file, two verdicts, depending on the library. §6.1: a proof with a duplicate member name, at any depth, is not well formed — **no proof found**, the same answer everywhere.' })
+  }
+
+  {
+    const big = text.replace('"acc_cm":1250', '"acc_cm":9007199254740993')
+    file({ name: '112-jpeg-integer-above-2-53', ext: 'jpg', file: withPayload(big), expected: NOT_FOUND,
+      notes: 'Vector 01\'s payload with `location.acc_cm` set to 2^53 + 1. An IEEE 754 double cannot hold it: JavaScript reads 9007199254740992, a 64-bit integer parser reads the number written, and JCS of the two cores differs by one digit. §6.1: every integer in a proof lies within ±(2^53 − 1), the range every JSON implementation reads exactly — outside it, **no proof found**. The schema bounds `acc_cm` to uint32 as well.' })
+  }
+
+  {
+    // A core signed over 1250, written as 1.25e3: JavaScript reads the same
+    // number, so the signature would verify.
+    const exponent = text.replace('"acc_cm":1250', '"acc_cm":1.25e3')
+    file({ name: '113-jpeg-exponent-literal', ext: 'jpg', file: withPayload(exponent), expected: NOT_FOUND,
+      notes: 'Vector 01\'s payload with `acc_cm` written as `1.25e3`. JavaScript\'s `JSON.parse` reads 1250, JCS re-serializes it as `1250`, and the signature over the core verifies — a reference verifier built on it said *authentic*. A parser that keeps number types reads a float and refuses the core. §6.1: integers are written as integer literals, `-?(0|[1-9][0-9]*)`, and nothing else — no exponent, no fraction, no `4032.0`. **No proof found**.' })
+  }
+
+  {
+    file({ name: '114-jpeg-payload-bom', ext: 'jpg', file: withPayload(Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(text, 'utf8')])), expected: NOT_FOUND,
+      notes: 'Vector 01\'s payload preceded by a UTF-8 byte-order mark. §3: the payload is UTF-8 with no BOM; some readers skip one and some do not. **No proof found**, whatever the rest says.' })
+  }
+
+  {
+    const trailer = buildTrailer(jcs(jpegProof as Json), { major: 2, flags: flagsFor(jpegProof) })
+    file({ name: '115-jpeg-footer-major-2', ext: 'jpg', file: Buffer.concat([baseJpeg, trailer]), expected: { outcome: 'unsupported_format_version', labels: [], not_evaluated: [] },
+      notes: 'A trailer whose footer says major version 2. The magic says a vcap trailer is here; the major says it is not one this reader implements. **Unsupported format version** (§3, §9) — not *no proof found*, which would tell a reader the platform stripped a proof that is sitting at the end of the file in a format this verifier predates. A v1 reader does not interpret the rest of a footer whose major it does not know.' })
+  }
+
+  {
+    // APP0's length made to run past the end of the file.
+    const broken = Buffer.from(baseJpeg)
+    broken.writeUInt16BE(0xfff0, 4)
+    const core = photoCore(baseJpeg, 'image/jpeg', { media: { mime: 'image/jpeg', w: 16, h: 16, hash: createHash('sha256').update(broken).digest('base64url') } })
+    const proof = sign(core)
+    file({ name: '116-jpeg-malformed-segment-length', ext: 'jpg', file: seal(broken, proof), proof, expected: NOT_FOUND,
+      notes: 'A JPEG whose APP0 length runs past the end of the file, sealed with a `media.hash` over its raw bytes. §4.1\'s walk cannot find the segments, so the file has no canonical bytes and the proof covers nothing a verifier can compute: **no proof found**. The reference verifier used to throw out of `verifyFile` here; a verifier that crashes on hostile input has given the attacker a verdict of their choosing, which is none.' })
+  }
+
+  file({ name: '117-empty-file', ext: 'jpg', file: Buffer.alloc(0), expected: NOT_FOUND,
+    notes: 'Zero bytes. No footer, no sidecar: **no proof found**, and no exception on the way there.' })
+
+  {
+    const sealed = Buffer.from(jpegSealed)
+    sealed.writeUInt32BE(0xffffffff, sealed.length - 8)
+    file({ name: '118-jpeg-payload-len-max', ext: 'jpg', file: sealed, expected: NOT_FOUND,
+      notes: 'Vector 01 with `payload_len` set to 2^32 − 1. `8 + payload_len + 16` then exceeds 2^32, and a reader computing it in 32 bits wraps to 23 and looks for a box header inside the footer. §3: the sum is computed without overflow and compared with the file length first — **no proof found**.' })
+  }
+
+  file({ name: '119-jpeg-reserved-flags', ext: 'jpg', file: seal(baseJpeg, jpegProof, { flags: 0xfff8 }), proof: jpegProof,
+    expected: { outcome: 'authentic', labels: PHOTO_LABELS, not_evaluated: [], core_hash: hashOf(jpegProof) },
+    notes: 'Vector 01 with footer bits 3–15 set. They are reserved and written as zero, and a reader ignores them (§3): they carry nothing, and refusing a file for them would make a later minor that assigns one unreadable. **Authentic**, and not *flags disagree* — bits 1 and 2 still agree with the JSON.' })
+
+  {
+    // Integer-like member names and a `__proto__` member, in the one place a
+    // core may carry object members nobody enumerated: an evidence entry.
+    const messy: Json = JSON.parse('{"v":"vcap/1.0","capture_id":"' + CAPTURE_ID.toString('base64url') + '","media":{"mime":"image/jpeg","w":16,"h":16,"hash":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"},"device":{"platform":"android","secure_hw":"tee","key_id":"' + KEY_ID + '"},"location":{"level":"declared","lat_udeg":1,"lon_udeg":2,"evidence":[{"kind":"x","b":1,"10":2,"9":3,"__proto__":4}]}}') as Json
+    const bytes = coreBytes(messy as Proof)
+    if (!bytes.toString('utf8').includes('{"10":2,"9":3,"__proto__":4,"b":1,"kind":"x"}')) throw new Error('JCS member order regressed')
+    vectors.push({ kind: 'jcs', name: '120-jcs-integer-like-and-proto-keys', input: messy,
+      expected: { core_bytes_hex: bytes.toString('hex'), core_hash: createHash('sha256').update(bytes).digest('hex') },
+      notes: 'A core whose evidence entry has members named `b`, `10`, `9`, `__proto__` and `kind`. RFC 8785 sorts member names by UTF-16 code units: `10`, `9`, `__proto__`, `b`, `kind`. Two things get in the way in JavaScript, and the reference implementation fell for both: an object enumerates integer-like keys first in numeric order (`9` before `10`) whatever order they were added in, and assigning a `__proto__` member sets the prototype instead of adding the member, which then vanishes from the output. A canonicalizer that builds a sorted object and hands it to `JSON.stringify` produces neither the order nor the member; one that writes members itself produces both.' })
+  }
+}
+
 // what it can rebuild is the difference between a generator and a broom.
 const owned = new Set(vectors.map((v) => v.name))
 if (existsSync(VECTORS)) {

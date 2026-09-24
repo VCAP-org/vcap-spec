@@ -90,8 +90,14 @@ by seeking from the end, never by scanning.
 - **Footer validity.** The last 16 bytes are a *valid footer* when all hold:
   `magic == "VCAP"`, `major == 1`, `8 + payload_len + 16 <= len(F)`, the 8 bytes
   before the payload read `box_size == 8 + payload_len + 16` followed by `"free"`.
-  If any of these fails, the file carries no trailer: *no proof found*, not an
-  error. If the structure holds and `crc32` does not match the payload, the
+  The sum is computed without overflow — in 32 bits, `payload_len = 2^32 − 1`
+  wraps to 23 and points a reader into the footer (vector 118). If any of
+  these fails, the file carries no trailer: *no proof found*, not an error —
+  with one exception: `magic == "VCAP"` and `major != 1` is **unsupported
+  format version**, with the major shown (vector 115). The magic says a vcap
+  trailer is there and the major says it is not one this reader implements;
+  a reader does not interpret the rest of a footer of a major it does not
+  know, and *no proof found* would tell a reader the proof was stripped. If the structure holds and `crc32` does not match the payload, the
   proof is **corrupted**, reported as such and never as *no proof found*. The
   distinction matters: one means the platform stripped the metadata, the other
   means somebody edited the file. The structural checks come first so that
@@ -213,7 +219,11 @@ Given the received file `F`:
 1. **Strip the trailer.** If the last 16 bytes are a valid footer (§3), let
    `T = 8 + payload_len + 16` and `F' = F[0 : len(F) - T]`. Otherwise `F' = F`.
    If `F'` itself ends in a valid footer: *nested proof*, stop (§3).
-2. **Container normalization.**
+2. **Container normalization.** The container is decided by the **first
+   bytes of `F'`**, never by `media.mime`: `FF D8` is JPEG, `ftyp` at offset 4
+   is ISO-BMFF, and anything else is hashed as it is, `C = F'`. The MIME type
+   is a claim inside the proof, and letting a claim choose how the bytes it
+   describes are hashed would let a writer pick the rule its file passes.
    - **JPEG**: remove every `APP11` segment (marker `0xFF 0xEB`) whose payload —
      the bytes after the 2-byte segment length — begins with `0x4A 0x50`
      (`"JP"`, the JUMBF common identifier C2PA uses), and only those. Keep every
@@ -221,6 +231,9 @@ Given the received file `F`:
      original order → `C`. The walk stops at `SOS`; fill bytes (`0xFF` padding
      before a marker) and markers without a length field (`TEM`, `RSTn`) are
      kept where they are, like every other byte that is not a JUMBF APP11.
+     A segment whose length is below 2 or runs past the end of the file makes
+     the JPEG malformed: it has no canonical bytes, and the verdict is *no
+     proof found* — never an exception (vector 116).
    - **ISO-BMFF** (MP4, MOV, HEIC): `C = F'` unchanged. Nothing is removed.
 3. **Hash.** `H = SHA-256(C)`, 32 raw bytes. `media.hash` is `H` in base64url,
    no padding.
@@ -228,7 +241,7 @@ Given the received file `F`:
 The asymmetry between containers is deliberate and follows from where each
 standard puts its own hash:
 
-- **Photos embed the C2PA manifest AFTER sealing**, because the JPEG hard binding
+- **JPEG embeds the C2PA manifest AFTER sealing**, because the JPEG hard binding
   (`c2pa.hash.data`) hashes every byte not excluded, EOI to end of file
   included; if the manifest were inside the canonical bytes, adding it would
   invalidate the vcap signature it depends on. So it is excluded — and, as a
@@ -237,9 +250,10 @@ standard puts its own hash:
   and 68). It carries its own signature, and once written after sealing its
   hard binding covers the trailer: a trailer rewritten later breaks the
   manifest, not the proof (`c2pa-interop-1.0.md` §3).
-- **Video embeds the manifest BEFORE sealing**: the manifest is inside the
+- **ISO-BMFF — video and HEIC alike — embeds the manifest BEFORE sealing**:
+  the manifest is inside the
   canonical bytes and stays there (a manifest inserted afterwards is
-  *tampered*, vector 73), and the trailer appended after it is a `free` box,
+  *tampered*, vector 73, a HEIC photo), and the trailer appended after it is a `free` box,
   which a C2PA claim generator keeps out of `c2pa.hash.bmff.v3` by putting
   `/free` on its exclusion list — the one exclusion, with `/skip`, that a C2PA
   validator does not even flag. Without that entry the trailer breaks the C2PA
@@ -567,14 +581,34 @@ A verifier builds it from the received proof by taking those keys and nothing
 else, then serializes it with JCS. Unknown top-level keys are not part of the
 core and are listed as *not evaluated* (§9).
 
-**Canonicalization procedure** (normative; vector `32-jcs-core-canonicalization`):
+**Reading the JSON** (normative). A proof — trailer payload or sidecar — is
+read under rules that leave two parsers no room to disagree, and a proof that
+breaks one is **not well formed: *no proof found*** (§8):
+
+- UTF-8, **no byte-order mark** (vector 114), and valid UTF-8 throughout.
+- **No duplicate member names**, at any depth (vector 111). JSON leaves them
+  undefined and parsers split between the first and the last, so one proof
+  would read as two.
+- **Every number is an integer, written as an integer literal**
+  `-?(0|[1-9][0-9]*)` — no fraction, no exponent, not `4032.0`, not `1.25e3`
+  (vector 113) — **within ±(2^53 − 1)** (vector 112), the range every JSON
+  implementation reads exactly. The format has no other numbers, in the core
+  or out of it; a later minor adds none.
+
+**Canonicalization procedure** (normative; vectors `32-jcs-core-canonicalization`
+and `120-jcs-integer-like-and-proto-keys`):
 
 1. Parse the proof JSON. Take the top-level members named above, in whatever
    order they appear; ignore every other member.
 2. Serialize the resulting object with JCS (RFC 8785): object members sorted by
    the UTF-16 code units of their names at every level, arrays in place, no
    whitespace, strings escaped as ECMAScript `JSON.stringify` does, numbers as
-   plain decimal integers (the core has no other numbers).
+   plain decimal integers (the core has no other numbers). The order is the
+   code-unit order of the names **as strings**: `"10"` before `"9"`, and a
+   member named `__proto__` is a member like any other. JavaScript objects
+   enumerate integer-like names first in numeric order and treat `__proto__`
+   as the prototype, so an implementation that builds a sorted object and
+   hands it to `JSON.stringify` gets both wrong (vector 120).
 3. `core_bytes` is the UTF-8 encoding of that string; `core_hash = SHA-256(core_bytes)`.
 
 A writer MUST store the whole proof in the trailer as JCS of the entire object;
