@@ -2,14 +2,14 @@
 
 Normative format specification. Changes here propagate to every implementation,
 so treat every edit as a breaking change and record it as one in `CHANGELOG.md`.
-`vcap/1.0` is **not frozen** and has no public version: there is no `v1.0` tag,
-and the additive-only rule of §9 binds at the first build, SDK or sealed file
-that reaches somebody else, not at a tag. `CHANGELOG.md` is the authority.
+The format is **not frozen** and no version has been released (`vcap/1.0` is
+the format identifier, not a release): the additive-only rule of §9 binds at
+the first build, SDK or sealed file that reaches somebody else. `CHANGELOG.md` is the authority.
 
 ## What lives here
 
-- `spec/threat-model.md` — what the format and the platform defend against,
-  what they do not, and the residual risk of each threat. Public. Every
+- `spec/threat-model.md` — what the format defends against,
+  what it does not, and the residual risk of each threat. Public. Every
   mitigation it names points at a spec section or a component; every accepted
   risk must be something the verifier UI says.
 - `spec/vcap-proof-1.0.md` — the normative document. The six format decisions
@@ -61,7 +61,8 @@ that reaches somebody else, not at a tag. `CHANGELOG.md` is the authority.
   format (JPEG, HEIC, MP4, MOV).
 - Once the format reaches somebody else (first build, first SDK, first sealed
   file out of our hands): additive changes only, minor version bump, and a
-  changelog entry saying what a v1.0 verifier does when it meets the new field.
+  changelog entry saying what a verifier that predates a new field does when
+  it meets it.
   Before that a breaking change is allowed, and `CHANGELOG.md` says it broke.
 
 ## Product invariants

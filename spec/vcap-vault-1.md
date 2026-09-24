@@ -1,17 +1,12 @@
 # VCAP encrypted vault object — version 1
 
-**Status: in use, with an offline reference decoder and test vectors.** As of
-20 September 2026 the platform stores objects in this format and the Android
-app writes them: version 1.0.12 is on Play's internal track and the server it
-talks to is deployed. That is **not** a publication, and this envelope is not
-frozen: an internal testing track reaches nobody outside, every object written
-so far is the owner's own and can be re-made, and the decision of 22 September
-2026 (`CHANGELOG.md`) applies here as it does to the proof format. The
-additive-only rule binds at the first object sealed under a key that is
-somebody else's, because that one cannot be re-encrypted; an earlier revision
-of this notice declared it already bound. This is a separate envelope for preserving a sealed
-file, not a change to `vcap/1.0`, its signature inputs, or its verification
-path.
+**Status: in development, with an offline reference decoder and test vectors.**
+This envelope is not frozen: every object written so far can be re-made, and
+the decision of 22 September 2026 (`CHANGELOG.md`) applies here as it does to
+the proof format. The additive-only rule binds at the first object sealed under
+a key that is somebody else's, because that one cannot be re-encrypted.
+This is a separate envelope for preserving a sealed file, not a change to
+`vcap/1.0`, its signature inputs, or its verification path.
 
 This document specifies encrypted storage (mode A). It does not define
 service-readable originals (mode B), public lookup, custodian passphrase
