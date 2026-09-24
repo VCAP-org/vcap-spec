@@ -8,13 +8,12 @@ bridge, a web capture SDK and four verifiers must agree byte for byte.
 
 ## Status
 
-Phase 1. **`vcap/1.0` is not frozen, and there is no public version of it yet**
-(22 September 2026): the `v1.0` tag and its pre-release were removed, and an
-internal testing track is not a publication. A breaking change is allowed and
-is recorded as breaking in `CHANGELOG.md`, which is the authority on the
-format's status. The additive-only rule of spec §9 binds at the first build,
-SDK or sealed file that reaches somebody else — until then nothing sealed is in
-anybody else's hands, so no change has to carry a fallback for older files.
+In development. Nothing is frozen and no version has been released; `vcap/1.0`
+is the format identifier inside every proof, not a release. A breaking change
+is allowed and is recorded as breaking in [`CHANGELOG.md`](CHANGELOG.md), which
+is the authority on the format's status. The additive-only rule of spec §9
+binds at the first build, SDK or sealed file that reaches somebody else — until
+then no change has to carry a fallback for older files.
 
 ## Layout
 
@@ -88,12 +87,10 @@ worth what it can be implemented into, and the conformance vectors are meant to
 live inside other people's test suites. The copyright holder is "the vcap
 authors" until a legal entity is named.
 
-
-
 ## Encrypted vault exports
 
 The separate [vault object draft](spec/vcap-vault-1.md) and
 [offline reference decoder](tools/src/vault/decrypt.ts) define recoverable
-exports with the organization's private key. They do not change `vcap/1.0`
-or enable uploads from the app. The small interoperability vector is public
-test data; its private key and deterministic encoder are never for real files.
+exports with the organization's private key. They do not change the `vcap/1.0`
+proof format. The small interoperability vector is public test data; its
+private key and deterministic encoder are never for real files.
