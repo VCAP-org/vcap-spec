@@ -1,0 +1,9 @@
+{
+  "kind": "file",
+  "verifier_clock": 1757419200000,
+  "outcome": "tampered",
+  "labels": [],
+  "not_evaluated": [],
+  "core_hash": "bbd3625e982971970baa596e05294fe23355b23236b7a0bf173c636bcdd680f5",
+  "schema_valid": true
+}

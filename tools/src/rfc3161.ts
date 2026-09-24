@@ -114,7 +114,7 @@ const generalizedTime = (node: Node): Date | null => {
 // ---- the validator --------------------------------------------------------
 
 export type TimestampOutcome =
-  | { ok: true, genTime: Date }
+  | { ok: true, genTime: Date, signerValid: { from: Date, to: Date } }
   | { ok: false, reason: string }
 
 export const verifyTimestampToken = (
@@ -208,7 +208,7 @@ export const verifyTimestampToken = (
   if (!hasTimeStamping(certificate)) {
     return { ok: false, reason: 'the signer has no timeStamping extended key usage' }
   }
-  return { ok: true, genTime }
+  return { ok: true, genTime, signerValid: { from: new Date(certificate.validFrom), to: new Date(certificate.validTo) } }
 }
 
 const hasTimeStamping = (certificate: X509Certificate): boolean => {

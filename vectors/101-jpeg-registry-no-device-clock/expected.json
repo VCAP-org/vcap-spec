@@ -1,0 +1,36 @@
+{
+  "kind": "file",
+  "verifier_clock": 1757419200000,
+  "key_status": {
+    "log_id": "n86HEwJWvHOhbryJkD8Q18_41VkQcVInSIqNa1EaBVs",
+    "at": 1757332890000,
+    "tree_size": 7,
+    "status": 1,
+    "signature": "oNcXlVKnIOqDpn0JGKUx_Sl5jmhfdEmj1VB-1t9AkKghZ4_V0S4GY3qAOoMg3Yi-YVPkaH9jwewNV_vq_YMviA"
+  },
+  "chain_read": {
+    "root": "T8nN-VQFajXyuG9R5NMTd1A4MKzmAg6dnxpS5o5YbqY",
+    "tree_size": 5,
+    "block_time": 1757332890000
+  },
+  "outcome": "authentic",
+  "labels": [
+    "capture time not declared",
+    "integrity unevaluated",
+    "location declared only",
+    "no trusted time",
+    "watermark not evaluated"
+  ],
+  "not_evaluated": [],
+  "core_hash": "4d62da10bd572c63f8029da6db1590dd80e3b1eb5fbe8496a1bde34307343332",
+  "level": {
+    "claimed": "tee",
+    "proven": "tee",
+    "ceiling": "amber"
+  },
+  "validated_at": {
+    "instant": "2025-09-08T12:01:30.000Z",
+    "source": "anchor"
+  },
+  "schema_valid": true
+}

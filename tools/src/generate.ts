@@ -13,7 +13,7 @@ import { type SegmentEntry, SEPARATOR, ZERO_LINK, linkOf, segmentMessage } from 
 import { signChain, signEs256 } from './sign.js'
 import { TEST_KEY_PKCS8_BASE64, TEST_OTHER_KEY_PKCS8_BASE64 } from './testkey.js'
 import { TEST_LOG_KEY_PKCS8_BASE64 } from './testlogkey.js'
-import { type KeyStatusStatement, keyStatusMessage, leafHash, leafKeyId, nodeHash, treeHeadMessage } from './registry.js'
+import { type KeyStatusStatement, integrityMessage, keyStatusMessage, leafHash, leafKeyId, nodeHash, treeHeadMessage } from './registry.js'
 import { type ChainRead } from './anchor.js'
 import { corroborationMessage } from './location.js'
 import { loadTrust } from './trust.js'
@@ -117,6 +117,20 @@ const PHOTO_LABELS = ['integrity unevaluated', 'key not in transparency log', 'l
 const jpegProof = sign(photoCore(baseJpeg, 'image/jpeg'))
 const jpegSealed = seal(baseJpeg, jpegProof)
 const hashOf = (p: Proof): string => coreHash(p).toString('hex')
+
+/**
+ * A committed RFC 3161 token from `vectors/_timestamps/`, refused when it is
+ * over another core: see `make-timestamp-tokens.ts`.
+ */
+const tokenNamed = (name: string, coreHashHex: string): { tsr: string, genTime: string } => {
+  const token = JSON.parse(readFileSync(join(VECTORS, '_timestamps', `${name}.json`), 'utf8')) as { core_hash: string, gen_time: string, tsr: string }
+  if (token.core_hash !== coreHashHex) {
+    throw new Error(
+      `_timestamps/${name}.json is a token over ${token.core_hash}, and this vector's core hash is ${coreHashHex}. ` +
+      'Re-mint: npx tsx src/make-timestamp-tokens.ts ' + coreHashHex)
+  }
+  return { tsr: token.tsr, genTime: token.gen_time }
+}
 
 const vectors: Vector[] = []
 const sortedLabels = <T extends { labels?: string[] }>(e: T): T => e.labels ? { ...e, labels: [...e.labels].sort() } : e
@@ -652,9 +666,22 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
       notes: 'The intermediate lives twelve days, the life of a real RKP intermediate, and the verifier reads the proof a year later. §7: the path is validated at the proven instant of the capture, so the level **stands** — an expired chain says the verifier is late, not that the capture is forged. What is missing is an independent instant: with only `time.device_clock` nothing but the device places the capture inside the chain\'s validity, so the label says so and the ceiling stays amber. `verifier_clock` is pinned in `expected.json` because otherwise this vector would answer differently as the calendar moves.' })
   }
 
+  // Every certificate of the chain but the pinned root has an entry (§6.2):
+  // the leaf is serial 03, the intermediate 02.
+  const VALID = [{ serial: '03', status: 'valid' }, { serial: '02', status: 'valid' }]
+  const revokedIntermediate = (o: { reason: string, revokedAt?: number }): Json =>
+    [{ serial: '03', status: 'valid' }, { serial: '02', status: 'revoked', reason: o.reason, ...(o.revokedAt !== undefined ? { revoked_at: o.revokedAt } : {}) }]
+  // The standard photo core is the one `_timestamps/valid.json` stamps: an
+  // attachment is outside the core, so adding a chain does not move it.
+  const withToken = (proof: Proof): { proof: Proof, genTime: string } => {
+    const token = tokenNamed('valid', hashOf(proof))
+    return { proof: { ...proof, timestamp: { tsr: token.tsr } }, genTime: token.genTime }
+  }
+  const STAMPED_LABELS = ATTESTED_LABELS.filter((l) => l !== 'no trusted time')
+
   {
     const base = attested({ chain: chainOf('tee') })
-    const status = statusAttachment(base, CAPTURE - 3600000, [{ serial: '02', status: 'revoked', reason: 'KEY_COMPROMISE' }])
+    const status = statusAttachment(base, CAPTURE - 3600000, revokedIntermediate({ reason: 'KEY_COMPROMISE', revokedAt: CAPTURE - 7200000 }))
     const proof = { ...base, attestation_status: status }
     file({ name: '44-jpeg-attestation-revoked-before-capture', ext: 'jpg', file: seal(baseJpeg, proof), proof,
       verifierClock: CAPTURE + day,
@@ -666,24 +693,120 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
         level: { claimed: 'tee', proven: 'none', ceiling: 'red' },
         validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
       },
-      notes: 'The frozen snapshot (§6.2) says the intermediate was already revoked an hour before the declared capture. The chain therefore proves nothing at that instant: `proven` drops to `none` and the level is **red**. The outcome stays `authentic` — the file is intact and the core signature is valid — which is the distinction §7 exists to keep: what the bytes are, and what the origin is worth, are two answers.' })
+      notes: 'The frozen snapshot (§6.2) says the intermediate is revoked, for `KEY_COMPROMISE`, with a revocation date two hours before the declared capture. The chain therefore proves nothing: `proven` drops to `none` and the level is **red**. Nothing here could save it — the only instant is the device\'s clock, and a compromise reaches back to the key\'s first use whatever the date says. The outcome stays `authentic` — the file is intact and the core signature is valid — which is the distinction §7 exists to keep: what the bytes are, and what the origin is worth, are two answers.' })
   }
 
   {
     const base = attested({ chain: chainOf('tee') })
-    const status = statusAttachment(base, CAPTURE + 30 * day, [{ serial: '02', status: 'revoked', reason: 'SUPERSEDED' }])
-    const proof = { ...base, attestation_status: status }
+    const status = statusAttachment(base, CAPTURE + 30 * day, revokedIntermediate({ reason: 'SUPERSEDED', revokedAt: CAPTURE + 30 * day }))
+    const { proof, genTime } = withToken({ ...base, attestation_status: status })
     file({ name: '45-jpeg-attestation-revoked-after-capture', ext: 'jpg', file: seal(baseJpeg, proof), proof,
       verifierClock: CAPTURE + 60 * day,
       expected: {
         outcome: 'authentic',
-        labels: [...ATTESTED_LABELS, 'attestation key revoked after the capture'],
+        labels: [...STAMPED_LABELS, 'attestation key revoked after the capture'],
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
+        validated_at: { instant: genTime, source: 'timestamp' }
+      },
+      notes: 'The intermediate is revoked, for `SUPERSEDED`, and the source gives the revocation date: thirty days after the capture. A timestamp token over this core places the capture one minute after the declared time — an instant the device does not choose — and that is before the revocation date, so the level at the proven instant **stands**, and the revocation is shown rather than applied: a batch key withdrawn later does not un-attest what it attested (§6.2).\n\nAll three conditions are needed and each has a vector that lacks it: an instant nobody can move (96 has only the device clock), a revocation date the source gives (97 has only `fetched_at`), and a reason that does not reach back (44). Amber for an unrelated reason: the key is not in the transparency log.' })
+  }
+
+  {
+    const base = attested({ chain: chainOf('tee') })
+    const status = statusAttachment(base, CAPTURE + 30 * day, revokedIntermediate({ reason: 'SUPERSEDED', revokedAt: CAPTURE + 30 * day }))
+    const proof = { ...base, attestation_status: status }
+    file({ name: '96-jpeg-attestation-revoked-after-device-clock', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + 60 * day,
+      expected: {
+        outcome: 'authentic',
+        labels: [...ATTESTED_LABELS, 'attestation key revoked'],
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'none', ceiling: 'red' },
+        validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+      },
+      notes: 'Vector 45 without the timestamp token. The revocation date is thirty days after `time.device_clock` — and the device clock is set by whoever holds the device key, which after a leaked keybox is exactly the person the revocation is about. A thief who signs today with the clock set to last month would read *revoked after the capture* and keep the level. So a device clock never places a capture before a revocation: **red** (§6.2, §7).' })
+  }
+
+  {
+    const base = attested({ chain: chainOf('tee') })
+    const status = statusAttachment(base, CAPTURE + 30 * day, revokedIntermediate({ reason: 'SUPERSEDED' }))
+    const { proof, genTime } = withToken({ ...base, attestation_status: status })
+    file({ name: '97-jpeg-attestation-revoked-without-date', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + 60 * day,
+      expected: {
+        outcome: 'authentic',
+        labels: [...STAMPED_LABELS, 'attestation key revoked'],
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'none', ceiling: 'red' },
+        validated_at: { instant: genTime, source: 'timestamp' }
+      },
+      notes: 'A revoked intermediate with no `revoked_at`, in a snapshot the registry took thirty days after the capture, and a timestamp token that places the capture firmly before that. Still **red**: `fetched_at` is when the registry read the list, not when anything was revoked, and a revocation first seen a month late may have happened a year early. Only a date the source itself gives can place a revocation after the capture (§6.2).' })
+  }
+
+  {
+    const base = attested({ chain: chainOf('tee') })
+    const status = statusAttachment(base, CAPTURE + 1800000, [{ serial: '03', status: 'valid' }, { serial: '02', status: 'unknown' }])
+    const proof = { ...base, attestation_status: status }
+    file({ name: '98-jpeg-attestation-status-unknown', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: {
+        outcome: 'authentic',
+        labels: [...ATTESTED_LABELS, 'chain revocation not checked'],
         not_evaluated: [],
         core_hash: hashOf(proof),
         level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
         validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
       },
-      notes: 'The same snapshot, taken thirty days later: the certificate was revoked **after** the capture. Revocation is temporal (§6.2), so the level at the proven instant stands and the revocation is shown rather than applied — a batch key withdrawn later does not un-attest what it attested. The pair 44/45 is the whole rule: the same entries, two verdicts, decided by the instant.' })
+      notes: 'The snapshot says `unknown` for the intermediate. That is the registry not knowing, and a verifier that read it as revoked — the reference verifier did — would turn silence into an accusation. **Amber**, *chain revocation not checked*, the level stands (§6.2).' })
+  }
+
+  {
+    const base = attested({ chain: chainOf('tee') })
+    const status = statusAttachment(base, CAPTURE + 1800000, [{ serial: '02', status: 'valid' }])
+    const proof = { ...base, attestation_status: status }
+    file({ name: '99-jpeg-attestation-status-uncovered', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: {
+        outcome: 'authentic',
+        labels: [...ATTESTED_LABELS, 'chain revocation not checked'],
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
+        validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+      },
+      notes: 'A correctly signed snapshot that says the intermediate (serial 02) is valid and says nothing about the leaf (serial 03). A snapshot answers for the certificates it names and no others: every certificate of the chain but the pinned root needs an entry, and one without is *chain revocation not checked*, **amber** (§6.2). A verifier that checked only the entries present would call a chain clean on the strength of one certificate.' })
+  }
+
+  {
+    // An attested key that signs a leaf of its own, claiming StrongBox.
+    const proof = attested({ chain: chainOf('forged-leaf'), secureHw: 'strongbox' })
+    file({ name: '105-jpeg-attestation-forged-leaf', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: {
+        outcome: 'authentic',
+        labels: [...PHOTO_LABELS, 'attestation evidence invalid'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'strongbox', proven: 'none', ceiling: 'amber' },
+        validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+      },
+      notes: 'A four-certificate chain in which a genuine attested TEE key — its own leaf, KeyDescription and all, under the real intermediate — has signed a **fifth-column leaf**: this proof\'s key, with a KeyDescription that says StrongBox. Every signature in the chain verifies and it ends in the pinned root.\n\n§7 refuses it twice. The key attestation extension belongs to the leaf and only the leaf, and certificate 1 carries one; and every certificate above the leaf MUST be a CA with `keyCertSign`, which an attested key is not. Proven level **none**, with both labels of §8 for a present attachment that does not hold up. Without those two rules a single genuine hardware key could mint "StrongBox" for any key it liked.' })
+  }
+
+  {
+    // The chain is about the test key; the proof is signed by another one.
+    const otherSpki = spkiOf(otherKey)
+    const core = photoCore(baseJpeg, 'image/jpeg', { device: { platform: 'android', secure_hw: 'tee', key_id: keyId(otherSpki) } })
+    const signed = { ...core, sig: { alg: 'ES256', value: signEs256(coreBytes(core), otherKey).toString('base64url'), pub: otherSpki.toString('base64url') } }
+    const proof = { ...signed, attestation: chainOf('tee') }
+    file({ name: '108-jpeg-attestation-leaf-not-signing-key', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: { outcome: 'tampered', labels: [], not_evaluated: [], core_hash: hashOf(proof) },
+      notes: 'A proof signed by one key carrying the genuine attestation chain of another. The core signature is valid under `sig.pub`, and the chain is perfect — for a different key. §6.2: the leaf\'s SubjectPublicKeyInfo MUST equal `sig.pub`, otherwise **tampered**. This is the signature swap of `threat-model.md` §5.1: re-sign a file with your own key and borrow somebody\'s hardware evidence. Weak evidence would be amber; evidence about someone else attached to your signature is red.' })
   }
 }
 
@@ -784,9 +907,9 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
   }
 
   /** An attested photo with a registry attachment and a clean status list. */
-  const registered = (o: Parameters<typeof registryFor>[0] = {}, statusEntries: Json = [{ serial: '02', status: 'valid' }]): Proof => {
-    const base = { ...sign(photoCore(baseJpeg, 'image/jpeg')), attestation: chainOf('tee') }
-    return { ...base, attestation_status: statusAttachment(base, CAPTURE - 1800000, statusEntries), registry: registryFor(o) }
+  const registered = (o: Parameters<typeof registryFor>[0] = {}, statusEntries: Json = [{ serial: '03', status: 'valid' }, { serial: '02', status: 'valid' }], chain = 'tee', core: Proof = {}): Proof => {
+    const base = { ...sign(photoCore(baseJpeg, 'image/jpeg', core)), attestation: chainOf(chain) }
+    return { ...base, attestation_status: statusAttachment(base, CAPTURE + 1800000, statusEntries), registry: registryFor(o) }
   }
 
   // Every absence label except the three this vector answers.
@@ -875,10 +998,216 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
         labels: GREEN_LABELS,
         not_evaluated: [],
         core_hash: hashOf(proof),
-        level: { claimed: 'tee', proven: 'tee', ceiling: 'green' },
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
         validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
       },
-      notes: 'The corpus\'s first **green**, and it takes one more input than vector 49: the log\'s signed answer about this key at the instant the capture is validated at.\n\n`key_status` in `expected.json` is an **input**, like `verifier_clock` — the verifier fetched it, the corpus declares what it fetched. It has to be, because §6.2 makes revocation an online question: the proof cannot carry the absence of a later revocation leaf, so no file on its own can be green. A conformance corpus that pretended otherwise would be testing a verdict no verifier can reach.\n\nThe statement is bound to **this key and this instant** — `"vcap/1.0/status" ‖ key_id ‖ at ‖ tree_size ‖ status`, signed by the log\'s tree-head key — so a statement about last week, correctly signed, is a valid answer to the wrong question and is refused as one. Everything §7 asks for is now present: `tee` proven by a chain to the pinned root, the chain\'s certificates valid in a signed status list, the key in the log before the capture, and the key not revoked at that instant. Change any one and the ceiling drops, which is what the four vectors around this one are for.' })
+      notes: 'Everything §7 asks for except one thing, and the one thing is time. `tee` proven by a chain to the pinned root, every certificate of the chain valid in a signed status snapshot, the key in the log before the declared capture, the app that made the key one the log admits, and the log\'s signed answer that the key was not revoked at that instant — `key_status` in `expected.json` is an **input**, like `verifier_clock`, because §6.2 makes revocation an online question.\n\nAnd the ceiling is **amber**. The only instant is `time.device_clock`, and a device clock caps the verdict at amber whatever else holds (§7): it is set by whoever holds the device, so every check made "at the capture" is a check made at a moment the signer chose. This vector used to be the corpus\'s green, in contradiction with that sentence; the text was right and the vector was not. Vector 100 is this proof with an instant nobody can move, and it is green.' })
+  }
+
+  // The standard core is the one `_timestamps/valid.json` stamps; every
+  // attachment here is outside it.
+  const stampedRegistered = (o: Parameters<typeof registryFor>[0] = {}, statusEntries?: Json, chain?: string): { proof: Proof, genTime: string } => {
+    const proof = registered(o, statusEntries, chain)
+    const token = tokenNamed('valid', hashOf(proof))
+    return { proof: { ...proof, timestamp: { tsr: token.tsr } }, genTime: token.genTime }
+  }
+  const STAMPED_GREEN = GREEN_LABELS.filter((l) => l !== 'no trusted time')
+
+  {
+    const { proof, genTime } = stampedRegistered()
+    file({ name: '100-jpeg-registry-green-timestamped', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      keyStatus: statusStatement(Date.parse(genTime), 1),
+      expected: {
+        outcome: 'authentic',
+        labels: STAMPED_GREEN,
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'green' },
+        validated_at: { instant: genTime, source: 'timestamp' }
+      },
+      notes: 'The corpus\'s **green**: vector 54 with an RFC 3161 token over its core. The token\'s `genTime` becomes the proven instant (§7), every certificate path is validated there, the log\'s signed status answers for that instant, and the tree head predates both the declared capture and the token (§6.2).\n\nWhat green says here, and only here: the key is in secure hardware of a device whose boot was verified, created by an app the log admits, registered in the log before the capture and not revoked at the instant a time-stamping authority vouches for; the chain\'s certificates were not revoked when the registry looked; and the bytes are the ones that key signed. Change any one input and one of the vectors around this one says which.' })
+  }
+
+  {
+    // No `time` in the core, so no declared capture time; a verified anchor
+    // supplies the instant, so the time cap is not what stops green here.
+    const base = registered({}, undefined, 'tee', { time: undefined as unknown as Json })
+    delete (base as Record<string, unknown>).time
+    const core = { ...base }
+    const leafIndex = 2
+    const size = 5
+    let level = Array.from({ length: size }, (_, i) => i === leafIndex ? leafHash(coreHash(core)) : leafHash(createHash('sha256').update(`another capture ${i}`).digest()))
+    const path: Buffer[] = []
+    let position = leafIndex
+    while (level.length > 1) {
+      if (position % 2 === 1) path.push(level[position - 1] as Buffer)
+      else if (position + 1 < level.length) path.push(level[position + 1] as Buffer)
+      const next: Buffer[] = []
+      for (let i = 0; i < level.length; i += 2) next.push(i + 1 < level.length ? nodeHash(level[i] as Buffer, level[i + 1] as Buffer) : level[i] as Buffer)
+      level = next
+      position = Math.floor(position / 2)
+    }
+    const root = level[0] as Buffer
+    const BLOCK = CAPTURE + 90_000
+    const proof = { ...core, anchor: { chain: 'base-sepolia', tx: '0x' + createHash('sha256').update('the anchoring transaction').digest('hex'), block: 46561942, anchor_id: 0, index: leafIndex, tree_size: size, root: root.toString('base64url'), merkle_path: path.map((h) => h.toString('base64url')) } }
+    file({ name: '101-jpeg-registry-no-device-clock', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      keyStatus: statusStatement(BLOCK, 1),
+      chainRead: { root: root.toString('base64url'), tree_size: size, block_time: BLOCK },
+      expected: {
+        outcome: 'authentic',
+        labels: [...GREEN_LABELS.filter((l) => l !== 'not anchored'), 'capture time not declared'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
+        validated_at: { instant: new Date(BLOCK).toISOString(), source: 'anchor' }
+      },
+      notes: 'A core with **no `time`**, everything else of vector 100, and a verified anchor for the instant. The reference verifier used to read a missing `device_clock` as "registered before the capture" — an absent field giving a *stronger* verdict than a present one, since a declared time can at least be late.\n\nNow the absence is shown, *capture time not declared*, and nothing that needs a declared capture time is established: the log\'s tree head cannot be placed before a capture nobody dated, so the ceiling is **amber**. The block time is an upper bound on the capture and says nothing about how long before it the key was registered.' })
+  }
+
+  {
+    const { proof, genTime } = stampedRegistered({ headTimestamp: CAPTURE + 120_000 })
+    file({ name: '102-jpeg-registry-after-trusted-time', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      keyStatus: statusStatement(Date.parse(genTime), 1),
+      expected: {
+        outcome: 'authentic',
+        labels: [...STAMPED_GREEN, 'registered after the declared capture', 'registered after the trusted time'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
+        validated_at: { instant: genTime, source: 'timestamp' }
+      },
+      notes: 'Vector 100 with a tree head signed two minutes after the capture — after the declared time **and** after the token\'s `genTime`. §6.2 requires `tree_head.timestamp` to exceed neither; the reference verifier used to check only the first. The second is the one that matters: the token is an instant the device does not choose, and a key logged after it was not in the log when the capture was stamped. Both labels, **amber**.' })
+  }
+
+  {
+    // A token one minute after the capture, and an anchor half a minute after.
+    const proof0 = sign(photoCore(baseJpeg, 'image/jpeg'))
+    const token = tokenNamed('valid', hashOf(proof0))
+    const anchorOf = (block: number): { anchor: Proof, read: Json } => {
+      const leafIndex = 1
+      const size = 3
+      const leaves = Array.from({ length: size }, (_, i) => i === leafIndex ? leafHash(coreHash(proof0)) : leafHash(createHash('sha256').update(`another capture ${i}`).digest()))
+      const left = nodeHash(leaves[0] as Buffer, leaves[1] as Buffer)
+      const root = nodeHash(left, leaves[2] as Buffer)
+      return {
+        anchor: { chain: 'base-sepolia', tx: '0x' + createHash('sha256').update(`block ${block}`).digest('hex'), block: 46561942, anchor_id: 1, index: leafIndex, tree_size: size, root: root.toString('base64url'), merkle_path: [leaves[0] as Buffer, leaves[2] as Buffer].map((h) => h.toString('base64url')) },
+        read: { root: root.toString('base64url'), tree_size: size, block_time: block }
+      }
+    }
+    const TS_ANCHOR_LABELS = PHOTO_LABELS.filter((l) => l !== 'not anchored' && l !== 'no trusted time')
+    {
+      const early = CAPTURE + 30_000
+      const { anchor, read } = anchorOf(early)
+      const proof = { ...proof0, timestamp: { tsr: token.tsr }, anchor }
+      file({ name: '103-jpeg-timestamp-after-anchor-block', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+        verifierClock: CAPTURE + day,
+        chainRead: read,
+        expected: {
+          outcome: 'authentic',
+          labels: [...TS_ANCHOR_LABELS, 'no trusted time', 'timestamp evidence invalid'].sort(),
+          not_evaluated: [],
+          core_hash: hashOf(proof),
+          level: { claimed: 'tee', proven: 'none', ceiling: 'amber' },
+          validated_at: { instant: new Date(early).toISOString(), source: 'anchor' }
+        },
+        notes: 'A valid token and a verified anchor over the same core, and the token\'s `genTime` is **after** the block that already anchors it. A token is validated at its own `genTime`, which whoever holds the TSA key chooses; the block time is chosen by nobody. When both are present the token must predate the block, and its signer certificate must still have been valid at the block (§6.2). This one fails the first: both labels of §8 for the token, and the block dates the capture.' })
+    }
+    {
+      const late = CAPTURE + 400 * day
+      const { anchor, read } = anchorOf(late)
+      const proof = { ...proof0, timestamp: { tsr: token.tsr }, anchor }
+      file({ name: '104-jpeg-timestamp-signer-expired-at-anchor', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+        verifierClock: CAPTURE + 500 * day,
+        chainRead: read,
+        expected: {
+          outcome: 'authentic',
+          labels: [...TS_ANCHOR_LABELS, 'no trusted time', 'timestamp evidence invalid'].sort(),
+          not_evaluated: [],
+          core_hash: hashOf(proof),
+          level: { claimed: 'tee', proven: 'none', ceiling: 'amber' },
+          validated_at: { instant: new Date(late).toISOString(), source: 'anchor' }
+        },
+        notes: 'The same token, and an anchor mined **400 days** after the capture — after the TSA signer\'s certificate expired (it lives a year). The token\'s `genTime` is inside that certificate\'s life and predates the block, so validated at `genTime` alone it holds. But a core first anchored after the certificate expired was stamped, as far as anything can show, by a key that was no longer valid: exactly what a TSA key leaked after its expiry would produce, backdated into the window. With an anchor, the signer must also be valid at the block time (§6.2); without one nothing bounds that risk, and `threat-model.md` §5.4 says so.' })
+    }
+  }
+
+  {
+    const { proof, genTime } = stampedRegistered({}, undefined, 'other-app')
+    file({ name: '106-jpeg-attestation-app-not-admitted', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      keyStatus: statusStatement(Date.parse(genTime), 1),
+      expected: {
+        outcome: 'authentic',
+        labels: [...STAMPED_GREEN, 'attestation app not admitted'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
+        validated_at: { instant: genTime, source: 'timestamp' }
+      },
+      notes: 'Vector 100 with a chain whose leaf says the key was created by an app signed with a certificate the log does not admit: `attestationApplicationId.signature_digests` holds no digest from the log\'s `app_signing_digests` in `_trust/logs.json` (§7). The hardware is genuine and the key is in the log, so the level stands; the app is not one the registry vouches for, so the ceiling is **amber**, *attestation app not admitted*. Not red: this is a claim the evidence does not reach, not a forgery.' })
+  }
+
+  {
+    const { proof, genTime } = stampedRegistered({}, undefined, 'no-app-id')
+    file({ name: '107-jpeg-attestation-app-not-checked', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      keyStatus: statusStatement(Date.parse(genTime), 1),
+      expected: {
+        outcome: 'authentic',
+        labels: [...STAMPED_GREEN, 'attestation app not checked'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
+        validated_at: { instant: genTime, source: 'timestamp' }
+      },
+      notes: 'Vector 100 with a chain whose leaf carries no `attestationApplicationId`. There is nothing to compare with the log\'s declared digests, and a verifier holding no declaration for the log is in the same place: *attestation app not checked*, **amber**, never red (§7). Green claims the key was created by a known app build (`threat-model.md` §1), so a verifier that cannot check it does not say green.' })
+  }
+
+  {
+    const { proof: stamped, genTime } = stampedRegistered()
+    const body: { [key: string]: Json } = { source: 'playIntegrity', verdict: 'failed', evaluated_at: CAPTURE + 1000 }
+    const proof = { ...stamped, integrity: { ...body, sig: signEs256(integrityMessage(coreHash(stamped), body), logKey).toString('base64url') } }
+    file({ name: '109-jpeg-integrity-failed-caps-green', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      keyStatus: statusStatement(Date.parse(genTime), 1),
+      expected: {
+        outcome: 'authentic',
+        labels: [...STAMPED_GREEN.filter((l) => l !== 'integrity unevaluated'), 'integrity failed'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
+        validated_at: { instant: genTime, source: 'timestamp' }
+      },
+      notes: 'Vector 100, the green, with a registry-signed integrity verdict of `failed`. §7: a valid `failed` caps the ceiling at **amber** and is shown prominently — the chain proves where the key lives, and Google\'s word that this device failed its integrity check is a reason not to say green however good the chain is. The level stands (`tee`): the verdict is about the device\'s state, not about the key.\n\nThe cap works in one direction only. Deleting the attachment gives *integrity unevaluated*, which caps nothing — so no integrity verdict can be a condition *for* green, and the format does not pretend it is. What a present `failed` can do is refuse green, and a relabelling cannot fake that away: the verdict is inside the signed message.' })
+  }
+
+  {
+    // iOS: no chain in the proof; the level comes from the registry's leaf.
+    const signed = sign(photoCore(baseJpeg, 'image/jpeg', { device: { platform: 'ios', secure_hw: 'secureEnclave', key_id: KEY_ID } }))
+    const leaves = [0, 1, 2].map((i) => i === 1 ? leafHash(coreHash(signed)) : leafHash(createHash('sha256').update(`another capture ${i}`).digest()))
+    const root = nodeHash(nodeHash(leaves[0] as Buffer, leaves[1] as Buffer), leaves[2] as Buffer)
+    const BLOCK = CAPTURE + 90_000
+    const proof = {
+      ...signed,
+      registry: registryFor({ secureHw: 'secureEnclave' }),
+      anchor: { chain: 'base-sepolia', tx: '0x' + createHash('sha256').update('the ios anchoring transaction').digest('hex'), block: 46561942, anchor_id: 2, index: 1, tree_size: 3, root: root.toString('base64url'), merkle_path: [leaves[0] as Buffer, leaves[2] as Buffer].map((h) => h.toString('base64url')) }
+    }
+    file({ name: '110-jpeg-secure-enclave-from-registry', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      keyStatus: statusStatement(BLOCK, 1),
+      chainRead: { root: root.toString('base64url'), tree_size: 3, block_time: BLOCK },
+      expected: {
+        outcome: 'authentic',
+        labels: [...GREEN_LABELS.filter((l) => l !== 'not anchored'), 'level from registry records'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'secureEnclave', proven: 'secureEnclave', ceiling: 'green' },
+        validated_at: { instant: new Date(BLOCK).toISOString(), source: 'anchor' }
+      },
+      notes: 'An iOS capture: no attestation chain in the proof, a `registry` attachment whose leaf records `secureEnclave` for this key, a verified anchor for the instant and the log\'s signed status at it. §7, *The Secure Enclave level*: this version defines no offline binding between a proof and an App Attest attestation, so the level is reachable **only through the registry**, and it is shown as what it is — *level from registry records*, the registry\'s word, like *corroborated* for a position. The inclusion proof shows the log recorded it; nothing in the file shows the Secure Enclave. A verifier that presented this level as checkable without the registry would be claiming a check it did not make.' })
   }
 
   {
@@ -1041,15 +1370,6 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
   const day = 86_400_000
   const chainOf = (name: string): string[] => (JSON.parse(readFileSync(join(VECTORS, '_chains', `${name}.json`), 'utf8')) as { chain: string[] }).chain
 
-  const tokenNamed = (name: string, coreHashHex: string): { tsr: string, genTime: string } => {
-    const file = JSON.parse(readFileSync(join(VECTORS, '_timestamps', `${name}.json`), 'utf8')) as { core_hash: string, gen_time: string, tsr: string }
-    if (file.core_hash !== coreHashHex) {
-      throw new Error(
-        `_timestamps/${name}.json is a token over ${file.core_hash}, and this vector's core hash is ${coreHashHex}. ` +
-        'Re-mint: npx tsx src/make-timestamp-tokens.ts ' + coreHashHex)
-    }
-    return { tsr: file.tsr, genTime: file.gen_time }
-  }
 
   const stamped = (name: string, extra: Proof = {}): { proof: Proof, genTime: string } => {
     const base = { ...sign(photoCore(baseJpeg, 'image/jpeg')), ...extra }
@@ -1158,16 +1478,15 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
   const day = 86_400_000
   const logKey = createPrivateKey({ key: Buffer.from(TEST_LOG_KEY_PKCS8_BASE64, 'base64'), format: 'der', type: 'pkcs8' })
 
-  /** §6.2: `core_hash ‖ UTF-8(verdict)`, signed by the registry's key. */
+  /** §6.2: `"vcap/1.0/integrity" ‖ core_hash ‖ JCS(body)`, signed by the registry's key. */
   const integrityFor = (proof: Proof, o: { verdict?: string, source?: string, forge?: boolean, otherKey?: boolean } = {}): Proof => {
-    const verdict = o.verdict ?? 'hardware'
-    const message = Buffer.concat([coreHash(proof), Buffer.from(verdict, 'utf8')])
+    const body: { [key: string]: Json } = { source: o.source ?? 'playIntegrity', verdict: o.verdict ?? 'hardware', evaluated_at: CAPTURE + 1000 }
     const key = o.otherKey ? otherKey : logKey
     const signature = o.forge
       // A signature over another verdict: the bytes are real, the claim is not.
-      ? signEs256(Buffer.concat([coreHash(proof), Buffer.from('basic', 'utf8')]), key)
-      : signEs256(message, key)
-    return { source: o.source ?? 'playIntegrity', verdict, evaluated_at: CAPTURE + 1000, sig: signature.toString('base64url') }
+      ? signEs256(integrityMessage(coreHash(proof), { ...body, verdict: 'basic' }), key)
+      : signEs256(integrityMessage(coreHash(proof), body), key)
+    return { ...body, sig: signature.toString('base64url') }
   }
 
   const withIntegrity = (o: Parameters<typeof integrityFor>[1] = {}): Proof => {

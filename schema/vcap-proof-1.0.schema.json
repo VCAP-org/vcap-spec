@@ -36,22 +36,25 @@
         },
         "w": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "maximum": 4294967295
         },
         "h": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "maximum": 4294967295
         },
         "duration_ms": {
-          "type": "integer",
-          "minimum": 0
+          "$ref": "#/$defs/uint32"
         },
         "hash": {
           "$ref": "#/$defs/bytes32"
         },
         "segment_count": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "maximum": 4294967295,
+          "description": "uint32: n in the §5 segment message is uint32 BE"
         }
       }
     },
@@ -96,21 +99,19 @@
           "$ref": "#/$defs/identifier"
         },
         "layout": {
-          "enum": [
-            "photo-bch-v3",
-            "video-rep-v1"
-          ]
+          "$ref": "#/$defs/identifier",
+          "description": "Extensible (§9): photo-bch-v3 and video-rep-v1 in this version; a verifier that does not implement a layout reports *watermark not evaluated*."
         },
         "payload_bits": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "maximum": 4294967295
         },
         "ecc": {
           "$ref": "#/$defs/identifier"
         },
         "strength": {
-          "type": "integer",
-          "minimum": 0
+          "$ref": "#/$defs/uint32"
         },
         "mark_id": {
           "type": "integer",
@@ -124,8 +125,7 @@
       "additionalProperties": false,
       "properties": {
         "device_clock": {
-          "type": "integer",
-          "minimum": 0,
+          "$ref": "#/$defs/uint53",
           "description": "milliseconds since the Unix epoch, UTC"
         }
       }
@@ -156,8 +156,7 @@
           "maximum": 180000000
         },
         "acc_cm": {
-          "type": "integer",
-          "minimum": 0
+          "$ref": "#/$defs/uint32"
         },
         "alt_cm": {
           "type": "integer",
@@ -170,8 +169,7 @@
           "description": "How the device obtained the fix: gnss, network or manual. Extensible (§9); an unknown value is still a declared position."
         },
         "at": {
-          "type": "integer",
-          "minimum": 0,
+          "$ref": "#/$defs/uint53",
           "description": "device clock when the fix was taken, ms since the Unix epoch; may precede time.device_clock"
         },
         "evidence": {
@@ -238,8 +236,7 @@
         ],
         "properties": {
           "gop": {
-            "type": "integer",
-            "minimum": 0
+            "$ref": "#/$defs/uint32"
           },
           "range": {
             "type": "array",
@@ -287,8 +284,7 @@
           "$ref": "#/$defs/bytes32"
         },
         "leaf_index": {
-          "type": "integer",
-          "minimum": 0
+          "$ref": "#/$defs/uint53"
         },
         "leaf": {
           "type": "object",
@@ -326,8 +322,7 @@
               "pattern": "^[0-9a-f]{64}$"
             },
             "registered_at": {
-              "type": "integer",
-              "minimum": 0
+              "$ref": "#/$defs/uint53"
             }
           }
         },
@@ -350,11 +345,11 @@
           "properties": {
             "tree_size": {
               "type": "integer",
-              "minimum": 1
+              "minimum": 1,
+              "maximum": 9007199254740991
             },
             "timestamp": {
-              "type": "integer",
-              "minimum": 0
+              "$ref": "#/$defs/uint53"
             },
             "root_hash": {
               "$ref": "#/$defs/bytes32"
@@ -403,20 +398,18 @@
           "pattern": "^0x[0-9a-f]{64}$"
         },
         "block": {
-          "type": "integer",
-          "minimum": 0
+          "$ref": "#/$defs/uint53"
         },
         "anchor_id": {
-          "type": "integer",
-          "minimum": 0
+          "$ref": "#/$defs/uint53"
         },
         "index": {
-          "type": "integer",
-          "minimum": 0
+          "$ref": "#/$defs/uint53"
         },
         "tree_size": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "maximum": 9007199254740991
         },
         "root": {
           "$ref": "#/$defs/bytes32"
@@ -441,11 +434,8 @@
       ],
       "properties": {
         "source": {
-          "enum": [
-            "playIntegrity",
-            "appAttest",
-            "none"
-          ]
+          "$ref": "#/$defs/identifier",
+          "description": "Extensible (§9): playIntegrity, appAttest, none in this version; a verifier that does not know the value reports *integrity unevaluated*."
         },
         "verdict": {
           "enum": [
@@ -456,11 +446,11 @@
           ]
         },
         "evaluated_at": {
-          "type": "integer",
-          "minimum": 0
+          "$ref": "#/$defs/uint53"
         },
         "sig": {
-          "$ref": "#/$defs/p1363"
+          "$ref": "#/$defs/p1363",
+          "description": "registry key ES256 over \"vcap/1.0/integrity\" ‖ core_hash ‖ JCS(attachment without sig)"
         }
       }
     },
@@ -479,8 +469,8 @@
           "description": "Where the status came from. Extensible (§9); googleStatusList is Android's attestation status list."
         },
         "fetched_at": {
-          "type": "integer",
-          "minimum": 0
+          "$ref": "#/$defs/uint53",
+          "description": "registry clock when the status was read, ms. Not a revocation date."
         },
         "entries": {
           "type": "array",
@@ -506,6 +496,10 @@
               "reason": {
                 "type": "string",
                 "maxLength": 64
+              },
+              "revoked_at": {
+                "$ref": "#/$defs/uint53",
+                "description": "the revocation date the source itself gives, ms; absent when the source gives none (§6.2)"
               }
             }
           }
@@ -540,11 +534,11 @@
         "radius_m": {
           "type": "integer",
           "minimum": 1,
+          "maximum": 4294967295,
           "description": "the circle around the declared position the operator was asked about; required by §6.2 when method is camara-location-verification"
         },
         "at": {
-          "type": "integer",
-          "minimum": 0,
+          "$ref": "#/$defs/uint53",
           "description": "registry clock when the operator answered, ms"
         },
         "operator_ref": {
@@ -596,6 +590,18 @@
       "type": "string",
       "pattern": "^[0-9a-f]{2,40}$",
       "description": "certificate serial number, lowercase hex, no leading 0x"
+    },
+    "uint32": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295,
+      "description": "§6.1: an unsigned 32-bit integer, written as an integer literal"
+    },
+    "uint53": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "§6.1: a non-negative integer no larger than 2^53 − 1, the largest every JSON implementation reads exactly; timestamps in ms and counters that enter a uint64 message field"
     }
   },
   "allOf": [
