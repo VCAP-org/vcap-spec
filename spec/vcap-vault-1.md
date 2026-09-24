@@ -167,7 +167,5 @@ The deterministic encoder and its keys/nonces must **never** encrypt real data.
 These vectors are separate from the numbered proof conformance corpus; adding a
 storage format does not change any existing proof vector or verdict.
 
-This is not an external cryptographic audit. Native phone interoperability,
-browser recovery UX, custodian blobs, storage integration and operational
-retention remain separate work. Publishing this decoder does not activate any
-vault capability or authorize an upload from an enrolled phone.
+This is not an external cryptographic audit. The decoder establishes no
+authorization to upload or store anything; it only recovers bytes.

@@ -32,9 +32,9 @@ the first build, SDK or sealed file that reaches somebody else. `CHANGELOG.md` i
   proof-format revision. Offline decoder in `tools/src/vault/`; public test-only
   keys and deterministic interoperability vectors in `tools/test/vault-vectors/`.
   Decryption never establishes a proof verdict.
-- `reviews/` — the review notes of the work order's steps 2 and 3. Findings are
-  graded BLOCKING / SHOULD / NOTE; the draft is amended, the note stays as the
-  record of why.
+- `reviews/` — historical review notes (cryptographic, implementability).
+  Findings are graded BLOCKING / SHOULD / NOTE; the spec absorbed them and is
+  authoritative. Do not update a review to match the spec.
 - `schema/` — JSON Schema plus a validator runnable from CI, including the
   shape of a published conformance report.
 - `vectors/` — one directory per case, each with the input, the proof and the
@@ -65,35 +65,27 @@ the first build, SDK or sealed file that reaches somebody else. `CHANGELOG.md` i
   it meets it.
   Before that a breaking change is allowed, and `CHANGELOG.md` says it broke.
 
-## Product invariants
+## Commands
 
-These hold for every line of code in every repository:
+Node 22 (`.nvmrc`), from `tools/`. CI (`.github/workflows/ci.yml`) runs, in order:
 
-- **The verification path never contains one of our servers.** If a component
-  becomes necessary to produce a verdict, that is a design error.
-- **Server registration is always optional**: capturing and verifying work with
-  no account and no network.
-- **A watermark alone is never a green verdict**: without a valid signature it is
-  "origin traced", not "authentic".
-- **A missing field yields a weaker verdict, not an error**: no timestamp means
-  "no trusted time", and the verifier says so.
-- Failures are published alongside successes.
-- Location is never "guaranteed": the reached level is declared
-  (declared, corroborated, authenticated).
+```
+npm ci
+npm run typecheck
+npm test                     # vitest: vectors, vault, watermark layouts, conformance docs vs corpus
+npm run validate             # every vector's proof.json / expected.json against the schema
+npm run manifest:check       # vectors/MANIFEST.json matches vectors/
+npm run conformance:check    # conformance report: corpus version, manifest hash, vector count
+npm run generate:edge-cases  # edge-case generator still agrees with the reference verifier
+```
 
-## Naming
+## Project rules
 
-`vcap` (verified capture) is the internal codename and the only name allowed in
-identifiers: package names, bundle ids, trailer magic, proof version string,
-database schemas, log prefixes. The product brand is provisional and must never
-appear in anything expensive to rename — it lives only in UI strings (single
-localization file) and store metadata.
+Product invariants, naming, definition of done, language and license are in
+`README.md`; they bind here too.
 
-## Definition of done
+## Public repository
 
-In main, tested, conformance vectors passing in CI, and documented where the next
-person needs it. Not "works on my branch".
-
-## Language
-
-Code, comments, README and commit messages in English.
+Never name private repositories, internal decision codes or internal document
+paths. Frozen vector notes, and `tools/src/derive-ios-vectors.ts` that
+reproduces them byte for byte, are the only exception and are not edited.
