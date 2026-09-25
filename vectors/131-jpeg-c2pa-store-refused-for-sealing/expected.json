@@ -1,0 +1,25 @@
+{
+  "kind": "file",
+  "outcome": "no_proof_found",
+  "labels": [],
+  "not_evaluated": [],
+  "writer": {
+    "expect": "refuse",
+    "error": "VCAP_C2PA_MANIFEST_PRESENT"
+  },
+  "c2pa": {
+    "validator": "c2pa-rs 0.91.0 (c2pa-node 0.9.8), trust anchor _trust/c2pa-test/root.pem",
+    "validation_state": "Trusted",
+    "success": [
+      "assertion.dataHash.match",
+      "assertion.hashedURI.match",
+      "claimSignature.insideValidity",
+      "claimSignature.validated",
+      "signingCredential.trusted"
+    ],
+    "informational": [
+      "signingCredential.ocsp.skipped"
+    ],
+    "failure": []
+  }
+}

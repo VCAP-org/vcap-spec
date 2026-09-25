@@ -1626,6 +1626,20 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
     notes: 'Vector 23 with a C2PA `uuid` manifest box inserted after `ftyp` — where C2PA 2.4 Annex A.5.3 puts the manifest store — **after** sealing. The mirror of vector 02: on a JPEG §4.1 excludes the JUMBF APP11 and the manifest may come and go; on ISO-BMFF nothing is excluded, the box is inside the canonical bytes, `media.hash` no longer matches and the photo is *tampered*.\n\nThis is the vector behind §4.1\'s "video embeds the manifest BEFORE sealing" and the same rule for HEIC. The asymmetry is not a preference: a C2PA `c2pa.hash.data` over a JPEG covers to end of file, so a manifest written before the trailer would be broken by the trailer, while a `c2pa.hash.bmff.v3` with `/free` excluded is not — so each container has exactly one order in which both bindings hold (`spec/c2pa-interop-1.0.md` §3).' })
 }
 
+// §4.1 (1.1): only the C2PA Manifest Store's JUMBF is excluded. A JUMBF box of
+// another type — JPEG 360, JPEG Privacy and Security, anything whose
+// description box names a type other than the store's — is content, as it is
+// to C2PA (15.12.1.2), and adding one after sealing is an edit.
+{
+  const box = (type: string, payload: Buffer): Buffer => bmffBox(type, payload)
+  const description = box('jumd', Buffer.concat([Buffer.from('6a736f6e00110010800000aa00389b71', 'hex'), Buffer.from([0x03]), Buffer.from('org.example.metadata\0', 'utf8')]))
+  const superbox = box('jumb', Buffer.concat([description, box('json', Buffer.from('{"example":true}', 'utf8'))]))
+  const segment = app11(Buffer.concat([Buffer.from('JP', 'ascii'), Buffer.from([0, 1, 0, 0, 0, 1]), superbox]))
+  file({ name: '122-jpeg-jumbf-other-than-c2pa-added-after-sealing', ext: 'jpg', file: insertAfterApp0(jpegSealed, segment), proof: jpegProof,
+    expected: { outcome: 'tampered', labels: [], not_evaluated: [], core_hash: hashOf(jpegProof) },
+    notes: 'Vector 01 with a JUMBF APP11 segment inserted after sealing whose box is **not** a C2PA Manifest Store: a superbox whose description box names the JSON content type (6A736F6E-0011-0010-8000-00AA00389B71), labelled `org.example.metadata` — the shape JPEG 360 or JPEG Privacy and Security metadata takes. C2PA hashes such a segment (15.12.1.2: only the store\'s APP11 segments are excluded), and since 1.1 so does §4.1: a JUMBF segment is removed from the canonical bytes only when its box is the C2PA store or its type cannot be read. The segment is content, the canonical bytes changed, and the photo is **tampered**. Before 1.1 every "JP" segment was removed and this file read *authentic*; vectors 02 and 68, whose JUMBF-shaped segment has no readable type, keep their verdict.' })
+}
+
 // §3.1: a sidecar never rescues a trailer that was found and is broken. The
 // trailer is structurally valid and its CRC fails: somebody edited the file,
 // and that is the verdict whatever sits next to it.

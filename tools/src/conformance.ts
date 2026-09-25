@@ -88,16 +88,24 @@ export const runVector = (name: string, anchors = trust()): VectorResult => {
 
   // `verifier_clock`, `key_status` and `chain_read` are inputs the vector
   // declares, not fields a verifier produces: destructured out with the rest.
-  const { kind, debug: _debug, schema_valid: schemaValid, verifier_clock: verifierClock, key_status: keyStatus, chain_read: chainRead, ...want } = expected
+  // `writer` is for writer suites and `c2pa` is what a C2PA validator reports:
+  // neither is a vcap verdict.
+  const { kind, debug: _debug, schema_valid: schemaValid, verifier_clock: verifierClock, key_status: keyStatus, chain_read: chainRead, writer: _writer, c2pa: _c2pa, ...want } = expected
   const disagree = (got: object): VectorResult =>
     ({ name, kind, pass: false, detail: `expected ${JSON.stringify(want)}, got ${JSON.stringify(got)}` })
 
   if (kind === 'file' || kind === 'container') {
-    const input = readdirSync(path).find((f) => f.startsWith('input.') && !f.endsWith('.vcap')) as string
+    // A `*.c2pa` file, where present, is the C2PA Manifest Store the caller
+    // hands over (§3.2): an input beside the file, like the sidecar.
+    const files = readdirSync(path)
+    const input = files.find((f) => f.startsWith('input.') && !f.endsWith('.vcap') && !f.endsWith('.c2pa')) as string
     const sidecarPath = join(path, `${input}.vcap`)
+    const store = files.find((f) => f.endsWith('.c2pa'))
+    const storePath = join(path, store ?? 'input.c2pa')
     const verdict = verifyFile({
       file: readFileSync(join(path, input)),
       sidecar: existsSync(sidecarPath) ? readFileSync(sidecarPath) : undefined,
+      externalStore: existsSync(storePath) ? readFileSync(storePath) : undefined,
       recomputeSegments: kind === 'container',
       trust: anchors,
       clock: verifierClock ? new Date(verifierClock) : undefined,

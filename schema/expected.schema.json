@@ -144,6 +144,68 @@
         }
       }
     },
+    "proof_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "description": "\u00a73.2: where the proof was read. Diagnostic, never a label. For `c2pa` (an embedded store, or the external one the caller handed over), `manifest` is the label of the C2PA manifest that carried the proof and `depth` how far up the parentOf chain it sits (0: the active manifest).",
+      "properties": {
+        "kind": {
+          "enum": [
+            "trailer",
+            "sidecar",
+            "c2pa"
+          ]
+        },
+        "manifest": {
+          "type": "string"
+        },
+        "depth": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "c2pa"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "manifest",
+              "depth"
+            ]
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "manifest"
+                  ]
+                },
+                {
+                  "required": [
+                    "depth"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "frames_name_capture": {
+      "type": "boolean",
+      "description": "\u00a73.2: whether a GOP of the received file carries a vcap SEI naming the proof's capture_id. A locating hint, never evidence; present when the verifier read the container of a video proof."
+    },
     "verifier_clock": {
       "type": "integer",
       "minimum": 0,
@@ -204,6 +266,81 @@
         "block_time": {
           "type": "integer",
           "minimum": 0
+        }
+      }
+    },
+    "writer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expect"
+      ],
+      "description": "For writer suites, never compared with a reader's verdict. `refuse`: sealing `input.<ext>` must fail with `error`. `not_covered`: nothing a vcap writer produces is exercised here, and a writer suite declares the vector NOT_COVERED.",
+      "properties": {
+        "expect": {
+          "enum": [
+            "refuse",
+            "not_covered"
+          ]
+        },
+        "error": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "expect": {
+                "const": "refuse"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "error"
+            ]
+          }
+        }
+      ]
+    },
+    "c2pa": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "validator"
+      ],
+      "description": "Informative: what the named C2PA validator reports about the file's Content Credentials, active manifest only (`validation_state` and the status codes of C2PA 15.2.2, sorted), or the error it refuses the file with. No vcap verdict reads it.",
+      "properties": {
+        "validator": {
+          "type": "string"
+        },
+        "validation_state": {
+          "type": "string"
+        },
+        "success": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "informational": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "failure": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "error": {
+          "type": "string"
         }
       }
     }

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { TYPE, jpegSegments, jumbfGroups } from './jumbf.js'
 
 /**
  * §4.1 canonical bytes. The trailer is already stripped by the caller; this is
@@ -18,35 +19,33 @@ export const detectContainer = (bytes: Buffer): Container => {
   return 'unknown'
 }
 
-const APP11 = 0xeb
-const SOS = 0xda
-const JUMBF_ID = Buffer.from('JP', 'ascii')
-
-// Walks the marker segments up to SOS; entropy-coded data and everything after
-// it are copied verbatim. Only APP11 segments whose payload starts with "JP"
-// are dropped — those are the JUMBF boxes C2PA writes after sealing.
+/**
+ * §4.1 for JPEG: remove the JUMBF APP11 segments (payload starting "JP") —
+ * except those of a JUMBF box that is readable and is **not** a C2PA Manifest
+ * Store. Those are content, as they are to C2PA (15.12.1.2: APP11 segments of
+ * JPEG 360 or JPEG Privacy and Security are hashed), so a box of that kind
+ * added after sealing is an edit. A JUMBF segment whose box type cannot be
+ * read stays excluded, as every JUMBF segment was before 1.1: the vectors that
+ * carry one (02, 68) keep their verdict.
+ *
+ * The walk stops at SOS; entropy-coded data, fill bytes and length-less
+ * markers are kept where they are.
+ */
 export const stripC2paFromJpeg = (jpeg: Buffer): Buffer => {
-  const kept: Buffer[] = [jpeg.subarray(0, 2)]
-  let pos = 2
-  while (pos + 4 <= jpeg.length) {
-    if (jpeg[pos] !== 0xff) throw new Error('JPEG: marker expected')
-    const marker = jpeg[pos + 1] as number
-    // §4.1 keeps fill bytes (0xFF padding before a marker) and length-less
-    // markers (TEM, RSTn) as they are: they are content, not a segment to judge.
-    if (marker === 0xff || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) { kept.push(jpeg.subarray(pos, pos + 1 + (marker === 0xff ? 0 : 1))); pos += marker === 0xff ? 1 : 2; continue }
-    if (marker === SOS) break
-    const length = jpeg.readUInt16BE(pos + 2)
-    // The length counts itself, so it is at least 2, and the segment ends
-    // inside the file. A walker that let `subarray` clip an overrun would hash
-    // a file it had misread.
-    if (length < 2 || pos + 2 + length > jpeg.length) throw new Error('JPEG: a segment length runs past the end of the file')
-    const segment = jpeg.subarray(pos, pos + 2 + length)
-    const payload = segment.subarray(4)
-    const isC2pa = marker === APP11 && payload.subarray(0, 2).equals(JUMBF_ID)
-    if (!isC2pa) kept.push(segment)
-    pos += 2 + length
+  const segments = jpegSegments(jpeg)
+  const dropped = new Set<number>()
+  for (const group of jumbfGroups(jpeg, segments)) {
+    if (group.type !== null && group.type !== TYPE.store) continue
+    for (const s of group.segments) dropped.add(s.start)
   }
-  kept.push(jpeg.subarray(pos))
+  const kept: Buffer[] = []
+  let at = 0
+  for (const s of segments) {
+    if (!dropped.has(s.start)) continue
+    kept.push(jpeg.subarray(at, s.start))
+    at = s.end
+  }
+  kept.push(jpeg.subarray(at))
   return Buffer.concat(kept)
 }
 

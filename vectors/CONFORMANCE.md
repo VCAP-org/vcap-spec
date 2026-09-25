@@ -1,6 +1,6 @@
 # Claiming conformance with a vcap-spec corpus
 
-This file says what the sentence *"conformant with vcap-spec corpus 2.0.0"*
+This file says what the sentence *"conformant with vcap-spec corpus 2.1.0"*
 has to mean for a consumer to be able to check it, and how to produce the
 report that backs it. `README.md` next to it describes the vectors themselves;
 this one is about the claim.
@@ -30,7 +30,7 @@ Two corollaries, and they are what a reviewer should check in someone else's
 runner:
 
 - **Pin the count, do not floor it.** `expect(count).toBeGreaterThanOrEqual(30)`
-  over a corpus of 121 hides the loss of 91 vectors. Compare against
+  over a corpus of 147 hides the loss of 117 vectors. Compare against
   `vector_count` in `MANIFEST.json` and fail on inequality — that also catches
   the corpus that is newer than the runner, which is the useful half.
 - **A vector you cannot run is declared, not dropped.** A runner that has no
@@ -47,11 +47,11 @@ reference verifier, measured against the corpus in the same commit.
 ```json
 {
   "implementation": "acme-verify 3.2 (https://example.invalid/acme-verify)",
-  "corpus_version": "2.0.0",
+  "corpus_version": "2.1.0",
   "manifest_sha256": "…64 hex…",
-  "vectors_declared": 121,
-  "vectors_run": 121,
-  "passed": 121,
+  "vectors_declared": 147,
+  "vectors_run": 147,
+  "passed": 147,
   "failed": [],
   "not_run": []
 }
@@ -59,8 +59,13 @@ reference verifier, measured against the corpus in the same commit.
 
 A vector passes when the implementation produces the same `outcome`, `labels`,
 `not_evaluated`, `core_hash`, `segments.verified` and, where the vector carries
-them, `level`, `validated_at` and `location` as `expected.json`, and the same
-`core_bytes_hex` for `jcs` vectors. Extra diagnostics a verdict carries are not
+them, `level`, `validated_at`, `location`, `proof_source` and
+`frames_name_capture` as `expected.json`, and the same `core_bytes_hex` for
+`jcs` vectors. `writer` and `c2pa` are not a reader's verdict and are never
+compared. A runner hands the verifier every input a directory holds — the
+`.vcap` sidecar, and a `*.c2pa` file as the C2PA store its caller supplies.
+A verifier without a C2PA carrier reader declares vectors 123–147 in
+`not_run`, with that reason. Extra diagnostics a verdict carries are not
 failures; the vector pins what it pins.
 
 Check a report — yours or somebody else's — against the schema and the two
@@ -101,5 +106,5 @@ be read and re-implemented rather than imported.
   arithmetic and `vectors/_watermark/agreement-floor.json` for the 0.85 floor
   a `video-rep-v1` decoder must not report an id below.
 - **Not a claim about a newer corpus.** The corpus grows by addition, so
-  passing corpus 2.0.0 says nothing about the vectors a later corpus adds, and
-  everything about 2.0.0's. State the version you ran.
+  passing corpus 2.1.0 says nothing about the vectors a later corpus adds, and
+  everything about 2.1.0's. State the version you ran.

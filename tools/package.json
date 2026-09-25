@@ -12,6 +12,7 @@
     "test": "vitest run",
     "generate": "tsx src/generate.ts",
     "generate:edge-cases": "tsx src/generate-edge-cases.ts",
+    "generate:c2pa": "tsx src/make-c2pa-vectors.ts",
     "validate": "tsx src/validate.ts",
     "manifest": "tsx src/manifest.ts",
     "manifest:check": "tsx src/manifest.ts --check",
@@ -20,6 +21,7 @@
     "vault:decrypt": "tsx src/vault/cli.ts"
   },
   "devDependencies": {
+    "@contentauth/c2pa-node": "0.9.8",
     "@noble/curves": "^2.4.0",
     "@peculiar/x509": "^2.1.0",
     "@types/node": "^22.10.5",

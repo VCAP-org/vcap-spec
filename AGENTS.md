@@ -24,10 +24,13 @@ the first build, SDK or sealed file that reaches somebody else. `CHANGELOG.md` i
   false-positive rate on real photographic content at volume above all).
   Informative. Every number
   carries its corpus; a number without its conditions does not go in.
-- `spec/c2pa-interop-1.0.md` — what vcap and C2PA each prove, the mapping onto
-  C2PA assertions, how the two bindings co-exist in one file, the sidecar's
-  rationale and what survives each transformation. Informative except where
-  marked, and every marked sentence has a vector.
+- `spec/c2pa-interop-1.0.md` (version 1.1; the file name stays because frozen
+  vector notes cite it) — what vcap and C2PA each prove, the proof as a C2PA
+  assertion and the writer rules around it, how the two bindings co-exist in
+  one file, the sidecar's rationale and what survives each transformation.
+  Informative except where marked, and every marked sentence has a vector.
+  The reader's rules for Content Credentials as a carrier are normative in
+  `vcap-proof-1.0.md` §3.2.
 - `spec/vcap-vault-1.md` — separate encrypted storage envelope draft, not a
   proof-format revision. Offline decoder in `tools/src/vault/`; public test-only
   keys and deterministic interoperability vectors in `tools/test/vault-vectors/`.
@@ -43,7 +46,12 @@ the first build, SDK or sealed file that reaches somebody else. `CHANGELOG.md` i
   written from the spec to prove the vectors consistent; it is not the
   implementation others copy. When it disagrees with an expected verdict, the
   review decides which one is wrong — the generator refuses to write a vector
-  the verifier fails.
+  the verifier fails. The C2PA carrier reader (`jumbf.ts`, `cbor.ts`,
+  `carrier.ts`) reads structure only and has no dependency; the vectors with
+  real Content Credentials (123–147) are minted on demand by
+  `make-c2pa-vectors.ts` through `@contentauth/c2pa-node`, a devDependency
+  nothing on the verification path imports, and committed because c2pa-rs
+  salts every assertion at random.
   `tools/corpus-drift.sh` is the one exception to "tooling that runs here": it
   runs in the **consumers**, delivered by the submodule, and tells them when
   their pin has fallen behind this repository's main. It lives here because
@@ -78,6 +86,12 @@ npm run manifest:check       # vectors/MANIFEST.json matches vectors/
 npm run conformance:check    # conformance report: corpus version, manifest hash, vector count
 npm run generate:edge-cases  # edge-case generator still agrees with the reference verifier
 ```
+
+On demand, never in CI: `npm run generate` (numbered vectors it owns,
+byte-stable), `npm run generate:c2pa` (the C2PA vectors, with
+`C2PATOOL=<path>` to record c2patool's answer in their notes). CI installs
+with `SKIP_RUST_BUILD=1`: c2pa-node's postinstall would otherwise fetch or
+build a native binary no CI step uses.
 
 ## Project rules
 
