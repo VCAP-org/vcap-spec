@@ -57,7 +57,9 @@ mitigated, and the verifier UI must say so.
   carries no authorship. A watermark alone is never green: without a valid
   signature it is *origin traced*, never *authentic*.
 - **Anything about a C2PA manifest** sitting next to the proof: outside the
-  canonical bytes, verified by its own signature, separately.
+  canonical bytes, verified by its own signature, separately — also when it
+  carries the proof, which a verifier reads without believing anything the
+  manifest says (`vcap-proof-1.0.md` §3.2).
 
 ## 3. Assets and trust boundaries
 
@@ -114,6 +116,8 @@ Boundaries, each enforced by code and tested:
 | Nested trailer | wraps a hardware-sealed original in a weaker proof | nested trailer detected and reported; writers refuse | none: *nested proof* |
 | Metadata stripping by a platform | social network removes the trailer | *no proof found*, distinct from *corrupted*; watermark → *origin traced*, never authentic; sidecar | accepted: provenance lost, origin traceable, never mistaken for tampering |
 | Format confusion | crafts a footer to make an unsealed file look edited | structural footer checks before the CRC (§3) | none |
+| Proof carried by a forged manifest | writes Content Credentials that carry a genuine proof over another file, or declare a file a derivation of a genuine capture | a proof in the active manifest is verified exactly as a sidecar; one found up the `parentOf` chain reaches only what it proves of this file — its bytes or located segments — and is otherwise *no proof found* (§3.2); nothing the manifest says is trusted | none: red at depth 0; a declared derivation is never green unless the proof covers its bytes |
+| Hostile Content Credentials | builds a store to crash, loop or mislead the reader: cycles, deep nesting, oversized lengths, two stores, a proof off the chain, a redacted proof left in place | structure-only reader bounded by its input; a chain walked without revisits to depth 16; no search off the chain; more than one store is none; a redaction listed anywhere is absence (§3.2) | low; hostile-input tests next to vectors 133–142 |
 | Canonicalization divergence | exploits differences between implementations | integers only, no free text, JCS, conformance vectors every implementation runs | low; vectors grow with every finding |
 
 ### 5.2 Against the key and the device
@@ -158,6 +162,7 @@ Boundaries, each enforced by code and tested:
 | Personal data in the public log | leaves carry key identifiers, level, digests, log time — nothing else; the registry mapping stays in the control plane | none by construction, enforced by the plane boundary |
 | Personal data leaking through the plane boundary | allowlist per endpoint, both sides; second net over values; tests assert names and VAT never cross | low |
 | EXIF in the signed file | signed as content; pseudonymous mode must strip **before** sealing | implementation duty of the SDKs |
+| Position and key id in a carried proof | the proof assertion is readable by anyone who dumps the Content Credentials; a carrier redacts it (C2PA 6.8) or carries only `policy.pseudonymous` proofs (`c2pa-interop-1.0.md` §2.1) | accepted and named: carrying the proof publishes it |
 | Server learning what is in a capture | the data plane sees hashes and keys; a stored original is client-side encrypted in mode A and readable by the service in mode B | none for a capture that is not stored; §5.9 for one that is |
 
 ### 5.6 Availability and failure behaviour
@@ -256,6 +261,10 @@ like, and it is the true one.
   *authenticated* level waits for a smartphone chipset with OSNMA.
 
 ## 7. Change log
+
+- 2026-09-25 — Content Credentials as a carrier (`vcap-proof-1.0.md` §3.2).
+  §5.1: a forged manifest carrying a proof, and a hostile store. §5.5: a
+  carried proof is public.
 
 - 2026-09-24 — Review fixes. §5.1: proof transplant onto a video and a
   reassembled video close on the binding rule of §5 (*Locating segments*).

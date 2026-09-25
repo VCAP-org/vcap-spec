@@ -12,6 +12,110 @@ else.
 
 ## Unreleased
 
+### Content Credentials as a carrier — corpus 2.0.0 → **2.1.0**
+
+A minor corpus bump: 26 vectors are new (122–147), 147 in all, and no
+existing vector changed a byte. `vectors/_trust/` gains `c2pa-test/`, so the
+`_trust` fixture hash in `MANIFEST.json` moves.
+
+**Reading the proof (`vcap-proof-1.0.md` §3.1–§3.2)**
+
+- **New, §3.2: a C2PA Manifest Store carries the proof** as the assertion
+  `io.github.vcap-org.vcap.proof`. Where the store is (JPEG APP11 groups
+  reassembled by `En`/`Z`; ISO-BMFF top-level C2PA `uuid` boxes of purpose
+  `manifest`, `original` or `update`, 8-byte offset skipped; a `.c2pa` store
+  the caller hands over, only when none is embedded, never fetched); which
+  manifests (`c2ma`, `c2um`, legacy `c2md`; `c2cm` not read; the active one is
+  the last); which assertion (listed by its own claim, labelled exactly, JSON
+  box, toggles `0x03` or `0x13`; `__n` ignored; both redaction forms of C2PA
+  6.8 are absence); the chain (the one `parentOf` ingredient, depth 1–16, no
+  revisits; `componentOf` and `inputTo` never). More than one embedded store —
+  an `original` beside an `update` included — is no carrier (C2PA 15.5.2.1).
+  Nothing about the manifest is checked: the proof authenticates itself.
+- **Precedence** (§3.1, rewritten in five steps): valid footer and CRC → the
+  trailer, with the sidecar compared as bytes and the active manifest's copy
+  as `JCS(parse(a)) == JCS(parse(b))`; CRC fails → *corrupted proof*, whatever
+  the store; `VCAP` with major ≠ 1 → *unsupported*; no footer → the active
+  manifest's proof (depth 0), then the sidecar, then the nearest `parentOf`
+  ancestor's proof (depth 1–16).
+- **Verdict with a carried proof.** Depth 0 reads exactly as a sidecar. Depth
+  ≥ 1 is a source capture's proof: *authentic* and *verified clip* stand,
+  and where §4–§8 give *tampered* or *frames not compared* the outcome is
+  *no proof found*, reason *Content Credentials carry the proof of a source
+  capture*.
+- **New label *manifest copy differs***, a warning beside *sidecar differs*.
+- **New verdict fields**, diagnostics and never labels: `proof_source`
+  (`{kind: "trailer"}`, `{kind: "sidecar"}`, `{kind: "c2pa", manifest,
+  depth}`) and `frames_name_capture` (a GOP of the file has a vcap SEI naming
+  the capture: a locating hint, not evidence).
+- **What a verifier that predates 1.1 does**: it ignores Content Credentials.
+  It answers *no proof found* wherever the carrier is the only copy, uses the
+  sidecar where there is one, never shows *manifest copy differs*, and
+  returns the same verdict wherever the trailer is intact — except on vector
+  122, which it reads *authentic* (§4.1 below).
+
+**Canonical bytes (§4.1)**
+
+- **Breaking, narrow. The JPEG exclusion covers the C2PA store only.** A
+  JUMBF APP11 segment is removed only when its box is a C2PA Manifest Store
+  or its type cannot be read; a JUMBF box of any other type (JPEG 360, JPEG
+  Privacy and Security) is content, as C2PA hashes it (15.12.1.2). Before,
+  every `JP` segment was removed, so a JPEG 360 box added to a sealed photo
+  left it *authentic* while C2PA's binding broke (vector 122). A JPEG sealed
+  with such a box present reads *tampered* under 1.1; none exists outside
+  this repository. Vectors 02 and 68, whose JUMBF-shaped segment has no
+  readable type, keep their verdict. Every canonicalizer changes: the SDKs
+  that seal JPEG and every verifier.
+
+**`c2pa-interop-1.0.md` → 1.1** (file name kept: frozen vector notes cite it)
+
+- **§2.1**: the assertion's box (JSON content type
+  `6A736F6E-0011-0010-8000-00AA00389B71`, toggles `0x03`/`0x13`), one
+  instance, copies compared as JCS because c2pa-rs re-serializes the JSON,
+  both redaction forms read as absence. **Normative**: the assertion goes in
+  `gathered_assertions` unless the claim generator ran the seal. **Normative
+  writer rules**: a vcap writer MUST NOT seal a JPEG that already embeds a
+  C2PA store (`VCAP_C2PA_MANIFEST_PRESENT`, vector 131); J1 — a writer that
+  replaces the trailer of a JPEG under a store MUST re-issue the manifest or
+  strip the store (vector 125).
+- **§2.3**: the soft binding's value, informative: the decoded payload (16
+  bytes of `capture_id`, or 3 bytes of `mark_id` big-endian), one `alg` per
+  layout, no `alg-params`, no `bindingMetadata`, `c2pa.watermarked.unbound`
+  until the algorithm is on the list.
+- **§3.1 corrected**: 15.12.1.2 says C2PA **hashes** non-C2PA APP11 segments;
+  1.0 read it as excluding them.
+- **§3.4 corrected**: on video the trailer is a `free` box the C2PA hash
+  excludes, not inside it, as §3.2 already said.
+- **§6**: any future reader rule for a trailing update box first normalizes
+  `box_purpose`, which C2PA rewrites from `manifest` to `original` inside
+  `media.hash`.
+
+**Vectors and tooling**
+
+- **122** (generated): a non-C2PA JUMBF box added after sealing → *tampered*.
+- **123–147** (minted, committed): real C2PA manifests over sealed and
+  unsealed JPEG and MP4 — carrier after sealing, trailer cut, copy differing,
+  CRC broken, sidecar beside the carrier, foreign proof at depth 0, edited
+  ancestor with and without a sidecar, the writer's refusal, an external
+  store, the assertion unsalted, a legacy manifest type, a suffixed label,
+  both redaction forms, a compressed manifest, a cycle, a component only, two
+  stores, an assertion no claim lists, `/free` excluded and hashed, a clip
+  through `parentOf`, a clip with a replaced GOP, a re-encoded clip. Signed by
+  a public test credential, *vcap-spec test CA* (`vectors/_trust/c2pa-test/`,
+  keys in `tools/src/testc2pakey.ts`), with c2pa-rs 0.91.0 through
+  `@contentauth/c2pa-node` 0.9.8, a new devDependency used only to mint them.
+  They are committed, not regenerated: c2pa-rs salts every assertion from the
+  OS RNG. `tools/src/make-c2pa-vectors.ts` mints them, and refuses to write
+  one the reference verifier disagrees with.
+- **`expected.json`** gains `proof_source` and `frames_name_capture`
+  (compared where present), `writer` (for writer suites: `refuse` with the
+  error code, or `not_covered`) and `c2pa` (what c2pa-rs reports; never
+  compared). A `*.c2pa` file in a vector directory is the external store
+  handed to the verifier.
+- **Reference tooling**: the carrier reader (`tools/src/jumbf.ts`,
+  `cbor.ts`, `carrier.ts`, `extractProof`), structure only, with hostile-input
+  tests (`tools/test/carrier.test.ts`).
+
 ### Review fixes — corpus 1.3.0 → **2.0.0**
 
 A major corpus bump: existing vectors changed bytes or verdict (33, 38, 44,
