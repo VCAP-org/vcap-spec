@@ -14,7 +14,11 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: tools/package-lock.json
+      # c2pa-node (a devDependency that mints the C2PA vectors on demand) would
+      # fetch or build a native binary in its postinstall; nothing here runs it.
       - run: npm ci
+        env:
+          SKIP_RUST_BUILD: '1'
       - run: npm run typecheck
       - run: npm test
       # Every vector's proof.json against the schema, and every expected.json against its own.

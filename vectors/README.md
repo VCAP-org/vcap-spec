@@ -5,8 +5,8 @@ its input:
 
 | `kind` | Input | What it exercises |
 |---|---|---|
-| `file` | `input.<ext>`, optional `input.<ext>.vcap` sidecar, `proof.json` for reading | trailer, canonical bytes, core signature, key binding, version policy, absence labels |
-| `container` | `input.mp4` or `input.mov`, optional `input.mp4.vcap` sidecar, `proof.json` for reading | everything `file` does **plus** §5: every GOP of the received container located by its vcap SEI and bound to a signed segment (*Locating segments*), and every located segment's `content_hash` recomputed from its NAL units and audio frames |
+| `file` | `input.<ext>`, optional `input.<ext>.vcap` sidecar, optional `input.c2pa` external C2PA store, `proof.json` for reading | trailer, canonical bytes, core signature, key binding, version policy, absence labels, Content Credentials as a carrier |
+| `container` | `input.mp4` or `input.mov`, optional `input.mp4.vcap` sidecar, optional `input.c2pa`, `proof.json` for reading | everything `file` does **plus** §5: every GOP of the received container located by its vcap SEI and bound to a signed segment (*Locating segments*), and every located segment's `content_hash` recomputed from its NAL units and audio frames |
 | `segments` | `segments.json` — `capture_id`, `pub`, `segment_count`, `segments[]` | the §5 chain at message level: content hashes given, no container |
 | `jcs` | `core.json` | canonicalization: expected `core_bytes_hex` and `core_hash` |
 
@@ -35,8 +35,27 @@ every certificate path was validated at, and what proved it) appear on the
 vectors that carry attestation evidence. `location` (§7.1: `claimed`, the
 level the core asks for, and `level`, the one the evidence reaches — `none`,
 `declared`, `corroborated`, `authenticated`) appears on the position vectors
-(74–84) and on 36 and 47, which declare no position and pin `none`. `debug`, where present, is for humans:
-intermediate bytes to compare before touching signatures.
+(74–84) and on 36 and 47, which declare no position and pin `none`.
+`proof_source` (where the proof was read: `trailer`, `sidecar`, or `c2pa` with
+the carrying manifest's label and its depth on the `parentOf` chain) and
+`frames_name_capture` (whether a GOP of the file names the proof's capture)
+appear on the carrier vectors (123–147), and are compared where present.
+`debug`, where present, is for humans: intermediate bytes to compare before
+touching signatures.
+
+Two fields are **not** a verdict and a reader never compares them. `writer`
+is for writer suites: `{"expect": "refuse", "error": "VCAP_C2PA_MANIFEST_PRESENT"}`
+on the input a writer must refuse to seal (131), and `{"expect":
+"not_covered"}` on every vector whose proof travels in a C2PA manifest, which
+no vcap writer produces — a writer suite declares those NOT_COVERED. `c2pa`
+is what a C2PA validator (c2pa-rs 0.91.0 through c2pa-node, trusting
+`_trust/c2pa-test/root.pem`, OCSP off) reports about the file's Content
+Credentials: the validation state and the active manifest's status codes, or
+the error it refuses the file with. It is there so that nobody writes a C2PA
+promise the library does not keep — c2pa-rs reports
+`assertion.bmffHash.additionalExclusionsPresent` for `/free` and `/skip`, and
+`signingCredential.ocsp.skipped` on every file — and each vector's `NOTES.md`
+adds what c2patool 0.28.0 says.
 
 `key_status`, where present, is also an **input**: §6.2's online revocation
 answer, as the corpus declares a verifier is assumed to have fetched it. It has
@@ -122,7 +141,7 @@ The numbered corpus (`vectors/NN-*`) has its own version, in `vectors/VERSION`
 — separate from `vcap/1.0`, the proof format version. The format version says
 what a proof looks like; the corpus version says which exact vectors an
 implementation checked itself against, so a third party can claim "conformant
-with vcap-spec corpus 2.0.0" and mean something a consumer can check.
+with vcap-spec corpus 2.1.0" and mean something a consumer can check.
 
 `vectors/MANIFEST.json` is that check: for every `vectors/NN-*` directory, its
 `kind`, its `outcome`, and a SHA-256 over its files (name and length included,
@@ -138,7 +157,7 @@ npm run manifest:check   # exits 1 if the committed file is stale — CI runs th
 ```
 
 `vectors/CONFORMANCE.md` says what the sentence "conformant with corpus
-2.0.0" has to contain to be checkable — corpus version, manifest hash, and
+2.1.0" has to contain to be checkable — corpus version, manifest hash, and
 how many vectors actually ran — and why a suite that ran zero vectors must be
 red. `vectors/conformance-report.json` is this repository's own claim in that
 format, regenerated and checked by CI (`npm run conformance:report` /
@@ -155,7 +174,8 @@ not do — so seeing one asks the same question a breaking spec change does.
 **2.0.0 is one**, and the answer is in `CHANGELOG.md`: the review of
 24 September 2026 changed verdicts the format had got wrong (a stolen proof
 reading *verified clip*, a device clock reaching green) while the format is
-still a draft, which is the one time §9 allows it.
+still a draft, which is the one time §9 allows it. 2.1.0 is a minor again:
+26 vectors added (122–147), none changed.
 
 `vectors/edge-cases/` (below) is not in the manifest and not part of the
 versioned corpus: it is regenerated on demand by its own tool, not hand-curated
@@ -199,12 +219,45 @@ ones (70, 71). **The C2PA co-existence vectors** (02, 03, 04, 68, 69, 73) carry
 no C2PA signature — a JUMBF-shaped APP11 or a `uuid` box with the C2PA extended
 type is all the vcap layer looks at — and pin §4.1's two orders, one per
 container, and the update-manifest case that fits neither
-(`spec/c2pa-interop-1.0.md` §3).
+(`spec/c2pa-interop-1.0.md` §3). Vector 122 is §4.1's narrowing in 1.1: a
+JUMBF box that is not a C2PA store is content.
+
+**The C2PA carrier vectors** (123–147) carry real Content Credentials:
+manifests written by c2pa-rs 0.91.0 through `@contentauth/c2pa-node` 0.9.8 and
+signed by *vcap-spec test CA* (`_trust/c2pa-test/`), a public test credential
+no trust list carries. They pin `vcap-proof-1.0.md` §3.1–§3.2: where the store
+is, which manifest and which assertion carry the proof, the precedence between
+the trailer, the active manifest, the sidecar and the `parentOf` chain, and
+the verdict at each depth. Some are edits no claim generator would make — a
+salt removed, a type relabelled, a redacted box put back, a reference turned
+into a cycle, a second store — so that a reader that cut the corner reaches a
+different verdict; their `c2pa` block says how C2PA takes the edit.
+
+They are **committed, not regenerated**, and `npm run generate` leaves them
+alone. Everything `tools/src/make-c2pa-vectors.ts` controls is fixed: the vcap
+proofs (the test key, RFC 6979), the C2PA signing key and certificate (keys in
+`tools/src/testc2pakey.ts`), the claim signature (RFC 6979 through c2pa-node's
+callback signer, so it is a function of the claim), the manifest labels and
+instance IDs, no thumbnail and no time-stamp — no TSA is called, so nothing in
+a manifest depends on a clock. What it cannot fix is the salt: c2pa-rs draws
+16 random bytes per assertion from the OS (C2PA 8.4.2.3 asks for random
+salts) and offers no hook, and each salt changes the claim and its
+signature. Run the script only to change what a vector says, and expect all
+of them to change with it; it writes nothing unless the reference verifier
+agrees with every vector:
+
+```
+npm run generate:c2pa                                  # from tools/
+C2PATOOL=/path/to/c2patool npm run generate:c2pa       # and record c2patool's answer in NOTES.md
+npm run generate:c2pa -- --mint-ca                     # re-mint _trust/c2pa-test/ first
+```
 
 An implementation passes conformance when, for every directory, it produces
 the same `outcome`, `labels`, `not_evaluated`, `core_hash`, `segments.verified`
-and, where present, `level`, `validated_at` and `location` as `expected.json`,
-and the same `core_bytes_hex` for `jcs` vectors.
+and, where present, `level`, `validated_at`, `location`, `proof_source` and
+`frames_name_capture` as `expected.json`, and the same `core_bytes_hex` for
+`jcs` vectors. A runner hands the verifier every input the directory holds:
+the sidecar, and a `*.c2pa` file as the caller-supplied C2PA store.
 
 ## Errata
 
@@ -246,7 +299,6 @@ corroboration of a `location` with no coordinates).
   by this repository's own sample-table rewrite with the proof in the
   trailer; the case with another tool's output, whose `moov` and interleaving
   are its own, still wants that tool's file.
-- **A JPEG carrying a C2PA manifest with a real claim signature** next to a
-  vcap trailer, validated by a C2PA validator as well as by ours. Both halves
-  of `spec/c2pa-interop-1.0.md` §3 are argued from the C2PA text; the C2PA
-  half is not executed here because no C2PA signing credential exists.
+- **A C2PA manifest signed by a credential on the C2PA trust list**: the
+  carrier vectors are *Trusted* only against the test root, and a trust-listed
+  signer needs a legal entity (`spec/c2pa-interop-1.0.md`, *We do not sign*).

@@ -180,25 +180,149 @@ restore are in `c2pa-interop-1.0.md` §4 and §5.
      *sidecar differs*, a label, and the sidecar is not used for anything
      (vector 18). Byte comparison, not semantic: a writer emits canonical bytes
      in both places and the label is a writer bug or a swapped file, either of
-     which the reader should say rather than resolve.
-  2. **Valid footer, CRC fails** → *corrupted proof*, whatever the sidecar
-     says (vector 72). The sidecar is a fallback for a trailer that is absent,
-     not a substitute for one that was found and is broken: somebody edited
-     the file, and showing the sidecar's proof as the file's would hide it.
-  3. **No valid footer, sidecar present** → the sidecar is the proof and the
-     canonical bytes are the **whole** received file (§4.1 step 1, `F' = F`),
-     including whatever a stale or displaced trailer left behind (vector 70).
-     The verdict is computed exactly as for an embedded proof, and a verifier
-     MUST NOT weaken it or add a label because the proof came from a sidecar
-     (vector 17): where the proof sat carries no evidence — `sig` over the
-     core and `media.hash` over the bytes carry all of it, and both are
-     recomputed in either case.
-  4. **Neither** → *no proof found*.
+     which the reader should say rather than resolve. The copy the file's
+     active C2PA manifest carries, if any (§3.2), is compared too, as
+     `JCS(parse(copy)) == JCS(parse(payload))` — a claim generator
+     re-serializes the JSON it is given, so bytes are not comparable across a
+     manifest (vector 123) — and not equal is *manifest copy differs*, a label;
+     the copy is not used for anything (vector 125). A copy that is not a
+     well-formed proof (§6.1) differs from any other.
+  2. **Valid footer, CRC fails** → *corrupted proof*, whatever the sidecar or
+     a C2PA store says (vectors 72, 126). The sidecar is a fallback for a
+     trailer that is absent, not a substitute for one that was found and is
+     broken: somebody edited the file, and showing another copy of the proof
+     as the file's would hide it.
+  3. **`VCAP` magic, major ≠ 1** → *unsupported format version* (§3, vector
+     115), whatever else the file carries.
+  4. **No valid footer** → the proof is the first of, in this order: the proof
+     in the active manifest of the file's Content Credentials (§3.2, depth 0);
+     the sidecar; the proof of the nearest `parentOf` ancestor that carries
+     one (§3.2, depth 1–16). The copy inside the bytes outranks the one beside
+     them, as C2PA's embedded store outranks a remote one (15.5.2.1), and the
+     sidecar, which is presented as this file's proof, outranks a source's
+     (vector 130). A sidecar next to a depth-0 proof is compared with it as
+     JCS; not equal is *sidecar differs*, and the sidecar is not used
+     (vector 127). The canonical bytes are the **whole** received file (§4.1
+     step 1, `F' = F`), including whatever a stale or displaced trailer left
+     behind (vector 70). The verdict is computed exactly as for an embedded
+     proof, and a verifier MUST NOT weaken it or add a label because the proof
+     came from a sidecar or a manifest (vectors 17, 124): where the proof sat
+     carries no evidence — `sig` over the core and `media.hash` over the bytes
+     carry all of it, and both are recomputed in every case. The one exception
+     is a proof found at depth ≥ 1, which is not presented as this file's
+     (§3.2, *The verdict*).
+  5. **None of these** → *no proof found*.
 - **Video.** Recomputing §5 content hashes stays optional and, when skipped,
   declared (*segment content not recomputed*); a sidecar next to a demuxable
   container is the case §5 has in mind.
 - **Footer flag bit 0** says a sidecar was written and is a hint: verifiers
   MUST NOT check it (§3).
+
+### 3.2 Content Credentials as a carrier
+
+A C2PA Manifest Store (C2PA 2.4, 11.1.4.2 *Manifest Store*) can carry the proof
+as the assertion `io.github.vcap-org.vcap.proof` (`c2pa-interop-1.0.md` §2.1):
+a platform or an editor that keeps Content Credentials and drops trailing
+bytes still delivers the proof, and a derivation's store keeps its source's
+manifest, proof included. Normative for readers since 1.1 (vectors 123–147).
+A reader authenticates nothing about the store — no COSE signature, no
+certificate, no hashed URI: the proof authenticates itself (§4.2), and whether
+the manifest is valid is a C2PA validator's question, answered apart and never
+merged into the verdict (`c2pa-interop-1.0.md` §1).
+
+- **Where the store is.** Structure only:
+  - **JPEG**: the APP11 segments whose payload begins with `JP` (`0x4A 0x50`),
+    grouped by box instance number `En`. A group is a store when its packet
+    with sequence number `Z` = 1 holds, after `CI`, `En` and `Z`, a JUMBF
+    superbox (`LBox`, `TBox` = `jumb`, `XLBox` when `LBox` = 1) whose
+    description box (`jumd`) has TYPE `63327061-0011-0010-8000-00AA00389B71`
+    (`c2pa`). Its box is reassembled from the group's packets in file order,
+    `Z` = 1, 2, 3 …: the first from `LBox` on, every later one without the
+    `LBox` and `TBox` (and `XLBox`) it repeats (ISO 19566-5 D.2; C2PA A.3.1
+    *Embedding manifests into JPEG*). A broken sequence is a store that cannot
+    be read.
+  - **ISO-BMFF**: every top-level `uuid` box with extended type
+    `D8FEC3D6-1B0E-483C-9297-5828877EC481` and `box_purpose` `manifest`,
+    `original` or `update` (C2PA A.5.1, A.5.3) is a store. Its data starts with
+    the 8-byte offset A.5.3 defines, which is skipped.
+  - In both, the store is the JUMBF superbox at the start of those bytes, and
+    whatever follows it is padding.
+  - **More than one embedded store is no carrier** (vector 141). C2PA
+    15.5.2.1: they are all invalid and validation proceeds as if none were
+    found. On ISO-BMFF an `original` store beside an `update` store counts as
+    two: the pair is an update manifest, which no writer may add to a sealed
+    file (`c2pa-interop-1.0.md` §3.2), and a reader does not merge them. A
+    store that cannot be read is no carrier.
+  - **An external store.** When the file embeds none, a verifier MAY read a
+    store its caller hands over — a `.c2pa` file, `application/c2pa` (C2PA
+    11.4) — as it may a sidecar (vector 132). It MUST NOT look anywhere else
+    and MUST NOT fetch one, from a URI the file names or otherwise. An
+    embedded store, readable or not, outranks it.
+- **Which manifests.** The store's children whose description TYPE is `c2ma`
+  (`63326D61-0011-0010-8000-00AA00389B71`), `c2um` (`6332756D-…`) or the
+  legacy `c2md` (`63326D64-…`, which C2PA 11.2.2 says consumers accept) are
+  manifests (vector 134). A compressed manifest, `c2cm` (`6332636D-…`, 11.2.4),
+  is not decompressed in this version: it carries no proof a reader sees and
+  points nowhere (vector 138). The **active manifest** is the last manifest
+  child (15.5.1). Children of any other type are skipped (11.1.2).
+- **Which assertion.** An assertion counts only when its own manifest's claim
+  lists it (C2PA 6.6, 10.2.2; vector 142): the claim is the manifest's `c2cl`
+  box, one CBOR content box, and the lists are `created_assertions` and
+  `gathered_assertions` (claim v2) or `assertions` (v1), by relative
+  (`self#jumbf=c2pa.assertions/<label>`) or absolute
+  (`self#jumbf=/c2pa/<manifest label>/c2pa.assertions/<label>`) URI. The proof
+  is the one listed assertion box in the manifest's assertion store (`c2as`)
+  labelled exactly `io.github.vcap-org.vcap.proof`, with description TYPE JSON
+  (`6A736F6E-0011-0010-8000-00AA00389B71`), toggles `0x03` or `0x13`
+  (vector 133), and exactly one `json` content box, whose bytes are read
+  exactly as a trailer's payload (§3, §6.1). A `__n` instance (C2PA 6.4) is
+  another assertion and is ignored (vector 135); two boxes with the label are
+  no proof (8.4.1: an ambiguous reference is unresolved).
+- **Redaction reads as absence.** An assertion that any claim of the store
+  lists in `redacted_assertions` is absent, whatever box is still there
+  (vector 136), and so is one whose content is the single UUID box C2PA 6.8
+  defines — `CAA98EEE-9D4D-F80E-86AD-4DFFCA263973` followed by zeros
+  (vector 137).
+- **The chain.** From a manifest, the next one up is named by its listed
+  ingredient assertion (`c2pa.ingredient`, `.v2` or `.v3`, `__n` instances
+  included) whose `relationship` is `parentOf`: its `activeManifest` (v3) or
+  `c2pa_manifest` (v1, v2) URI, `self#jumbf=/c2pa/<label>`, names a manifest of
+  the same store. With no `parentOf` ingredient, with more than one (C2PA
+  15.10.1.2 rejects that manifest, `manifest.multipleParents`), or with a URI
+  that names no manifest, the chain stops there. `componentOf` and `inputTo`
+  are **never** followed (vector 140): a component is a part, and its proof is
+  not the proof of what it was placed in. A manifest is never visited twice
+  (vector 139), and the chain is read to depth 16 at most — the active
+  manifest is depth 0, its parent depth 1. Only the **nearest** ancestor that
+  carries a proof is judged, and a reader never looks for a proof off the
+  chain.
+- **The verdict.** §4–§8 are unchanged, over the canonical bytes of the
+  received file.
+  - **Depth 0** reads exactly as a sidecar: the manifest presents the proof as
+    this file's. *Authentic* when the bytes are the sealed ones (vector 124);
+    *verified clip*, *frames not compared* or *tampered* under §5 for a video
+    (vector 146); *tampered* for a photo that is not the one sealed
+    (vector 128).
+  - **Depth ≥ 1** is the proof of a **source** capture, and the file is a
+    derivation its Content Credentials declare. It reaches what the proof
+    proves of it — *authentic* for the same bytes, *verified clip* for located
+    segments that verify (vector 145) — and nothing is held against it: where
+    §4–§8 give *tampered* or *frames not compared*, the outcome is **no proof
+    found**, and a verifier says *Content Credentials carry the proof of a
+    source capture* (vectors 129, 147). A modification declared in C2PA is not
+    an accusation the proof can make. An undeclared one gains nothing either:
+    a derivation is never *authentic* or *verified clip* unless the source's
+    proof covers its bytes or its located segments, and *no proof found* is
+    what a file without a proof of its own has.
+- **Diagnostics, not labels.** A verdict carries `proof_source`:
+  `{kind: "trailer"}`, `{kind: "sidecar"}` or `{kind: "c2pa", manifest,
+  depth}`, `manifest` being the label of the manifest that carried the proof
+  and `depth` its place on the chain; a proof from an external store is
+  `c2pa` too. For a video proof whose container the verifier read, it carries
+  `frames_name_capture`: whether any GOP of the received file has a vcap SEI
+  naming the proof's `capture_id`. That is a **locating hint** — an SEI is
+  never evidence (§5) — and it says why frames were or were not compared.
+  Neither field is a label and neither moves an outcome.
 
 ---
 
@@ -223,13 +347,24 @@ Given the received file `F`:
    is ISO-BMFF, and anything else is hashed as it is, `C = F'`. The MIME type
    is a claim inside the proof, and letting a claim choose how the bytes it
    describes are hashed would let a writer pick the rule its file passes.
-   - **JPEG**: remove every `APP11` segment (marker `0xFF 0xEB`) whose payload —
-     the bytes after the 2-byte segment length — begins with `0x4A 0x50`
-     (`"JP"`, the JUMBF common identifier C2PA uses), and only those. Keep every
-     other APP11 and every other segment. Concatenate the remaining bytes in
-     original order → `C`. The walk stops at `SOS`; fill bytes (`0xFF` padding
+   - **JPEG**: remove the `APP11` segments (marker `0xFF 0xEB`) whose payload
+     — the bytes after the 2-byte segment length — begins with `0x4A 0x50`
+     (`"JP"`, the JUMBF common identifier), **except** those of a JUMBF box
+     whose type can be read and is not the C2PA Manifest Store's. The type is
+     read as §3.2 reads it: the segments are grouped by `En`, and the group's
+     packet with `Z` = 1 holds `LBox`, `TBox` = `jumb` (`XLBox` when `LBox` =
+     1) and a description box `jumd` whose first 16 bytes are the TYPE. A
+     group whose TYPE is `63327061-0011-0010-8000-00AA00389B71` (`c2pa`), or
+     whose TYPE cannot be read that way — no `En`, no `Z` = 1 packet, too
+     short, not `jumb` then `jumd` — is removed (vectors 02, 68); a group with
+     any other TYPE — JPEG 360, JPEG Privacy and Security, any JUMBF box that
+     is not a C2PA store — is content and stays, because C2PA hashes it
+     (15.12.1.2 *Hashing of JPEG 1 files*; vector 122). Keep every other APP11
+     and every other segment. Concatenate the remaining bytes in original
+     order → `C`. The walk stops at `SOS`; fill bytes (`0xFF` padding
      before a marker) and markers without a length field (`TEM`, `RSTn`) are
-     kept where they are, like every other byte that is not a JUMBF APP11.
+     kept where they are, like every other byte that is not a removed JUMBF
+     APP11.
      A segment whose length is below 2 or runs past the end of the file makes
      the JPEG malformed: it has no canonical bytes, and the verdict is *no
      proof found* — never an exception (vector 116).
@@ -246,17 +381,20 @@ standard puts its own hash:
   invalidate the vcap signature it depends on. So it is excluded — and, as a
   consequence, the C2PA manifest of a sealed photo can be added, replaced or
   removed without touching the vcap verdict, whichever came first (vectors 02
-  and 68). It carries its own signature, and once written after sealing its
-  hard binding covers the trailer: a trailer rewritten later breaks the
-  manifest, not the proof (`c2pa-interop-1.0.md` §3).
+  and 68) — though a writer does not seal a JPEG that already carries one
+  (`c2pa-interop-1.0.md` §2.1, vector 131). It carries its own signature, and
+  once written after sealing its hard binding covers the trailer: a trailer
+  rewritten later breaks the manifest, not the proof (`c2pa-interop-1.0.md`
+  §3, vector 125).
 - **ISO-BMFF — video and HEIC alike — embeds the manifest BEFORE sealing**:
   the manifest is inside the
   canonical bytes and stays there (a manifest inserted afterwards is
   *tampered*, vector 73, a HEIC photo), and the trailer appended after it is a `free` box,
   which a C2PA claim generator keeps out of `c2pa.hash.bmff.v3` by putting
-  `/free` on its exclusion list — the one exclusion, with `/skip`, that a C2PA
-  validator does not even flag. Without that entry the trailer breaks the C2PA
-  binding, not ours. A C2PA *update* manifest, which C2PA requires to be the
+  `/free` on its exclusion list — the one exclusion, with `/skip`, that C2PA
+  15.12.2 does not even flag (c2pa-rs 0.91 flags it all the same, as
+  informational: vector 143). Without that entry the trailer breaks the C2PA
+  binding, not ours (vector 144). A C2PA *update* manifest, which C2PA requires to be the
   last box of the file, cannot share a file with a trailer at all (vectors
   69–70; `c2pa-interop-1.0.md` §3).
 
@@ -1249,7 +1387,7 @@ what the origin is worth. The outcomes:
 | `tampered` | red | a signature, a hash or a binding the proof makes does not hold |
 | `corrupted_proof` | red | a structurally valid trailer whose CRC does not match (§3) |
 | `nested_proof` | red | the canonical bytes end in another trailer (§3) |
-| `no_proof_found` | none | no trailer, no sidecar, or a proof that is missing, unparseable or malformed (below) |
+| `no_proof_found` | none | no trailer, no sidecar, no Content Credentials carrying a proof, or a proof that is missing, unparseable or malformed (below); also a proof carried only as a source capture's that nothing in the file matches (§3.2) |
 | `unsupported_format_version` | none | a proof or a footer of a major version this verifier does not implement (§9) |
 
 The ceiling is computed for an `authentic` outcome and is red only for a
@@ -1442,6 +1580,15 @@ whose present segments verify and are located in the file → *verified clip*
 (§5); on a video in which no segment can be located → *frames not compared*
 (§5, *Locating segments*). On a photo, a `media.hash`
 mismatch with a valid `sig` means the file was altered after sealing: **red**.
+A proof found up a C2PA `parentOf` chain (§3.2, depth ≥ 1) is a source
+capture's, and where §4–§8 would give *tampered* or *frames not compared* the
+outcome is *no proof found*: the derivation is declared, and the proof is not
+presented as this file's.
+
+**Where the proof came from.** *Sidecar differs* and *manifest copy differs*
+(§3.1) are warnings on an otherwise valid verdict: a second copy of the proof
+that is not the one used. `proof_source` and `frames_name_capture` (§3.2) are
+diagnostics and never labels.
 
 **The rule that outranks the table.** A watermark match with no valid signature is
 **origin traced**, never authentic — and where the original is available, shown
@@ -1508,8 +1655,11 @@ who finds it out later stops trusting the rest:
   app, and why its failure is prominent.
 - **Anything about the C2PA manifest** of a sealed photo. It sits outside the
   canonical bytes (§4.1) and can change without affecting the vcap verdict; it
-  is verified by its own signature, separately. What each format proves that
-  the other does not, how a proof maps onto C2PA assertions and what a
+  is verified by its own signature, separately. A verifier that reads the proof
+  out of Content Credentials (§3.2) still checks nothing about the manifest
+  that carried it: who signed it, what it declares and whether its bindings
+  hold are a C2PA validator's answer, shown apart. What each format proves
+  that the other does not, how a proof maps onto C2PA assertions and what a
   verifier says after a platform strips metadata: `c2pa-interop-1.0.md`.
 
 ---
@@ -1532,13 +1682,18 @@ says.
 - [~] `REVIEW (mobile)` manifest ordering: after sealing for photos, before for
       video — confirmed against C2PA 2.4 (`c2pa-interop-1.0.md` §3, vectors
       68 and 73): `c2pa.hash.data` covers to end of file, `c2pa.hash.bmff.v3`
-      needs `/free` excluded; the on-device check with a real claim generator
-      waits for a signing certificate
+      needs `/free` excluded; executed with a real claim generator (c2pa-rs
+      0.91) and a test signing credential in vectors 123–147, whose C2PA
+      results `expected.json` records. The on-device check waits for a
+      signing certificate of our own
 - [ ] `REVIEW (BE)` a C2PA update manifest appended to a sealed ISO-BMFF file
       takes the position the footer needs (vectors 69–70). Forbidden for
       writers; whether a future minor lets a reader step over a trailing C2PA
       `uuid` box before seeking the footer is open, and would be a new reading
-      rule, not a change to this one
+      rule, not a change to this one. Any such rule first normalizes
+      `box_purpose` in the canonical bytes: appending an update store turns
+      the original store's `box_purpose` from `manifest` into `original` in
+      place (C2PA A.5.3), inside `media.hash` (`c2pa-interop-1.0.md` §6)
 - [ ] `REVIEW (mobile)` per-segment signing cost in StrongBox on a long clip
 - [~] `REVIEW (mobile)` NAL byte definition and audio DTS rule reproducible on both encoders — the DTS clock is now named (M8) and the timeline with it (edit lists, §5); H.264 and HEVC on Android are reproduced byte for byte by a second implementation written from this text (`tools/src/container.ts`, vectors 36–37), which is what "reproducible" was asking; on iOS the NAL bytes are reproduced for HEVC in MOV (vector 48) and H.264 in MP4 (vector 85), and the audio DTS rule is not yet exercised: neither clip has an audio track
 - [x] `REVIEW (mobile)` hashing two interleaved tracks during encoding — resolved: 8 KB and 0.5 ms per segment on a TEE device (M8)
@@ -1570,7 +1725,9 @@ says.
       **84** with the position level (74–84), **85** with the iOS sealed
       clip, and **121** in corpus 2.0.0 with the video binding (86–94), the
       time, revocation and attestation rules (96–110), the JSON reading rules
-      (111–120) and the extensible identifiers (95, 121),
+      (111–120) and the extensible identifiers (95, 121), and **147** in
+      corpus 2.1.0 with the JUMBF exclusion narrowed to the C2PA store (122)
+      and Content Credentials as a carrier of the proof (123–147),
       checked by the reference verifier in `tools/`. The §7 vectors
       trust the anchors in `vectors/_trust/`, whose attestation root is a test
       root: they prove the level logic, not that an implementation can walk a

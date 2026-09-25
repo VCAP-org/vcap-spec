@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto'
 import { type Json } from './jcs.js'
 import { type Proof, coreBytes, coreHash, keyId, publicKeyFromSpki, verifyEs256 } from './core.js'
 import { canonicalBytes, mediaHash } from './canonical.js'
-import { Flag, parseTrailer } from './trailer.js'
+import { Flag } from './trailer.js'
+import { type ProofSource, extractProof } from './carrier.js'
 import { type SegmentEntry, verifyChain } from './segments.js'
 import { type ContainerReading, ContainerMalformed, readContainer } from './container.js'
 import { RANK, leafSpki, normalSerial, validateChain } from './attestation.js'
@@ -48,6 +49,13 @@ export interface Verdict {
   // §7.1: the position level the core claims and the one the evidence
   // reaches. Orthogonal to the outcome — present on every non-red verdict.
   location?: { claimed: string, level: string }
+  // §3.2: where the proof was read. Diagnostic, never a label: where a proof
+  // sat is not evidence.
+  proof_source?: ProofSource
+  // §3.2: whether a GOP of the received file carries a vcap SEI naming the
+  // proof's capture. A locating hint, reported whenever the container was
+  // read; the SEI is never evidence (§5).
+  frames_name_capture?: boolean
   reason?: string
 }
 
@@ -163,31 +171,46 @@ export interface FileInput {
    * is somewhere else. Absent is *anchoring not verified*.
    */
   chainRead?: ChainRead
+  /**
+   * A C2PA Manifest Store the caller hands over (a `.c2pa` file), read only
+   * when the file embeds none (§3.2). Never fetched.
+   */
+  externalStore?: Buffer
 }
 
-export const verifyFile = ({ file, sidecar, recomputeSegments, trust, clock = new Date(), keyStatus, chainRead }: FileInput): Verdict => {
-  // 1. Trailer, sidecar, nesting (§3).
-  const trailer = parseTrailer(file)
-  if (trailer.kind === 'corrupted') return fail('corrupted_proof', 'footer valid, CRC mismatch')
-  if (trailer.kind === 'unsupported') return fail('unsupported_format_version', `footer major ${trailer.major}`)
-
-  const labels: string[] = []
-  let payload: Buffer
-  let media: Buffer
-  let flags: number | null = null
-  if (trailer.kind === 'ok') {
-    payload = trailer.payload
-    media = file.subarray(0, trailer.mediaEnd)
-    flags = trailer.flags
-    if (parseTrailer(media).kind !== 'none') return fail('nested_proof', 'the canonical bytes end in another trailer')
-    if (sidecar && !sidecar.equals(payload)) labels.push('sidecar differs')
-  } else if (sidecar) {
-    payload = sidecar
-    media = file
-  } else {
-    return fail('no_proof_found', 'no trailer and no sidecar')
+export const verifyFile = (input: FileInput): Verdict => {
+  // 1. Trailer, carrier, sidecar, nesting (§3, §3.1, §3.2).
+  const extracted = extractProof(input.file, input.sidecar, input.externalStore)
+  if (extracted.kind === 'corrupted') return fail('corrupted_proof', 'footer valid, CRC mismatch')
+  if (extracted.kind === 'unsupported') return fail('unsupported_format_version', `footer major ${extracted.major}`)
+  if (extracted.kind === 'nested') return fail('nested_proof', 'the canonical bytes end in another trailer')
+  if (extracted.kind === 'none') return fail('no_proof_found', `no trailer, no sidecar: ${extracted.reason}`)
+  const located: { frames?: boolean } = {}
+  const verdict = { ...judge(extracted.payload, extracted.media, extracted.flags, [...extracted.labels], input, located), proof_source: extracted.source }
+  if (located.frames !== undefined) verdict.frames_name_capture = located.frames
+  // §3.2: a proof found up the `parentOf` chain is the proof of a source
+  // capture, and the file in hand is a derivation its Content Credentials
+  // declare. It can reach what the source's proof proves of it — the same
+  // bytes, or located segments that verify — and nothing is held against it:
+  // *tampered* and *frames not compared* read as no proof of this file.
+  const depth = 'depth' in extracted.source ? extracted.source.depth : 0
+  if (depth >= 1 && (verdict.outcome === 'tampered' || verdict.outcome === 'frames_not_compared')) {
+    return {
+      outcome: 'no_proof_found', labels: [], not_evaluated: [], core_hash: verdict.core_hash, proof_source: extracted.source,
+      ...(located.frames !== undefined ? { frames_name_capture: located.frames } : {}),
+      reason: SOURCE_CAPTURE
+    }
   }
+  return verdict
+}
 
+/** §3.2: what a reader is told when a carried proof is about a source capture. */
+export const SOURCE_CAPTURE = 'Content Credentials carry the proof of a source capture'
+
+const judge = (
+  payload: Buffer, media: Buffer, flags: number | null, labels: string[],
+  { recomputeSegments, trust, clock = new Date(), keyStatus, chainRead }: FileInput, located: { frames?: boolean }
+): Verdict => {
   // 2. JSON and version (§9).
   let proof: Proof
   try {
@@ -309,6 +332,7 @@ export const verifyFile = ({ file, sidecar, recomputeSegments, trust, clock = ne
     if (recomputeSegments) {
       try {
         binding = bindSegments(readContainer(media), captureId, entries)
+        located.frames = binding.located
       } catch (e) {
         if (!(e instanceof ContainerMalformed)) throw e
         return { ...tampered(`the container is malformed: ${e.message}`), segments: { verified: [] } }

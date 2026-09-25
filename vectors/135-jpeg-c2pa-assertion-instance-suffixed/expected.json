@@ -1,0 +1,15 @@
+{
+  "kind": "file",
+  "outcome": "no_proof_found",
+  "labels": [],
+  "not_evaluated": [],
+  "schema_valid": true,
+  "writer": {
+    "expect": "not_covered",
+    "reason": "the proof travels in a C2PA manifest, which no vcap writer produces"
+  },
+  "c2pa": {
+    "validator": "c2pa-rs 0.91.0 (c2pa-node 0.9.8), trust anchor _trust/c2pa-test/root.pem",
+    "error": "assertion missing: url = io.github.vcap-org.vcap.proof__1"
+  }
+}

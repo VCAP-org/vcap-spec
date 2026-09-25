@@ -1,0 +1,41 @@
+{
+  "kind": "file",
+  "outcome": "authentic",
+  "labels": [
+    "integrity unevaluated",
+    "key not in transparency log",
+    "location declared only",
+    "no trusted time",
+    "not anchored",
+    "origin not hardware-attested",
+    "watermark not evaluated"
+  ],
+  "not_evaluated": [],
+  "core_hash": "dc59127e528a04d6e285de3abe748559e49c7f1ef66b238092a6b13afeeb5119",
+  "proof_source": {
+    "kind": "c2pa",
+    "manifest": "urn:c2pa:76636170-0000-4000-8000-000001230001",
+    "depth": 0
+  },
+  "schema_valid": true,
+  "writer": {
+    "expect": "not_covered",
+    "reason": "the proof travels in a C2PA manifest, which no vcap writer produces"
+  },
+  "c2pa": {
+    "validator": "c2pa-rs 0.91.0 (c2pa-node 0.9.8), trust anchor _trust/c2pa-test/root.pem",
+    "validation_state": "Invalid",
+    "success": [
+      "assertion.hashedURI.match",
+      "claimSignature.insideValidity",
+      "claimSignature.validated",
+      "signingCredential.trusted"
+    ],
+    "informational": [
+      "signingCredential.ocsp.skipped"
+    ],
+    "failure": [
+      "assertion.dataHash.mismatch"
+    ]
+  }
+}
