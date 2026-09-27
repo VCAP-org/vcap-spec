@@ -15,8 +15,8 @@
   },
   "outcome": "authentic",
   "labels": [
+    "integrity hardware",
     "integrity not proven",
-    "integrity unevaluated",
     "level from registry records",
     "location declared only",
     "no trusted time",

@@ -1037,24 +1037,44 @@ containing a schema-valid value remain readable under the same rules.
   is worthless against the compromised device it exists to flag. As a
   registry-signed attachment the verdict is Google's or Apple's, relayed and
   signed by a key the verifier already has for tree heads. Absent →
-  *integrity unevaluated* (§8). The server *adds* evidence; it is never
-  *needed* for a verdict.
+  *integrity unevaluated* (§8). The server *adds* evidence; a verdict is
+  always reached without it, and **green** is not (§7).
 
-  A valid attachment is shown as **`integrity <verdict>`**. A valid `failed`
-  caps the ceiling at **amber** and is shown prominently (§7, vector 109):
-  the chain proves where the key lives, and Google's or Apple's word that the
-  device failed its check is a reason not to say green however good the chain
-  is. No other verdict moves the ceiling, and neither does absence.
+  **What `hardware` means.** The source attested the device's software state
+  — verified boot, no known tampering — from a hardware root of trust. For
+  `playIntegrity` that is `MEETS_STRONG_INTEGRITY`; `MEETS_DEVICE_INTEGRITY`
+  and `MEETS_BASIC_INTEGRITY` are `basic`, because a device that hides a root
+  from software checks passes them; no label at all is `failed`. `appAttest`
+  proves a genuine device running a genuine build and says **nothing** about
+  whether the device is jailbroken, so a registry MUST NOT relay an
+  `appAttest` verdict as `hardware`: a valid assertion from an App Store or
+  TestFlight build is `basic`, a failed one `failed`.
 
-  The cap works in one direction, and the signature is why. The verdict is
-  inside the signed message, so a verdict cannot be **strengthened**: `failed`
-  cannot become `hardware` without breaking it. It cannot buy the other
-  direction. A relabelled attachment is indistinguishable from one signed by a
-  registry the verifier does not follow — both are "no key of mine made this
-  signature" (vector 66) — and an attacker who wanted to suppress a `failed`
-  verdict could delete the attachment for the same result. So no integrity
-  verdict is a condition *for* green; a present `failed` is a reason against
-  it.
+  A valid attachment is shown as **`integrity <verdict>`**, and a valid
+  `failed` is shown prominently (vector 109). **Green requires proven device
+  integrity** (§7): a valid attachment whose `source` is `playIntegrity` and
+  whose verdict is `hardware` (vector 100). Every other case — absent, a
+  source this verifier does not know, a signer it does not follow, a verdict
+  of `basic`, `unevaluated` or `failed`, any verdict from `appAttest` — caps
+  the ceiling at **amber** with *integrity not proven* beside the proven
+  level (vectors 148, 149, 150). The proven level says where the key lives;
+  it does not say that what asked the key to sign was intact, and green
+  claims both.
+
+  Why a condition and not only a cap: the signature stops a verdict being
+  **strengthened** — `failed` cannot become `hardware` without breaking it —
+  and cannot stop it being **deleted**. A relabelled attachment is
+  indistinguishable from one signed by a registry the verifier does not
+  follow (vector 66), and deleting it leaves a file whose every other
+  signature holds. Were absence to cap nothing, whoever held a copy of the
+  file could turn a `failed` amber into green by stripping it. With integrity
+  a condition for green, stripping evidence leaves the verdict where it was
+  or lowers it — never raises it. The price is stated, not hidden: a capture
+  is amber until the registry has relayed a `hardware` verdict for it, which
+  for a capture sealed offline means until it is sent; and **no iOS capture is
+  green in this version**, because no source proves an iOS device intact. A
+  source that does arrives as a new `source` value in a later minor, with its
+  vectors, and changes the table then.
 - **`location_corroboration`** *(optional)* — an
   operator-side check of the declared position, relayed and countersigned by
   the registry. The registry, after the capture and with the user's consent
@@ -1238,9 +1258,10 @@ for *key not in transparency log*.
 
 | proven level | attestation / binding | key in log before capture | verdict ceiling | label shown |
 |---|---|---|---|---|
-| `strongbox` | valid to Google hardware root, RKP fresh, revocation checked, app admitted | yes | **green** | sealed in secure hardware |
-| `tee` | valid to Google root, revocation checked, app admitted | yes | **green** | sealed in the TEE |
-| `secureEnclave` | the registry records an App Attest binding (see below) | yes | **green** | sealed in the Secure Enclave (app-attested) — *our records* |
+| `strongbox` | valid to Google hardware root, RKP fresh, revocation checked, app admitted, device integrity proven | yes | **green** | sealed in secure hardware |
+| `tee` | valid to Google root, revocation checked, app admitted, device integrity proven | yes | **green** | sealed in the TEE |
+| `secureEnclave` | the registry records an App Attest binding (see below) | yes | **amber** in this version: no source proves an iOS device intact | integrity not proven — *our records* |
+| any of the above | valid, and no valid `integrity` attachment from `playIntegrity` with verdict `hardware` (§6.2) | any | **amber** | integrity not proven |
 | any of the above | valid | no (`registry` absent), or its evidence invalid | **amber** | key not in the transparency log |
 | any of the above | valid | yes, but `tree_head.timestamp` after the declared capture | **amber** | registered after the declared capture |
 | any of the above | valid | yes, but `tree_head.timestamp` after a valid token's `genTime` | **amber** | registered after the trusted time |
@@ -1258,7 +1279,7 @@ for *key not in transparency log*.
 | `none` | session key, no attestation, or a chain that does not prove a level | n/a | **amber, never green** | origin not hardware-attested |
 | any of the above | a video proof whose `content_hash` values were not recomputed from the container (§5) | any | unchanged | segment content not recomputed |
 | any | claimed level above the level the `attestation` attachment proves | — | **amber at best, flagged** | inconsistent claim |
-| any | a valid `integrity` attachment whose verdict is `failed` (§6.2) | — | **amber at best, prominently flagged** | integrity failed |
+| any | a valid `integrity` attachment whose verdict is `failed` (§6.2) | — | **amber at best, prominently flagged** | integrity failed (and, beside a proven level, integrity not proven) |
 | any | `sig` invalid, or attestation leaf ≠ `sig.pub` | — | **red** | tampered |
 
 - **Claimed above proven** is flagged and capped at amber, not red: the core is
@@ -1325,6 +1346,9 @@ as evidence of **our records** — the registry's word, like *corroborated* in
 §7.1 — never as *checkable without us*. Without such a leaf the level is
 `none`, whatever `device.secure_hw` claims. A binding a verifier can check
 offline arrives as a new attachment in a later minor, with its vectors.
+Whatever the level, an iOS capture is **amber at best** in this version: green
+requires proven device integrity, and no source proves an iOS device intact
+(§6.2; vectors 110, 150).
 
 ### 7.1 The position level
 
@@ -1420,10 +1444,11 @@ and the verifier states it rather than staying silent.
 | `registry` present, `log_id` unknown to this verifier | *log not trusted* | not evidence that failed: evidence this verifier cannot read |
 | the log's signed status, when offline | *revocation not checked* | the key was in the log; whether it still is cannot be established without asking |
 | `timestamp` present, no TSA root pinned | *trusted time not evaluated* | evidence this verifier cannot read |
-| `integrity` present and valid | *integrity `<verdict>`* | what Google or Apple said about the device, relayed and signed by the registry; `failed` caps the ceiling at amber (§7), every other verdict caps nothing |
+| `integrity` present and valid | *integrity `<verdict>`* | what Google or Apple said about the device, relayed and signed by the registry; only `hardware` from `playIntegrity` proves the device intact (§6.2), and `failed` is shown prominently |
 | `anchor` present, chain not consulted | *anchoring not verified* | the path reaches the claimed root; nobody checked the chain recorded it |
 | `attestation` (Android) | *origin not hardware-attested* | proven level `none` |
 | `integrity` | *integrity unevaluated* | no statement about the device's state |
+| a proven level (§7) without proven device integrity | *integrity not proven* | where the key lives is proven, that the device was intact is not: absent, `basic`, `failed`, `appAttest`, or evidence this verifier cannot read; the ceiling is amber (§7) |
 | `watermark` | *no watermark* | the detector did not run, or no mark was looked for |
 | `location` | nothing shown | absence is not a claim about place: `location.level` is `none` (§7.1) |
 | `location` present, no valid corroboration | *location declared only* | the device signed the coordinates and nothing else vouches for them |

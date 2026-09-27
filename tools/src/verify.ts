@@ -295,9 +295,9 @@ const judge = (
   // returns before the level is computed and still has to say whether the key
   // was in the log — the label is about the key, not about the verdict.
   const registry = registryOutcome(proof, spki, trust, labels, deviceClock, timestamp.ok ? timestamp.genTime.getTime() : null)
-  // §6.2 `integrity`. It corroborates and never carries, so it produces a
-  // label and no level: see `integrityOutcome`.
-  integrityOutcome(proof, Buffer.from(hash, 'hex'), trust, labels)
+  // §6.2 `integrity`. It produces a label and no level, and it is a
+  // condition for green: see `integrityOutcome`.
+  const deviceIntegrity = integrityOutcome(proof, Buffer.from(hash, 'hex'), trust, labels)
   // §7.1 the position level. Computed here, before the video branch, because
   // it is orthogonal to the outcome: a clip's coordinates are worth exactly
   // what an original's are.
@@ -365,7 +365,7 @@ const judge = (
   return {
     outcome: 'authentic', labels: labels.sort(), not_evaluated: notEvaluated, core_hash: hash,
     ...(segments ? { segments } : {}),
-    ...level(proof, spki, Buffer.from(hash, 'hex'), labels, trust, clock, registry, keyStatus, anchor, timestamp),
+    ...level(proof, spki, Buffer.from(hash, 'hex'), labels, trust, clock, registry, keyStatus, anchor, timestamp, deviceIntegrity),
     location
   }
 }
@@ -379,7 +379,7 @@ const judge = (
 const level = (
   proof: Proof, spki: Buffer, coreHash: Buffer, labels: string[], trust: TrustBundle | undefined, clock: Date,
   registry: RegistryVerdict, keyStatus: KeyStatusStatement | undefined, anchor: AnchorVerdict,
-  timestamp: TimestampVerdict
+  timestamp: TimestampVerdict, deviceIntegrity: boolean
 ): Pick<Verdict, 'level' | 'validated_at'> => {
   // The instant (§7), in its order of trust: a valid timestamp token's
   // genTime, then a verified anchor's block, then the device's own clock —
@@ -487,8 +487,13 @@ const level = (
     else if (!carried.some((digest) => declared.includes(digest))) labels.push('attestation app not admitted')
   }
 
-  // Green needs a proven level, the key in the log before the capture, and an
-  // instant nobody can move. Red is for a chain, or a key, already revoked at
+  // §7: a proven level says where the key lives, not whether what asked it to
+  // sign was intact. Named only beside a level, because without one the
+  // verdict is already amber for *origin not hardware-attested*.
+  if (proven !== 'none' && !deviceIntegrity) labels.push('integrity not proven')
+
+  // Green needs a proven level, the key in the log before the capture, an
+  // instant nobody can move, and a device whose integrity was proven. Red is for a chain, or a key, already revoked at
   // the capture.
   // Every amber cause has to be checked, not just the two nearest: §7's table
   // caps the verdict on an unchecked chain revocation, on a capture time only
@@ -496,7 +501,8 @@ const level = (
   // ignored any of them would be a stronger claim than the evidence.
   const amberCauses = ['inconsistent claim', 'chain revocation not checked', 'revocation not checked',
                        'attestation chain expired, capture time not proven', 'registry evidence invalid',
-                       'attestation app not checked', 'attestation app not admitted', 'integrity failed']
+                       'attestation app not checked', 'attestation app not admitted', 'integrity failed',
+                       'integrity not proven']
   const green = proven !== 'none' && registry.ok && registry.beforeCapture &&
     (source === 'timestamp' || source === 'anchor') &&
     !amberCauses.some((cause) => labels.includes(cause))
@@ -526,21 +532,26 @@ type AnchorVerdict = { ok: false } | { ok: true, blockTime: number | null }
 type TimestampVerdict = { ok: false } | { ok: true, genTime: Date, signerValid: { from: Date, to: Date } }
 
 /**
- * §6.2 `integrity`, and §7's row for it: a valid `failed` verdict caps the
- * ceiling at amber and is shown prominently; every other verdict, and the
- * absence of one, is shown and caps nothing.
+ * §6.2 `integrity`, and §7's rows for it. Returns whether the device's
+ * integrity is **proven**: a valid `hardware` verdict from a source that
+ * attests the device's software state from a hardware root, which in this
+ * version is `playIntegrity` alone. Green needs it.
  *
- * Why only `failed`, and why it is not load-bearing the other way: deleting
- * the attachment gives *integrity unevaluated*, so no verdict here can be a
- * condition for green without letting whoever strips it decide. What a
- * present `failed` can do is refuse green on the strength of Google's or
- * Apple's word, which is the one direction a relabelling cannot fake — the
- * verdict is inside the signed message.
+ * Why a condition and not only a cap: a cap alone let whoever strips the
+ * attachment turn amber into green, because absence capped nothing. As a
+ * condition, deleting a `failed` gives *integrity unevaluated* and stays
+ * amber — stripping evidence can no longer buy a stronger verdict. A valid
+ * `failed` is still shown prominently, on top.
+ *
+ * `appAttest` never proves it, whatever its verdict: Apple says nothing
+ * about whether a device is jailbroken.
  */
-const integrityOutcome = (proof: Proof, coreHash: Buffer, trust: TrustBundle | undefined, labels: string[]): void => {
+const PROVES_DEVICE_INTEGRITY = new Set(['playIntegrity'])
+
+const integrityOutcome = (proof: Proof, coreHash: Buffer, trust: TrustBundle | undefined, labels: string[]): boolean => {
   if (!isObject(proof.integrity)) {
     labels.push('integrity unevaluated')
-    return
+    return false
   }
   const outcome = verifyIntegrity(proof.integrity as unknown as IntegrityAttachment, coreHash, trust?.logs ?? [])
   if (!outcome.ok) {
@@ -549,9 +560,10 @@ const integrityOutcome = (proof: Proof, coreHash: Buffer, trust: TrustBundle | u
     // is a fact a reader can act on, while evidence this verifier cannot read
     // — a signer it does not follow, a source from a later minor — is absence.
     if (outcome.trusted && outcome.evaluated) labels.push('integrity evidence invalid')
-    return
+    return false
   }
   labels.push(`integrity ${outcome.verdict}`)
+  return outcome.verdict === 'hardware' && PROVES_DEVICE_INTEGRITY.has(outcome.source)
 }
 
 /**

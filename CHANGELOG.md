@@ -12,6 +12,63 @@ else.
 
 ## Unreleased
 
+### Device integrity is a condition for green — corpus 2.1.0 → **3.0.0**
+
+**Breaking.** A major corpus bump: vector 100 changed bytes, 20 expected
+verdicts changed, vector 110 went from green to amber, and 148–150 are new
+(150 in all).
+
+**Why.** A registry-signed `integrity: failed` capped the ceiling at amber,
+and its absence capped nothing. The attachment is outside the core, so
+deleting it leaves every other signature intact: whoever held a copy of a
+`failed` capture could turn amber into green by stripping the evidence against
+it (vectors 109 and 100 differed in nothing else). The 2026-09-24 review chose
+"absence caps nothing" to avoid the server being needed for green; the
+registry already is (*key not in transparency log* is amber), so that price
+bought nothing and cost the one direction that matters.
+
+**The rule (`vcap-proof-1.0.md` §6.2, §7, §8)**
+
+- **Green requires proven device integrity**: a valid `integrity` attachment
+  with `source: playIntegrity` and verdict `hardware`. Absent, unknown
+  source, untrusted signer, `basic`, `unevaluated`, `failed`, or any
+  `appAttest` verdict → **amber**.
+- **New label *integrity not proven***, beside a proven level only (without
+  one the verdict is already amber for *origin not hardware-attested*, and a
+  revoked chain proves no level). A valid `failed` is still *integrity
+  failed*, shown prominently, alongside it.
+- **`hardware` is defined**: the source attested the device's software state
+  from a hardware root. Play Integrity `MEETS_STRONG_INTEGRITY` → `hardware`;
+  `MEETS_DEVICE_INTEGRITY` / `MEETS_BASIC_INTEGRITY` → `basic`; no label →
+  `failed`. A registry MUST NOT relay `appAttest` as `hardware` (Apple says
+  nothing about a jailbreak): App Store / TestFlight assertion → `basic`.
+- **iOS is amber at best**: the `secureEnclave` row of §7 is amber in this
+  version. A future iOS device-integrity source arrives as a new `source`
+  value with its vectors.
+- **Consequence stated**: a capture sealed offline is amber until it is sent
+  and the registry relays a `hardware` verdict for it.
+
+**Vectors**
+
+- **100** gains an `integrity` attachment (`playIntegrity`, `hardware`) and
+  stays the corpus's green; its bytes moved.
+- **148** (new) is the old 100: no `integrity`, amber, *integrity not proven*.
+  It is also 109 with the `failed` statement deleted — the case this change
+  closes.
+- **149** (new): `playIntegrity` `basic` → amber.
+- **150** (new): iOS with an `appAttest` statement mislabelled `hardware` →
+  amber; the rule is the verifier's, not the registry's good behaviour.
+- **110**: green → amber, *integrity not proven*.
+- **41–43, 45, 49–54, 63, 98, 99, 101, 102, 106, 107, 109**: expected labels
+  gain *integrity not proven*; ceilings unchanged (all amber already).
+- Notes that described a vector as "vector 100 with …" and carry no
+  integrity now say "vector 148 with …".
+
+**What a verifier that predates 3.0.0 does**: it shows green for a capture
+with a proven level and no `hardware` integrity statement (vectors 148, 149,
+150, 110), and never shows *integrity not proven*. There is no fallback, under
+the no-backward-compatibility decision of 22 September 2026 above.
+
 ### Content Credentials as a carrier — corpus 2.0.0 → **2.1.0**
 
 A minor corpus bump: 26 vectors are new (122–147), 147 in all, and no

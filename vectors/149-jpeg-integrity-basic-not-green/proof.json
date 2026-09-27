@@ -85,8 +85,8 @@
   },
   "integrity": {
     "source": "playIntegrity",
-    "verdict": "hardware",
+    "verdict": "basic",
     "evaluated_at": 1757332801000,
-    "sig": "saxfg7df4pqgYhh5iA8Y81CLGruLGvtdlTFgTZqkgyJD3o2jkyJTaA5bR0Tew34JTWmYscSO2aD8W-0zozMYFw"
+    "sig": "H-1DKLeMP_f4WRxFxVWql-It_fLMW8L-myKipSWxYjlEXY1yoQVilt_bD3HKUNTbtVVtrH4DeMNX6RFx_p5Qsw"
   }
 }

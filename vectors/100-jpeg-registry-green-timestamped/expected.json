@@ -10,7 +10,7 @@
   },
   "outcome": "authentic",
   "labels": [
-    "integrity unevaluated",
+    "integrity hardware",
     "location declared only",
     "not anchored",
     "watermark not evaluated"

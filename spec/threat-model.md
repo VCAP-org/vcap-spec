@@ -13,16 +13,21 @@ this one says who would want to lie in it, how, and what stops them.
 For a capture that verifies **green**, and only then:
 
 1. The bytes of the media were exactly these when a specific key signed them.
-2. That key lives in secure hardware (Android StrongBox or TEE, Apple Secure
-   Enclave) of a device whose boot was verified, and was created by a known
-   app build — proven by a key attestation chain to Google's or Apple's root,
-   not declared.
-3. The key was registered in a public, append-only transparency log before the
+2. That key lives in secure hardware (Android StrongBox or TEE) of a device
+   whose boot was verified, and was created by a known app build — proven by
+   a key attestation chain to Google's root, not declared.
+3. Google attested the device's integrity from a hardware root
+   (`MEETS_STRONG_INTEGRITY`), relayed and signed by the registry. This is a
+   strong signal and not a certainty: attestation keys have leaked before,
+   and the check runs when the capture is sent, not when it is taken (§2).
+   No source proves an iOS device intact, so **no iOS capture is green** in
+   this version.
+4. The key was registered in a public, append-only transparency log before the
    capture, by an organization that passed KYB, and was not revoked at capture
    time.
-4. The claims around the media — capture id, declared time and place, level,
+5. The claims around the media — capture id, declared time and place, level,
    watermark parameters — were signed by the same key at the same moment.
-5. Optionally: the proof existed before a trusted time (RFC 3161), and before
+6. Optionally: the proof existed before a trusted time (RFC 3161), and before
    an on-chain block.
 
 For a capture that verifies **amber**, one or more of these is not proven, and
@@ -129,7 +134,7 @@ Boundaries, each enforced by code and tested:
 | Key extraction | reads the private key out of the device | secure hardware; not our control | accepted: the platform's promise, not ours |
 | Compromised app | a modified build of our app, or another app, uses the key | `attestationApplicationId` (package + signing digest) / App ID, per tenant; token rotation stops a leaked build | low; a re-signed app has a different digest |
 | Imported key | key created elsewhere, imported into the TEE | `origin` must be `GENERATED` | none |
-| Unlocked bootloader / rooted device with virtual camera | genuine hardware signs an injected frame | verified boot state and locked device required in the attestation; integrity statement (Play Integrity / App Attest) signed by the registry as an attachment; both prominent on the verdict | **high and accepted**: see §2. The verdict names it; a registry-signed integrity verdict of `failed` caps the ceiling at amber (`vcap-proof-1.0.md` §7). An absent verdict caps nothing — whoever strips it would otherwise decide — so *integrity unevaluated* is shown instead |
+| Unlocked bootloader / rooted device with virtual camera | genuine hardware signs an injected frame | verified boot state and locked device required in the attestation; integrity statement (Play Integrity / App Attest) signed by the registry as an attachment; both prominent on the verdict | **high and accepted**: see §2. The verdict names it. Green requires a registry-signed `hardware` verdict from Play Integrity (`vcap-proof-1.0.md` §6.2, §7); anything else — absent, `basic`, `failed`, App Attest — is amber with *integrity not proven*, so stripping a `failed` verdict cannot raise the colour. What remains is a device that passes Google's strongest check while compromised, which a leaked attestation key has made possible before |
 | Cloned Secure Enclave key (theoretical) | two devices with one key | App Attest counter must increase on every assertion; the receipt (future) | low |
 
 ### 5.3 Against the registry and the log
@@ -250,6 +255,12 @@ like, and it is the true one.
 - **Channel binding** derivation in the control plane (TLS exporter or session
   hash): today optional; the verdict says when it is absent.
 - **Mirrors and gossip**: split-view resistance depends on them.
+- **Integrity freshness**: the integrity verdict is minted when a capture is
+  sent, not when it is taken, and no window bounds the gap. A bound on
+  `evaluated_at` relative to the proven instant would narrow it; it needs a
+  measured distribution of send delays first.
+- **An iOS device-integrity source**: until one exists, iOS captures are
+  amber at best (`vcap-proof-1.0.md` §6.2).
 - **External audit**: commissioned during phase 1, findings folded here.
 - **Per-capture keys** for unlinkability: cost and policy, later.
 - **Position, corroborated** (§5.7): the residual on SIM/device decoupling
@@ -261,6 +272,12 @@ like, and it is the true one.
   *authenticated* level waits for a smartphone chipset with OSNMA.
 
 ## 7. Change log
+
+- 2026-09-27 — Device integrity is a condition for green. §1 claims it, and
+  no longer claims green for iOS; §5.2: stripping a `failed` verdict no
+  longer raises the colour. This reverses the 2026-09-24 reading below: the
+  contradiction it removed is resolved the other way, in §6.2 and §7 too.
+  §6: integrity freshness and an iOS source are open.
 
 - 2026-09-25 — Content Credentials as a carrier (`vcap-proof-1.0.md` §3.2).
   §5.1: a forged manifest carrying a proof, and a hostile store. §5.5: a
