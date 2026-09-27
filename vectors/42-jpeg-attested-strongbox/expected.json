@@ -4,6 +4,7 @@
   "outcome": "authentic",
   "labels": [
     "chain revocation not checked",
+    "integrity not proven",
     "integrity unevaluated",
     "key not in transparency log",
     "location declared only",

@@ -605,7 +605,9 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
   const day = 86_400_000
   const chainOf = (name: string): string[] => (JSON.parse(readFileSync(join(VECTORS, '_chains', `${name}.json`), 'utf8')) as { chain: string[] }).chain
   // Attested photos keep every absence label except the attestation one.
-  const ATTESTED_LABELS = PHOTO_LABELS.filter((l) => l !== 'origin not hardware-attested')
+  // A proven level with no proven device integrity beside it: §7 names the
+  // missing half, and the ceiling cannot be green.
+  const ATTESTED_LABELS = [...PHOTO_LABELS.filter((l) => l !== 'origin not hardware-attested'), 'integrity not proven'].sort()
   const logKey = createPrivateKey({ key: Buffer.from(TEST_LOG_KEY_PKCS8_BASE64, 'base64'), format: 'der', type: 'pkcs8' })
 
   // §6.2: `core_hash ‖ JCS(entries) ‖ uint64 BE fetched_at`, signed by the key
@@ -679,6 +681,9 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
     return { proof: { ...proof, timestamp: { tsr: token.tsr } }, genTime: token.genTime }
   }
   const STAMPED_LABELS = ATTESTED_LABELS.filter((l) => l !== 'no trusted time')
+  // A revoked chain proves no level (§7, red), so there is no level whose
+  // missing integrity half is worth naming.
+  const REVOKED_LABELS = ATTESTED_LABELS.filter((l) => l !== 'integrity not proven')
 
   {
     const base = attested({ chain: chainOf('tee') })
@@ -688,7 +693,7 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
       verifierClock: CAPTURE + day,
       expected: {
         outcome: 'authentic',
-        labels: [...ATTESTED_LABELS, 'attestation key revoked'],
+        labels: [...REVOKED_LABELS, 'attestation key revoked'],
         not_evaluated: [],
         core_hash: hashOf(proof),
         level: { claimed: 'tee', proven: 'none', ceiling: 'red' },
@@ -722,7 +727,7 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
       verifierClock: CAPTURE + 60 * day,
       expected: {
         outcome: 'authentic',
-        labels: [...ATTESTED_LABELS, 'attestation key revoked'],
+        labels: [...REVOKED_LABELS, 'attestation key revoked'],
         not_evaluated: [],
         core_hash: hashOf(proof),
         level: { claimed: 'tee', proven: 'none', ceiling: 'red' },
@@ -739,7 +744,7 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
       verifierClock: CAPTURE + 60 * day,
       expected: {
         outcome: 'authentic',
-        labels: [...STAMPED_LABELS, 'attestation key revoked'],
+        labels: [...STAMPED_LABELS.filter((l) => l !== 'integrity not proven'), 'attestation key revoked'],
         not_evaluated: [],
         core_hash: hashOf(proof),
         level: { claimed: 'tee', proven: 'none', ceiling: 'red' },
@@ -914,8 +919,8 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
   }
 
   // Every absence label except the three this vector answers.
-  const GREEN_LABELS = PHOTO_LABELS.filter((l) =>
-    l !== 'origin not hardware-attested' && l !== 'key not in transparency log')
+  const GREEN_LABELS = [...PHOTO_LABELS.filter((l) =>
+    l !== 'origin not hardware-attested' && l !== 'key not in transparency log'), 'integrity not proven'].sort()
 
   /** §6.2's online status, signed by the log for one instant only. */
   const statusStatement = (at: number, status: 0 | 1 | 2, treeSize = 7): Json => ({
@@ -1002,7 +1007,7 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
         level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
         validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
       },
-      notes: 'Everything §7 asks for except one thing, and the one thing is time. `tee` proven by a chain to the pinned root, every certificate of the chain valid in a signed status snapshot, the key in the log before the declared capture, the app that made the key one the log admits, and the log\'s signed answer that the key was not revoked at that instant — `key_status` in `expected.json` is an **input**, like `verifier_clock`, because §6.2 makes revocation an online question.\n\nAnd the ceiling is **amber**. The only instant is `time.device_clock`, and a device clock caps the verdict at amber whatever else holds (§7): it is set by whoever holds the device, so every check made "at the capture" is a check made at a moment the signer chose. This vector used to be the corpus\'s green, in contradiction with that sentence; the text was right and the vector was not. Vector 100 is this proof with an instant nobody can move, and it is green.' })
+      notes: 'Everything §7 asks for except one thing, and the one thing is time. `tee` proven by a chain to the pinned root, every certificate of the chain valid in a signed status snapshot, the key in the log before the declared capture, the app that made the key one the log admits, and the log\'s signed answer that the key was not revoked at that instant — `key_status` in `expected.json` is an **input**, like `verifier_clock`, because §6.2 makes revocation an online question.\n\nAnd the ceiling is **amber**. The only instant is `time.device_clock`, and a device clock caps the verdict at amber whatever else holds (§7): it is set by whoever holds the device, so every check made "at the capture" is a check made at a moment the signer chose. This vector used to be the corpus\'s green, in contradiction with that sentence; the text was right and the vector was not. Vector 148 is this proof with an instant nobody can move, and vector 100 adds a proven device integrity: that one is green.' })
   }
 
   // The standard core is the one `_timestamps/valid.json` stamps; every
@@ -1014,9 +1019,33 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
   }
   const STAMPED_GREEN = GREEN_LABELS.filter((l) => l !== 'no trusted time')
 
+  /** A registry-signed §6.2 `integrity` statement over `proof`'s core. */
+  const integrityOver = (proof: Proof, source: string, verdict: string): Proof => {
+    const body: { [key: string]: Json } = { source, verdict, evaluated_at: CAPTURE + 1000 }
+    return { ...proof, integrity: { ...body, sig: signEs256(integrityMessage(coreHash(proof), body), logKey).toString('base64url') } }
+  }
+  const PROVEN_GREEN = [...STAMPED_GREEN.filter((l) => l !== 'integrity unevaluated' && l !== 'integrity not proven'), 'integrity hardware'].sort()
+
+  {
+    const { proof: stamped, genTime } = stampedRegistered()
+    const proof = integrityOver(stamped, 'playIntegrity', 'hardware')
+    file({ name: '100-jpeg-registry-green-timestamped', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      keyStatus: statusStatement(Date.parse(genTime), 1),
+      expected: {
+        outcome: 'authentic',
+        labels: PROVEN_GREEN,
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'green' },
+        validated_at: { instant: genTime, source: 'timestamp' }
+      },
+      notes: 'The corpus\'s **green**: vector 54 with an RFC 3161 token over its core and a registry-signed `integrity` statement of `hardware` from `playIntegrity`. The token\'s `genTime` becomes the proven instant (§7), every certificate path is validated there, the log\'s signed status answers for that instant, and the tree head predates both the declared capture and the token (§6.2).\n\nWhat green says here, and only here: the key is in secure hardware of a device whose boot was verified, created by an app the log admits, registered in the log before the capture and not revoked at the instant a time-stamping authority vouches for; the chain\'s certificates were not revoked when the registry looked; Google attested the device\'s integrity from a hardware root; and the bytes are the ones that key signed. Change any one input and one of the vectors around this one says which — vector 148 is this proof without the integrity statement.' })
+  }
+
   {
     const { proof, genTime } = stampedRegistered()
-    file({ name: '100-jpeg-registry-green-timestamped', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+    file({ name: '148-jpeg-registry-timestamped-integrity-absent', ext: 'jpg', file: seal(baseJpeg, proof), proof,
       verifierClock: CAPTURE + day,
       keyStatus: statusStatement(Date.parse(genTime), 1),
       expected: {
@@ -1024,10 +1053,27 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
         labels: STAMPED_GREEN,
         not_evaluated: [],
         core_hash: hashOf(proof),
-        level: { claimed: 'tee', proven: 'tee', ceiling: 'green' },
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
         validated_at: { instant: genTime, source: 'timestamp' }
       },
-      notes: 'The corpus\'s **green**: vector 54 with an RFC 3161 token over its core. The token\'s `genTime` becomes the proven instant (§7), every certificate path is validated there, the log\'s signed status answers for that instant, and the tree head predates both the declared capture and the token (§6.2).\n\nWhat green says here, and only here: the key is in secure hardware of a device whose boot was verified, created by an app the log admits, registered in the log before the capture and not revoked at the instant a time-stamping authority vouches for; the chain\'s certificates were not revoked when the registry looked; and the bytes are the ones that key signed. Change any one input and one of the vectors around this one says which.' })
+      notes: 'Vector 100 without its `integrity` attachment: everything else green asks for, and **amber**, with *integrity unevaluated* and *integrity not proven* (§7). A proven level says where the key lives; it does not say that what asked the key to sign was intact, and green claims both.\n\nThis is also vector 109 with its `failed` verdict deleted. Before corpus 3.0.0 that deletion turned amber into green, because absence capped nothing and only a present `failed` did: whoever held a copy of the file decided the colour by stripping the evidence against it. With device integrity a condition *for* green, stripping evidence can only leave the verdict where it was or lower it.' })
+  }
+
+  {
+    const { proof: stamped, genTime } = stampedRegistered()
+    const proof = integrityOver(stamped, 'playIntegrity', 'basic')
+    file({ name: '149-jpeg-integrity-basic-not-green', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      keyStatus: statusStatement(Date.parse(genTime), 1),
+      expected: {
+        outcome: 'authentic',
+        labels: [...STAMPED_GREEN.filter((l) => l !== 'integrity unevaluated'), 'integrity basic'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
+        validated_at: { instant: genTime, source: 'timestamp' }
+      },
+      notes: 'Vector 100 with a verdict of `basic` in place of `hardware`: a genuine, valid statement that the device passed Google\'s ordinary checks and not the one a hardware root answers. **Amber**, *integrity basic* and *integrity not proven* (§7): a device that hides a root from software checks passes those, so `basic` does not prove the device intact, and green claims that it was.' })
   }
 
   {
@@ -1064,7 +1110,7 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
         level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
         validated_at: { instant: new Date(BLOCK).toISOString(), source: 'anchor' }
       },
-      notes: 'A core with **no `time`**, everything else of vector 100, and a verified anchor for the instant. The reference verifier used to read a missing `device_clock` as "registered before the capture" — an absent field giving a *stronger* verdict than a present one, since a declared time can at least be late.\n\nNow the absence is shown, *capture time not declared*, and nothing that needs a declared capture time is established: the log\'s tree head cannot be placed before a capture nobody dated, so the ceiling is **amber**. The block time is an upper bound on the capture and says nothing about how long before it the key was registered.' })
+      notes: 'A core with **no `time`**, everything else of vector 148, and a verified anchor for the instant. The reference verifier used to read a missing `device_clock` as "registered before the capture" — an absent field giving a *stronger* verdict than a present one, since a declared time can at least be late.\n\nNow the absence is shown, *capture time not declared*, and nothing that needs a declared capture time is established: the log\'s tree head cannot be placed before a capture nobody dated, so the ceiling is **amber**. The block time is an upper bound on the capture and says nothing about how long before it the key was registered.' })
   }
 
   {
@@ -1080,7 +1126,7 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
         level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
         validated_at: { instant: genTime, source: 'timestamp' }
       },
-      notes: 'Vector 100 with a tree head signed two minutes after the capture — after the declared time **and** after the token\'s `genTime`. §6.2 requires `tree_head.timestamp` to exceed neither; the reference verifier used to check only the first. The second is the one that matters: the token is an instant the device does not choose, and a key logged after it was not in the log when the capture was stamped. Both labels, **amber**.' })
+      notes: 'Vector 148 with a tree head signed two minutes after the capture — after the declared time **and** after the token\'s `genTime`. §6.2 requires `tree_head.timestamp` to exceed neither; the reference verifier used to check only the first. The second is the one that matters: the token is an instant the device does not choose, and a key logged after it was not in the log when the capture was stamped. Both labels, **amber**.' })
   }
 
   {
@@ -1148,7 +1194,7 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
         level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
         validated_at: { instant: genTime, source: 'timestamp' }
       },
-      notes: 'Vector 100 with a chain whose leaf says the key was created by an app signed with a certificate the log does not admit: `attestationApplicationId.signature_digests` holds no digest from the log\'s `app_signing_digests` in `_trust/logs.json` (§7). The hardware is genuine and the key is in the log, so the level stands; the app is not one the registry vouches for, so the ceiling is **amber**, *attestation app not admitted*. Not red: this is a claim the evidence does not reach, not a forgery.' })
+      notes: 'Vector 148 with a chain whose leaf says the key was created by an app signed with a certificate the log does not admit: `attestationApplicationId.signature_digests` holds no digest from the log\'s `app_signing_digests` in `_trust/logs.json` (§7). The hardware is genuine and the key is in the log, so the level stands; the app is not one the registry vouches for, so the ceiling is **amber**, *attestation app not admitted*. Not red: this is a claim the evidence does not reach, not a forgery.' })
   }
 
   {
@@ -1164,7 +1210,7 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
         level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
         validated_at: { instant: genTime, source: 'timestamp' }
       },
-      notes: 'Vector 100 with a chain whose leaf carries no `attestationApplicationId`. There is nothing to compare with the log\'s declared digests, and a verifier holding no declaration for the log is in the same place: *attestation app not checked*, **amber**, never red (§7). Green claims the key was created by a known app build (`threat-model.md` §1), so a verifier that cannot check it does not say green.' })
+      notes: 'Vector 148 with a chain whose leaf carries no `attestationApplicationId`. There is nothing to compare with the log\'s declared digests, and a verifier holding no declaration for the log is in the same place: *attestation app not checked*, **amber**, never red (§7). Green claims the key was created by a known app build (`threat-model.md` §1), so a verifier that cannot check it does not say green.' })
   }
 
   {
@@ -1182,7 +1228,7 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
         level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
         validated_at: { instant: genTime, source: 'timestamp' }
       },
-      notes: 'Vector 100, the green, with a registry-signed integrity verdict of `failed`. §7: a valid `failed` caps the ceiling at **amber** and is shown prominently — the chain proves where the key lives, and Google\'s word that this device failed its integrity check is a reason not to say green however good the chain is. The level stands (`tee`): the verdict is about the device\'s state, not about the key.\n\nThe cap works in one direction only. Deleting the attachment gives *integrity unevaluated*, which caps nothing — so no integrity verdict can be a condition *for* green, and the format does not pretend it is. What a present `failed` can do is refuse green, and a relabelling cannot fake that away: the verdict is inside the signed message.' })
+      notes: 'Vector 148 with a registry-signed integrity verdict of `failed`. §7: a valid `failed` is shown prominently — Google\'s word that this device failed its integrity check — and the ceiling is **amber**, as it is for every verdict that does not prove the device intact (*integrity not proven*). The level stands (`tee`): the verdict is about the device\'s state, not about the key.\n\nDeleting the attachment gives vector 148: *integrity unevaluated*, still amber. Until corpus 3.0.0 it gave green, because only a present `failed` capped the verdict; that is why device integrity is now a condition for green and not only a reason against it.' })
   }
 
   {
@@ -1205,10 +1251,38 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
         labels: [...GREEN_LABELS.filter((l) => l !== 'not anchored'), 'level from registry records'].sort(),
         not_evaluated: [],
         core_hash: hashOf(proof),
-        level: { claimed: 'secureEnclave', proven: 'secureEnclave', ceiling: 'green' },
+        level: { claimed: 'secureEnclave', proven: 'secureEnclave', ceiling: 'amber' },
         validated_at: { instant: new Date(BLOCK).toISOString(), source: 'anchor' }
       },
-      notes: 'An iOS capture: no attestation chain in the proof, a `registry` attachment whose leaf records `secureEnclave` for this key, a verified anchor for the instant and the log\'s signed status at it. §7, *The Secure Enclave level*: this version defines no offline binding between a proof and an App Attest attestation, so the level is reachable **only through the registry**, and it is shown as what it is — *level from registry records*, the registry\'s word, like *corroborated* for a position. The inclusion proof shows the log recorded it; nothing in the file shows the Secure Enclave. A verifier that presented this level as checkable without the registry would be claiming a check it did not make.' })
+      notes: 'An iOS capture: no attestation chain in the proof, a `registry` attachment whose leaf records `secureEnclave` for this key, a verified anchor for the instant and the log\'s signed status at it. §7, *The Secure Enclave level*: this version defines no offline binding between a proof and an App Attest attestation, so the level is reachable **only through the registry**, and it is shown as what it is — *level from registry records*, the registry\'s word, like *corroborated* for a position. The inclusion proof shows the log recorded it; nothing in the file shows the Secure Enclave. A verifier that presented this level as checkable without the registry would be claiming a check it did not make.\n\n**Amber**, with *integrity not proven* (§7): no source in this version proves an iOS device intact — Apple says nothing about a jailbreak — so an iOS capture is amber at best until one does. Vector 150 carries an App Attest statement and stays amber.' })
+  }
+
+  {
+    // iOS again, with the best App Attest can say, mislabelled `hardware` by
+    // a registry: the verdict is shown and proves nothing about the device.
+    const signed = sign(photoCore(baseJpeg, 'image/jpeg', { device: { platform: 'ios', secure_hw: 'secureEnclave', key_id: KEY_ID } }))
+    const leaves = [0, 1, 2].map((i) => i === 1 ? leafHash(coreHash(signed)) : leafHash(createHash('sha256').update(`another capture ${i}`).digest()))
+    const root = nodeHash(nodeHash(leaves[0] as Buffer, leaves[1] as Buffer), leaves[2] as Buffer)
+    const BLOCK = CAPTURE + 90_000
+    const anchored = {
+      ...signed,
+      registry: registryFor({ secureHw: 'secureEnclave' }),
+      anchor: { chain: 'base-sepolia', tx: '0x' + createHash('sha256').update('the ios anchoring transaction').digest('hex'), block: 46561942, anchor_id: 2, index: 1, tree_size: 3, root: root.toString('base64url'), merkle_path: [leaves[0] as Buffer, leaves[2] as Buffer].map((h) => h.toString('base64url')) }
+    }
+    const proof = integrityOver(anchored, 'appAttest', 'hardware')
+    file({ name: '150-jpeg-app-attest-integrity-not-green', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      keyStatus: statusStatement(BLOCK, 1),
+      chainRead: { root: root.toString('base64url'), tree_size: 3, block_time: BLOCK },
+      expected: {
+        outcome: 'authentic',
+        labels: [...GREEN_LABELS.filter((l) => l !== 'not anchored' && l !== 'integrity unevaluated'), 'integrity hardware', 'level from registry records'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'secureEnclave', proven: 'secureEnclave', ceiling: 'amber' },
+        validated_at: { instant: new Date(BLOCK).toISOString(), source: 'anchor' }
+      },
+      notes: 'Vector 110 with an `integrity` attachment from `appAttest` whose verdict is `hardware` — which a registry following §6.2 never writes for this source, and which a verifier reads anyway, because the rule that keeps it from green is the verifier\'s. The statement is valid and shown (*integrity hardware*), and the ceiling is **amber** with *integrity not proven*: App Attest proves a genuine device running a genuine build and says nothing about whether the device is jailbroken, so §7 does not accept it as proof of device integrity whatever its verdict.' })
   }
 
   {
@@ -1449,7 +1523,7 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
       verifierClock: CAPTURE + 365 * day,
       expected: {
         outcome: 'authentic',
-        labels: TS_LABELS.filter((l) => l !== 'origin not hardware-attested').concat('chain revocation not checked').sort(),
+        labels: TS_LABELS.filter((l) => l !== 'origin not hardware-attested').concat('chain revocation not checked', 'integrity not proven').sort(),
         not_evaluated: [],
         core_hash: hashOf(proof),
         level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },

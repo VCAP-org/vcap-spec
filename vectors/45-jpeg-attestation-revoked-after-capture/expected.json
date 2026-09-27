@@ -4,6 +4,7 @@
   "outcome": "authentic",
   "labels": [
     "attestation key revoked after the capture",
+    "integrity not proven",
     "integrity unevaluated",
     "key not in transparency log",
     "location declared only",

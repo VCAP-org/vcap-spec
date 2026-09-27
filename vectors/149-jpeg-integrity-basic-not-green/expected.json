@@ -1,15 +1,18 @@
 {
   "kind": "file",
-  "verifier_clock": 1788868800000,
+  "verifier_clock": 1757419200000,
+  "key_status": {
+    "log_id": "n86HEwJWvHOhbryJkD8Q18_41VkQcVInSIqNa1EaBVs",
+    "at": 1757332860000,
+    "tree_size": 7,
+    "status": 1,
+    "signature": "1X3TWJlxUo1o0J9qwLg1E-5eWyiYPGeIG6MLUniYwpNV-RYhldhij_rIM4IsS-axphPPmLozqgElge-k346HyA"
+  },
   "outcome": "authentic",
   "labels": [
-    "attestation chain expired, capture time not proven",
-    "chain revocation not checked",
+    "integrity basic",
     "integrity not proven",
-    "integrity unevaluated",
-    "key not in transparency log",
     "location declared only",
-    "no trusted time",
     "not anchored",
     "watermark not evaluated"
   ],
@@ -21,8 +24,8 @@
     "ceiling": "amber"
   },
   "validated_at": {
-    "instant": "2025-09-08T12:00:00.000Z",
-    "source": "device_clock"
+    "instant": "2025-09-08T12:01:00.000Z",
+    "source": "timestamp"
   },
   "schema_valid": true
 }

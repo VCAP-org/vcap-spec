@@ -16,6 +16,7 @@
   "outcome": "authentic",
   "labels": [
     "capture time not declared",
+    "integrity not proven",
     "integrity unevaluated",
     "location declared only",
     "no trusted time",

@@ -3,6 +3,7 @@
   "verifier_clock": 1757419200000,
   "outcome": "authentic",
   "labels": [
+    "integrity not proven",
     "integrity unevaluated",
     "location declared only",
     "no trusted time",
