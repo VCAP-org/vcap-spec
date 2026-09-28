@@ -166,7 +166,7 @@
         },
         "source": {
           "$ref": "#/$defs/identifier",
-          "description": "How the device obtained the fix: gnss, network or manual. Extensible (§9); an unknown value is still a declared position."
+          "description": "How the device obtained the fix: gnss, network, manual or fused (the OS combined its sources and did not say which). Extensible (§9); an unknown value is still a declared position."
         },
         "at": {
           "$ref": "#/$defs/uint53",

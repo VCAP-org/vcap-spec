@@ -141,7 +141,7 @@ The numbered corpus (`vectors/NN-*`) has its own version, in `vectors/VERSION`
 — separate from `vcap/1.0`, the proof format version. The format version says
 what a proof looks like; the corpus version says which exact vectors an
 implementation checked itself against, so a third party can claim "conformant
-with vcap-spec corpus 3.0.0" and mean something a consumer can check.
+with vcap-spec corpus 3.1.0" and mean something a consumer can check.
 
 `vectors/MANIFEST.json` is that check: for every `vectors/NN-*` directory, its
 `kind`, its `outcome`, and a SHA-256 over its files (name and length included,
@@ -157,7 +157,7 @@ npm run manifest:check   # exits 1 if the committed file is stale — CI runs th
 ```
 
 `vectors/CONFORMANCE.md` says what the sentence "conformant with corpus
-3.0.0" has to contain to be checkable — corpus version, manifest hash, and
+3.1.0" has to contain to be checkable — corpus version, manifest hash, and
 how many vectors actually ran — and why a suite that ran zero vectors must be
 red. `vectors/conformance-report.json` is this repository's own claim in that
 format, regenerated and checked by CI (`npm run conformance:report` /
@@ -179,7 +179,8 @@ still a draft, which is the one time §9 allows it. 2.1.0 is a minor again:
 reason: device integrity became a condition for green (`CHANGELOG.md`), so
 vector 100 gained an `integrity` attachment, 20 expected verdicts gained
 *integrity not proven*, vector 110 went from green to amber, and 148–150 were
-added.
+added. 3.1.0 is a minor again: vector 151 added (`location.source: fused`),
+none changed.
 
 `vectors/edge-cases/` (below) is not in the manifest and not part of the
 versioned corpus: it is regenerated on demand by its own tool, not hand-curated

@@ -1,0 +1,30 @@
+{
+  "kind": "file",
+  "verifier_clock": 1757419200000,
+  "outcome": "authentic",
+  "labels": [
+    "integrity unevaluated",
+    "key not in transparency log",
+    "location declared only",
+    "no trusted time",
+    "not anchored",
+    "origin not hardware-attested",
+    "watermark not evaluated"
+  ],
+  "not_evaluated": [],
+  "core_hash": "8b3b06f85a1bc57b7cd502914f563a0a4c3fad3332cb14abb1810499dc7f8240",
+  "level": {
+    "claimed": "tee",
+    "proven": "none",
+    "ceiling": "amber"
+  },
+  "validated_at": {
+    "instant": "2025-09-08T12:00:00.000Z",
+    "source": "device_clock"
+  },
+  "location": {
+    "claimed": "declared",
+    "level": "declared"
+  },
+  "schema_valid": true
+}
