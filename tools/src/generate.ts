@@ -1789,6 +1789,19 @@ file({ name: '72-jpeg-footer-crc-mismatch-sidecar', ext: 'jpg', file: seal(baseJ
   }
 
   {
+    // What a phone usually has: the OS's fused fix, with the precision the
+    // person allowed (an approximate permission reads kilometres) and no
+    // altitude. `fused` says how, without naming a source the OS kept to itself.
+    const proof = sign(photoCore(baseJpeg, 'image/jpeg', {
+      location: { level: 'declared', lat_udeg: 45464664, lon_udeg: 9188540, acc_cm: 150000, source: 'fused', at: CAPTURE - 40000 }
+    }))
+    file({ name: '151-jpeg-location-declared-fused', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: { outcome: 'authentic', labels: DECLARED_LABELS, not_evaluated: [], core_hash: hashOf(proof), ...at({}), location: { claimed: 'declared', level: 'declared' } },
+      notes: 'A declared position as a phone usually has it: `source: fused` — the OS combined satellites, Wi-Fi and cell and did not say which (Android\'s fused provider; iOS CoreLocation always) — an accuracy of 1.5 km, which is what an approximate location permission yields, no altitude, and a fix 40 s older than the capture. The level is **declared**, exactly as vector 74: how the fix was obtained and how precise the OS said it was are part of the claim, signed, and neither raises it. A writer names the source the OS reported and never a guessed one (§6.1).' })
+  }
+
+  {
     const proof = corroborated()
     file({ name: '75-jpeg-location-corroborated', ext: 'jpg', file: seal(baseJpeg, proof), proof,
       verifierClock: CAPTURE + day,

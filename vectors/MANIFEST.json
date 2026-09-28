@@ -1,6 +1,6 @@
 {
-  "corpus_version": "3.0.0",
-  "vector_count": 150,
+  "corpus_version": "3.1.0",
+  "vector_count": 151,
   "vectors": [
     {
       "name": "01-jpeg-sealed",
@@ -1048,6 +1048,13 @@
       "kind": "file",
       "outcome": "authentic",
       "sha256": "dabb166b253e7a3bbd65b6e680a279faca5236c66f745f09a41e011434d43d27",
+      "files": 4
+    },
+    {
+      "name": "151-jpeg-location-declared-fused",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "9624c94036358f9edfa501a2a1fbb08dde7c2afa9c961fb75e2075c373857ff4",
       "files": 4
     }
   ],

@@ -12,6 +12,26 @@ else.
 
 ## Unreleased
 
+### `location.source: fused` — corpus 3.0.0 → **3.1.0**
+
+A minor corpus bump: vector 151 is new (151 in all), no existing vector
+changed a byte.
+
+- **§6.1: `source` gains `fused`** — the OS combined its sources and did not
+  say which (Android's fused provider; iOS CoreLocation, always). The other
+  values are described: `gnss` satellites, `network` Wi-Fi or cell, `manual`
+  typed by a person.
+- **Writer rule**: a writer that knows how the fix was obtained SHOULD say so,
+  and MUST NOT name a source the OS did not report; `fused` when it combined
+  them, absence when it said nothing.
+- **Why**: until now iOS never carried a `source` and Android dropped it for
+  fused fixes, so most real positions said nothing about how they were taken.
+  `acc_cm` already carries the precision the OS reported, approximate
+  permissions included (kilometres).
+- **What a verifier that predates 3.1.0 does**: `source` is extensible (§9),
+  so it reads a declared position exactly as before and shows `fused` as an
+  unknown source string. No level or ceiling moves.
+
 ### Device integrity is a condition for green — corpus 2.1.0 → **3.0.0**
 
 **Breaking.** A major corpus bump: vector 100 changed bytes, 20 expected

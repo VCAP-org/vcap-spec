@@ -777,9 +777,14 @@ Rules that keep five implementations byte-identical:
   `level`: `lat_udeg`, `lon_udeg` (integer microdegrees, `int32`, ±90 000 000
   and ±180 000 000), `alt_cm` (height above the WGS 84 ellipsoid, integer
   centimetres, signed), `acc_cm` (the horizontal accuracy the OS reported,
-  integer centimetres, `uint32`), `source` — how the fix was obtained: `gnss`,
-  `network`, `manual`; extensible (§9), an unknown value is still a declared
-  position — and `at`, the device clock when the fix was taken, ms, which may
+  integer centimetres, `uint32`), `source` — how the fix was obtained: `gnss`
+  (satellites), `network` (Wi-Fi or cell), `manual` (typed by a person), or
+  `fused` (the OS combined its sources and did not say which: Android's fused
+  provider, iOS CoreLocation always); extensible (§9), an unknown value is
+  still a declared position. A writer that knows how the fix was obtained
+  SHOULD say so, and MUST NOT name a source the OS did not report: `fused` is
+  the honest answer when it combined them, and absence when it said nothing
+  at all — and `at`, the device clock when the fix was taken, ms, which may
   precede `time.device_clock` by the age of the fix. A position is two
   coordinates: a `location` without both `lat_udeg` and `lon_udeg` declares
   nothing (vector 84). `level` is the level the device **claims** (§7.1): a
