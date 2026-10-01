@@ -695,8 +695,13 @@ sig(n)          = ECDSA-P256-SHA256( message(n) ), P1363, low s (§4.2)
   `pasp` of its own) and a matrix it was handed as a rotation hint, and the
   rule is the one §5 already states for NAL units. In practice: Android's
   `MediaMuxer` writes `tkhd` from `setOrientationHint`, and AVFoundation's
-  `AVAssetWriter` from the input's `transform`, and either may add `colr` or
-  `pasp` boxes of its own; the writer reads all of them back. `w` and `h` stay the coded
+  `AVAssetWriter` from the input's `transform`, and what else lands in the
+  sample entry is the muxer's choice, not the writer's: measured, `MediaMuxer`
+  on a Samsung SM-S908B writes a `colr` (`nclx`) and no `pasp` (vectors 36,
+  37), macOS `AVAssetWriter` writes `fiel` and `chrm` and neither of the two,
+  and the iPhone files of vectors 48 and 85 carry the configuration record
+  alone. Only `clap`, `pasp` and `colr` enter `config`, whichever are there;
+  the writer reads them back rather than assuming any. `w` and `h` stay the coded
   frame size; a rotated display is the matrix's business. A writer that
   writes more than the one video and at most one audio track, or leaves an
   extra track enabled, makes every clip of the file *tracks not bound*, and
