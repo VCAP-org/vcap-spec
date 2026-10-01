@@ -28,9 +28,15 @@ x509.cryptoProvider.set(webcrypto as unknown as Parameters<typeof x509.cryptoPro
 const LEVELS: Record<Level, number> = { software: 0, tee: 1, strongbox: 2 }
 
 /** The KeyDescription of schema version 300, with the fields §7 reads. */
-export const keyDescription = (o: { attestation: Level, keyMint: Level, locked?: boolean, bootState?: number, withRootOfTrust?: boolean, appSigningDigest?: Buffer | null }): x509.Extension => {
+export const keyDescription = (o: { attestation: Level, keyMint: Level, locked?: boolean, bootState?: number, withRootOfTrust?: boolean, appSigningDigest?: Buffer | null, origin?: number | null }): x509.Extension => {
   const enumerated = (value: number) => new asn1js.Enumerated({ value })
   const octets = (bytes: Uint8Array) => new asn1js.OctetString({ valueHex: bytes.buffer as ArrayBuffer })
+  // origin [702] in hardwareEnforced, before rootOfTrust as KeyMint orders
+  // tags: GENERATED (0) unless the chain is about an imported key; null writes
+  // none.
+  const origin = o.origin === null
+    ? []
+    : [new asn1js.Constructed({ idBlock: { tagClass: 3, tagNumber: 702 }, value: [new asn1js.Integer({ value: o.origin ?? 0 })] })]
   const rootOfTrust = o.withRootOfTrust === false
     ? []
     : [new asn1js.Constructed({
@@ -60,7 +66,7 @@ export const keyDescription = (o: { attestation: Level, keyMint: Level, locked?:
     new asn1js.Integer({ value: 300 }), enumerated(LEVELS[o.attestation]),
     new asn1js.Integer({ value: 300 }), enumerated(LEVELS[o.keyMint]),
     octets(new Uint8Array([1, 2, 3])), octets(new Uint8Array(0)),
-    new asn1js.Sequence({ value: applicationId }), new asn1js.Sequence({ value: rootOfTrust })
+    new asn1js.Sequence({ value: applicationId }), new asn1js.Sequence({ value: [...origin, ...rootOfTrust] })
   ] }).toBER()
   return new x509.Extension(KEY_DESCRIPTION_OID, false, body)
 }
@@ -120,6 +126,8 @@ export const testChain = async (o: {
   withRootOfTrust?: boolean,
   /** attestationApplicationId's signing digest; null writes none. */
   appSigningDigest?: Buffer | null,
+  /** KeyMint `origin`: GENERATED (0) by default; null writes none. */
+  origin?: number | null,
   /**
    * An attested key that signs a leaf of its own: the genuine leaf becomes the
    * second certificate and the proof's key sits under it with whatever
@@ -132,7 +140,7 @@ export const testChain = async (o: {
 }): Promise<TestChain> => {
   const root = o.root
   const intermediate = await issue({ subject: 'CN=vcap test attestation intermediate', issuer: root, ca: true, serial: '02', notBefore: o.notBefore, notAfter: o.notAfter })
-  const description = (level: Level): x509.Extension => keyDescription({ attestation: level, keyMint: level, locked: o.locked, bootState: o.bootState, withRootOfTrust: o.withRootOfTrust, appSigningDigest: o.appSigningDigest })
+  const description = (level: Level): x509.Extension => keyDescription({ attestation: level, keyMint: level, locked: o.locked, bootState: o.bootState, withRootOfTrust: o.withRootOfTrust, appSigningDigest: o.appSigningDigest, origin: o.origin })
   // §6.2: each certificate DER in base64url, like every other binary in a proof.
   const der = (c: x509.X509Certificate) => Buffer.from(c.rawData).toString('base64url')
   if (o.forgedLeaf) {

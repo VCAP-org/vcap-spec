@@ -141,7 +141,7 @@ The numbered corpus (`vectors/NN-*`) has its own version, in `vectors/VERSION`
 — separate from `vcap/1.0`, the proof format version. The format version says
 what a proof looks like; the corpus version says which exact vectors an
 implementation checked itself against, so a third party can claim "conformant
-with vcap-spec corpus 3.1.0" and mean something a consumer can check.
+with vcap-spec corpus 4.0.0" and mean something a consumer can check.
 
 `vectors/MANIFEST.json` is that check: for every `vectors/NN-*` directory, its
 `kind`, its `outcome`, and a SHA-256 over its files (name and length included,
@@ -157,7 +157,7 @@ npm run manifest:check   # exits 1 if the committed file is stale — CI runs th
 ```
 
 `vectors/CONFORMANCE.md` says what the sentence "conformant with corpus
-3.1.0" has to contain to be checkable — corpus version, manifest hash, and
+4.0.0" has to contain to be checkable — corpus version, manifest hash, and
 how many vectors actually ran — and why a suite that ran zero vectors must be
 red. `vectors/conformance-report.json` is this repository's own claim in that
 format, regenerated and checked by CI (`npm run conformance:report` /
@@ -180,7 +180,14 @@ reason: device integrity became a condition for green (`CHANGELOG.md`), so
 vector 100 gained an `integrity` attachment, 20 expected verdicts gained
 *integrity not proven*, vector 110 went from green to amber, and 148–150 were
 added. 3.1.0 is a minor again: vector 151 added (`location.source: fused`),
-none changed.
+none changed. **4.0.0 is major**: §7 now requires an attestation key's
+`origin` to be `GENERATED`, which no committed chain carried, so the chains
+were minted again and the 26 attested vectors moved bytes with them (none
+changed its verdict); vector 54's `key_status` input became the log's answer
+about the verifier's clock (§6.2); `_trust/logs.json` gained a second trusted
+log; vectors 89, 94 and 145 changed verdict because a clip is now verified
+only when its core binds its presentation (§5 *Presentation*), which their
+device proofs cannot; and 152–164 were added (`CHANGELOG.md`).
 
 `vectors/edge-cases/` (below) is not in the manifest and not part of the
 versioned corpus: it is regenerated on demand by its own tool, not hand-curated
@@ -280,6 +287,14 @@ turns out to be wrong is corrected here, not in place.
   about 236. The vector stays exactly as it is — a file shaped like this exists,
   and a reader has to handle it — but the cause belongs to that writer's
   configuration, not to Apple's encoder.
+
+- **145 · `145-mp4-c2pa-clip-parent-of`** — its note says the outcome is
+  *verified clip*, 1 and 2 of 3. From corpus 4.0.0 it is **no proof found**
+  (`SOURCE_CAPTURE`, `frames_name_capture` true): vector 36's proof binds no
+  `media.presentation`, so the cut is *frames not compared* (§5
+  *Presentation*), and a proof found at depth 1 is never held against the
+  derivation (§3.2). `expected.json` carries the new verdict; the C2PA vectors
+  are not regenerated for a note (their salts are random), so the note stays.
 
 ## Not here yet, and why
 

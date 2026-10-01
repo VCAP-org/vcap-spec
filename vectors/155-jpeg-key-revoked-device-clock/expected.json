@@ -1,0 +1,33 @@
+{
+  "kind": "file",
+  "verifier_clock": 1757419200000,
+  "key_status": {
+    "log_id": "n86HEwJWvHOhbryJkD8Q18_41VkQcVInSIqNa1EaBVs",
+    "at": 1757419200000,
+    "tree_size": 7,
+    "status": 2,
+    "signature": "kb13-P6Ie7zIpsTuKMUVppS96Rl76PcZRnIl-1Iob_QHozG7tLfntnHwcrMc96RAusxcubMAOUdDBj5Bqd7Ayw"
+  },
+  "outcome": "authentic",
+  "labels": [
+    "integrity not proven",
+    "integrity unevaluated",
+    "key revoked",
+    "location declared only",
+    "no trusted time",
+    "not anchored",
+    "watermark not evaluated"
+  ],
+  "not_evaluated": [],
+  "core_hash": "dc59127e528a04d6e285de3abe748559e49c7f1ef66b238092a6b13afeeb5119",
+  "level": {
+    "claimed": "tee",
+    "proven": "tee",
+    "ceiling": "red"
+  },
+  "validated_at": {
+    "instant": "2025-09-08T12:00:00.000Z",
+    "source": "device_clock"
+  },
+  "schema_valid": true
+}

@@ -7,7 +7,7 @@ import { type ProofSource, extractProof } from './carrier.js'
 import { type SegmentEntry, verifyChain } from './segments.js'
 import { type ContainerReading, ContainerMalformed, readContainer } from './container.js'
 import { RANK, leafSpki, normalSerial, validateChain } from './attestation.js'
-import { type TrustBundle } from './trust.js'
+import { type TrustBundle, type TrustedLog } from './trust.js'
 import { type IntegrityAttachment, type KeyStatusStatement, type RegistryAttachment, verifyIntegrity, verifyKeyStatus, verifyRegistry } from './registry.js'
 import { type AnchorAttachment, type ChainRead, verifyAnchor } from './anchor.js'
 import { verifyTimestampToken } from './rfc3161.js'
@@ -107,6 +107,16 @@ const hasNonInteger = (v: Json): boolean => {
 const b64urlLen = (s: unknown, bytes: number): s is string =>
   typeof s === 'string' && /^[A-Za-z0-9_-]+$/.test(s) && Buffer.from(s, 'base64url').length === bytes
 
+/** §6.1: `{ config: 32 bytes base64url, matrix: 9 int32, display: 2 uint32 }`. */
+const presentationShape = (v: unknown): boolean => {
+  if (!isObject(v)) return false
+  const int32 = (x: unknown): boolean => Number.isInteger(x) && (x as number) >= -0x80000000 && (x as number) <= 0x7fffffff
+  const uint32 = (x: unknown): boolean => Number.isInteger(x) && (x as number) >= 0 && (x as number) <= 0xffffffff
+  return typeof v.config === 'string' && /^[A-Za-z0-9_-]{43}$/.test(v.config) &&
+    Array.isArray(v.matrix) && v.matrix.length === 9 && v.matrix.every(int32) &&
+    Array.isArray(v.display) && v.display.length === 2 && v.display.every(uint32)
+}
+
 // The shape checks the verifier needs before it can trust the types it reads;
 // `schema/` formalizes the rest.
 const shapeProblem = (proof: Proof): string | null => {
@@ -126,6 +136,9 @@ const shapeProblem = (proof: Proof): string | null => {
   // §8: media.mime alone decides that a proof is a video proof, and a video
   // proof needs its segments — the container and duration_ms decide nothing.
   if ((proof.media.mime as string).startsWith('video/') && !('segments' in proof && Number.isInteger(proof.media.segment_count))) return 'video proof without segments'
+  // §6.1 `media.presentation`: a reader takes its absence as a clip that is
+  // not bound, and its malformation as a payload two readers read two ways.
+  if ('presentation' in proof.media && !presentationShape(proof.media.presentation)) return 'media.presentation malformed'
   if (hasNonInteger(coreObject(proof))) return 'floating-point number in the core'
   return null
 }
@@ -295,13 +308,17 @@ const judge = (
   // returns before the level is computed and still has to say whether the key
   // was in the log — the label is about the key, not about the verdict.
   const registry = registryOutcome(proof, spki, trust, labels, deviceClock, timestamp.ok ? timestamp.genTime.getTime() : null)
+  // §6.2 *Which key*: every registry countersignature, and the online key
+  // status, is checked under the log a `registry` attachment names — never
+  // under whichever trusted key happens to verify.
+  const signers = signingLogs(proof, trust)
   // §6.2 `integrity`. It produces a label and no level, and it is a
   // condition for green: see `integrityOutcome`.
-  const deviceIntegrity = integrityOutcome(proof, Buffer.from(hash, 'hex'), trust, labels)
+  const deviceIntegrity = integrityOutcome(proof, Buffer.from(hash, 'hex'), signers, labels)
   // §7.1 the position level. Computed here, before the video branch, because
   // it is orthogonal to the outcome: a clip's coordinates are worth exactly
   // what an original's are.
-  const location = locationOutcome(proof, Buffer.from(hash, 'hex'), trust, labels)
+  const location = locationOutcome(proof, Buffer.from(hash, 'hex'), signers, labels)
   // A declared watermark is the writer saying a mark was embedded, not a
   // promise a reader finds it. This verifier ships no detector, so the only
   // honest §7 outcome is *watermark not evaluated* — never silence, which a
@@ -329,9 +346,15 @@ const judge = (
     // recompute says so, and gives no segment credit.
     if (!recomputeSegments) labels.push('segment content not recomputed')
     let binding: Binding = { located: false, reason: 'segment content not recomputed' }
+    let reading: ContainerReading | null = null
     if (recomputeSegments) {
       try {
-        binding = bindSegments(readContainer(media), captureId, entries)
+        reading = readContainer(media)
+        // A container this verifier cannot read as a video — not ISO-BMFF, no
+        // video track, an edit list it does not model — gave it nothing to
+        // recompute, and §7 says so in the same words as not trying.
+        if (reading.kind === 'unreadable') labels.push('segment content not recomputed')
+        binding = bindSegments(reading, captureId, entries)
         located.frames = binding.located
       } catch (e) {
         if (!(e instanceof ContainerMalformed)) throw e
@@ -343,6 +366,9 @@ const judge = (
     if (chain.status === 'tampered') return { ...tampered(chain.reason ?? 'segment chain'), segments }
     if (binding.located && binding.problems.length > 0) return { ...tampered(binding.problems.join('; ')), segments }
 
+    // §5 *Presentation*: what the core signs about how the frames are shown.
+    const signed = (proof.media as Proof).presentation as { config: string, matrix: number[], display: number[] } | undefined
+    const read = reading?.kind === 'gops' ? reading : null
     if (!mediaMatches) {
       // A file that is not the original, and in which no GOP of this capture
       // could be found: the signatures hold, and nothing ties them to these
@@ -350,8 +376,25 @@ const judge = (
       if (!binding.located) {
         return { outcome: 'frames_not_compared', labels: labels.sort(), not_evaluated: notEvaluated, core_hash: hash, segments, location, reason: `media.hash does not match and ${binding.reason}` }
       }
+      // Located and matching, and still not a verified clip unless the core
+      // binds how the frames are presented and this file presents them so: a
+      // rotated matrix, an edited parameter set or a track nobody signed
+      // shows the signed frames as something they were not. No segment is
+      // credited, and the label names what is not bound.
+      const unbound = signed === undefined ? 'presentation not bound'
+        : read?.layout ? 'tracks not bound'
+          : read && presentationDiffers(signed, read.presentation) ? 'presentation differs'
+            : null
+      if (unbound !== null) {
+        labels.push(unbound)
+        return { outcome: 'frames_not_compared', labels: labels.sort(), not_evaluated: notEvaluated, core_hash: hash, segments: { verified: [] }, location, reason: `media.hash does not match and the presentation is not the signed one (${unbound})` }
+      }
       return { outcome: 'verified_clip', labels: labels.sort(), not_evaluated: notEvaluated, core_hash: hash, segments, location, reason: 'media.hash does not match the received file' }
     }
+    // The original: `media.hash` covers its presentation with every other
+    // byte, so a signed presentation that does not describe it is the
+    // writer's false claim about its own file — flagged, amber, never red.
+    if (signed !== undefined && read && presentationDiffers(signed, read.presentation)) labels.push('presentation differs')
     // media.hash matches: these are the bytes the device sealed. A chain with
     // segments missing from the proof is still a clip of the proof, and says
     // so even over the original file.
@@ -365,7 +408,7 @@ const judge = (
   return {
     outcome: 'authentic', labels: labels.sort(), not_evaluated: notEvaluated, core_hash: hash,
     ...(segments ? { segments } : {}),
-    ...level(proof, spki, Buffer.from(hash, 'hex'), labels, trust, clock, registry, keyStatus, anchor, timestamp, deviceIntegrity),
+    ...level(proof, spki, Buffer.from(hash, 'hex'), labels, trust, signers, clock, registry, keyStatus, anchor, timestamp, deviceIntegrity),
     location
   }
 }
@@ -377,7 +420,7 @@ const judge = (
  * not a separate verdict — it is part of this one.
  */
 const level = (
-  proof: Proof, spki: Buffer, coreHash: Buffer, labels: string[], trust: TrustBundle | undefined, clock: Date,
+  proof: Proof, spki: Buffer, coreHash: Buffer, labels: string[], trust: TrustBundle | undefined, signers: readonly TrustedLog[], clock: Date,
   registry: RegistryVerdict, keyStatus: KeyStatusStatement | undefined, anchor: AnchorVerdict,
   timestamp: TimestampVerdict, deviceIntegrity: boolean
 ): Pick<Verdict, 'level' | 'validated_at'> => {
@@ -400,10 +443,19 @@ const level = (
   // nothing — and its absence is the reason an offline verifier cannot reach
   // green: *revocation not checked*, by design, because green must never mean
   // less than it says.
+  //
+  // The question is about the proven instant only when a source the device
+  // does not control proved it. A device clock is set by whoever holds the
+  // key, and the thief of a key revoked for loss sets it before the
+  // revocation; `attestation_status` refuses that clock for the same reason
+  // (vector 96). With no trusted instant the verifier asks about its own
+  // clock: a revocation is never undone, so *valid now* is *valid then*, and
+  // *revoked now* is revoked with nothing to place the capture before it.
+  const trusted = source === 'timestamp' || source === 'anchor'
   if (registry.ok) {
     const checked = keyStatus === undefined
       ? null
-      : verifyKeyStatus(keyStatus, Buffer.from((proof.device as Proof).key_id as string, 'base64url'), instant, trust?.logs ?? [])
+      : verifyKeyStatus(keyStatus, Buffer.from((proof.device as Proof).key_id as string, 'base64url'), trusted ? instant : clock, signers)
     if (checked?.ok === true && checked.status === 2) labels.push('key revoked')
     else if (checked?.ok !== true || checked.status === 0) labels.push('revocation not checked')
   }
@@ -452,10 +504,15 @@ const level = (
   // the revocation date the source itself gives, and the reason is not one
   // that reaches back. The device clock can be set by whoever holds the key,
   // which is exactly who a revocation is about, so it never places anything.
-  const trustedInstant = source === 'timestamp' || source === 'anchor' ? instant.getTime() : null
-  if (chain && proven !== 'none') {
+  const trustedInstant = trusted ? instant.getTime() : null
+  // A chain that holds (rules 1–3 and 5) is evidence whatever level it
+  // proves, and a revoked certificate in it is evidence against the file, not
+  // missing evidence: an unlocked phone's chain signed by a leaked keybox is
+  // *attestation key revoked*, red, like any other (§6.2, vector 164).
+  const chainHolds = chain !== null && (trust?.attestationRoots.length ?? 0) > 0 && !chain.evidenceInvalid
+  if (chainHolds) {
     const frozen = isObject(proof.attestation_status)
-      ? frozenRevocation(proof.attestation_status, coreHash, trust, chain.serials ?? [])
+      ? frozenRevocation(proof.attestation_status, coreHash, signers, (chain as NonNullable<typeof chain>).serials ?? [])
       : { checked: false as const }
     if (frozen.checked && frozen.revoked.length > 0) {
       const after = trustedInstant !== null && frozen.revoked.every((r) => !r.retroactive && r.revokedAt !== null && trustedInstant < r.revokedAt)
@@ -466,23 +523,35 @@ const level = (
     }
   }
 
-  if (chain && proven !== 'none' && (RANK[claimed] ?? 0) > (RANK[proven] ?? 0)) labels.push('inconsistent claim')
-
-  // A leaf's `secure_hw` is the level the log saw proven at registration. §6.2
-  // forbids it from exceeding what `attestation` proves, and the honest label
-  // is the one the format already has for a claim above its evidence.
-  if (registry.ok && (RANK[registry.secureHw] ?? 0) > (RANK[proven] ?? 0) && !labels.includes('inconsistent claim')) {
-    labels.push('inconsistent claim')
-  }
+  // §7 *Claimed above proven*: measured against the level a chain that holds
+  // establishes — before revocation, which retracts a level and contradicts
+  // no claim — and only when it holds, since a chain that fails rules 1–3 or
+  // 5 is no evidence to contradict anything with. A chain that holds and
+  // proves `none` (an unlocked boot, an imported key, a software key) is
+  // evidence, and a device that claimed `tee` beside it claimed more than it
+  // shows (vector 157).
+  const attested = chainHolds ? (chain as NonNullable<typeof chain>).proven : 'none'
+  const above = (x: string, y: string): boolean => (RANK[x] ?? 0) > (RANK[y] ?? 0)
+  const inconsistent = (chainHolds && above(claimed, attested)) ||
+    // §6.2: a leaf's `secure_hw` is the level the log saw proven at
+    // registration, and MUST NOT exceed what `attestation` proves when both
+    // are present.
+    (chainHolds && registry.ok && above(registry.secureHw, attested)) ||
+    // iOS carries no chain: the registry leaf is the evidence the claim is
+    // measured against.
+    ((proof.device as Proof).platform === 'ios' && registry.ok && above(claimed, registry.secureHw))
+  if (inconsistent) labels.push('inconsistent claim')
 
   // §7: the app that created the key. The leaf's attestationApplicationId is
   // compared with the signing digests the log declares for the apps it admits
   // keys from. It needs both halves, so it is evaluated only for a registered
   // key: without the declaration there is nothing to compare with, and that is
   // *not checked*, amber — never red, the hardware claim still stands.
-  if (chain && proven !== 'none' && registry.ok) {
+  // Checked for every chain that holds: what is missing is the claim that a
+  // known app build made the key, whatever the key's level.
+  if (chainHolds && registry.ok) {
     const declared = registry.appSigningDigests
-    const carried = chain.appSigningDigests ?? null
+    const carried = (chain as NonNullable<typeof chain>).appSigningDigests ?? null
     if (declared === null || declared.length === 0 || carried === null) labels.push('attestation app not checked')
     else if (!carried.some((digest) => declared.includes(digest))) labels.push('attestation app not admitted')
   }
@@ -502,7 +571,7 @@ const level = (
   const amberCauses = ['inconsistent claim', 'chain revocation not checked', 'revocation not checked',
                        'attestation chain expired, capture time not proven', 'registry evidence invalid',
                        'attestation app not checked', 'attestation app not admitted', 'integrity failed',
-                       'integrity not proven']
+                       'integrity not proven', 'presentation differs']
   const green = proven !== 'none' && registry.ok && registry.beforeCapture &&
     (source === 'timestamp' || source === 'anchor') &&
     !amberCauses.some((cause) => labels.includes(cause))
@@ -546,14 +615,14 @@ type TimestampVerdict = { ok: false } | { ok: true, genTime: Date, signerValid: 
  * `appAttest` never proves it, whatever its verdict: Apple says nothing
  * about whether a device is jailbroken.
  */
-const PROVES_DEVICE_INTEGRITY = new Set(['playIntegrity'])
+const PROVES_DEVICE_INTEGRITY = new Map([['playIntegrity', 'android']])
 
-const integrityOutcome = (proof: Proof, coreHash: Buffer, trust: TrustBundle | undefined, labels: string[]): boolean => {
+const integrityOutcome = (proof: Proof, coreHash: Buffer, signers: readonly TrustedLog[], labels: string[]): boolean => {
   if (!isObject(proof.integrity)) {
     labels.push('integrity unevaluated')
     return false
   }
-  const outcome = verifyIntegrity(proof.integrity as unknown as IntegrityAttachment, coreHash, trust?.logs ?? [])
+  const outcome = verifyIntegrity(proof.integrity as unknown as IntegrityAttachment, coreHash, signers)
   if (!outcome.ok) {
     labels.push('integrity unevaluated')
     // The same distinction the registry draws: evidence that does not hold up
@@ -563,7 +632,23 @@ const integrityOutcome = (proof: Proof, coreHash: Buffer, trust: TrustBundle | u
     return false
   }
   labels.push(`integrity ${outcome.verdict}`)
-  return outcome.verdict === 'hardware' && PROVES_DEVICE_INTEGRITY.has(outcome.source)
+  // A source proves the integrity of the platform it attests, and of no
+  // other: Play Integrity relayed beside an iOS proof is about some other
+  // device, or about none (vector 153).
+  return outcome.verdict === 'hardware' && PROVES_DEVICE_INTEGRITY.get(outcome.source) === (proof.device as Proof).platform
+}
+
+/**
+ * §6.2 *Which key*: the log a `registry` attachment names, when this verifier
+ * trusts it, and no other. A `registry` naming a log nobody here trusts is
+ * absent evidence (*log not trusted*), so it names nothing either, and every
+ * trusted log is tried as for a proof without one — such a proof cannot be
+ * green, because its key is not shown to be in any log this verifier follows.
+ */
+const signingLogs = (proof: Proof, trust: TrustBundle | undefined): readonly TrustedLog[] => {
+  const logs = trust?.logs ?? []
+  const named = isObject(proof.registry) ? logs.filter((log) => log.log_id === (proof.registry as Proof).log_id) : []
+  return named.length > 0 ? named : logs
 }
 
 /**
@@ -640,7 +725,7 @@ const anchorOutcome = (
  * evaluated. Nothing here touches the ceiling.
  */
 const locationOutcome = (
-  proof: Proof, coreHash: Buffer, trust: TrustBundle | undefined, labels: string[]
+  proof: Proof, coreHash: Buffer, signers: readonly TrustedLog[], labels: string[]
 ): NonNullable<Verdict['location']> => {
   const claim = isObject(proof.location) ? proof.location : null
   const attachment = isObject(proof.location_corroboration) ? proof.location_corroboration : null
@@ -657,7 +742,7 @@ const locationOutcome = (
   const claimed = typeof claim.level === 'string' && LOCATION_LEVELS.has(claim.level) ? claim.level : 'declared'
   let level = 'declared'
   if (attachment !== null) {
-    const outcome = verifyLocationCorroboration(attachment, coreHash, trust?.logs ?? [])
+    const outcome = verifyLocationCorroboration(attachment, coreHash, signers)
     if (!outcome.ok) {
       labels.push(!outcome.evaluated
         ? 'location corroboration not evaluated'
@@ -738,7 +823,7 @@ type FrozenStatus =
 const RETROACTIVE = new Set(['KEY_COMPROMISE', 'CA_COMPROMISE'])
 
 const frozenRevocation = (
-  attachment: { [key: string]: Json }, coreHash: Buffer, trust: TrustBundle | undefined, serials: string[]
+  attachment: { [key: string]: Json }, coreHash: Buffer, signers: readonly TrustedLog[], serials: string[]
 ): FrozenStatus => {
   const entries = attachment.entries
   const fetchedAt = attachment.fetched_at
@@ -748,10 +833,10 @@ const frozenRevocation = (
   const message = Buffer.concat([coreHash, jcs(entries), at])
   let signature: Buffer
   try { signature = Buffer.from(attachment.sig as string, 'base64url') } catch { return { checked: false } }
-  // §6.2: the key is the one that signs that log's tree heads. With no
-  // registry attachment naming it, every trusted log key is tried and the
-  // signature identifies the one that made it.
-  const signed = (trust?.logs ?? []).some((log) => {
+  // §6.2: the key is the one that signs that log's tree heads — the log the
+  // registry attachment names, or with none naming it every trusted log key,
+  // and the signature identifies the one that made it (`signingLogs`).
+  const signed = signers.some((log) => {
     const key = publicKeyFromSpki(Buffer.from(log.spki, 'base64'))
     return key !== null && verifyEs256(message, signature, key)
   })
@@ -772,6 +857,13 @@ const frozenRevocation = (
   }
   return { checked: true, revoked, incomplete }
 }
+
+/** §5 *Presentation*: whether the received file presents its frames otherwise than the core says. */
+const presentationDiffers = (signed: { config: string, matrix: number[], display: number[] }, read: { config: Buffer, matrix: number[], display: number[] } | null): boolean =>
+  read === null ||
+  read.config.toString('base64url') !== signed.config ||
+  read.matrix.some((value, i) => value !== signed.matrix[i]) ||
+  read.display.some((value, i) => value !== signed.display[i])
 
 /**
  * §5, *Locating segments*: which signed segments this file really contains.

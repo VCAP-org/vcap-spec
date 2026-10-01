@@ -113,6 +113,8 @@ Boundaries, each enforced by code and tested:
 | Pixel or metadata edit | changes bytes after sealing | `media.hash` over canonical bytes, in the signed core (§4) | none: red |
 | Claim edit | changes location, time, level, capture id in the JSON | the core is signed (§4.2); `key_id` derived from `sig.pub`; proven level from attestation, claimed level capped | none: red / flagged |
 | Signature swap | re-signs the file with own key and attaches a genuine attestation chain | attestation leaf SPKI must equal `sig.pub` (§6.2) | none: red |
+| Presentation edit | re-muxes a genuine clip keeping every sample, and rotates the track matrix, edits the out-of-band SPS (crop, colour) or adds an enabled track | `media.presentation` in the core binds the configuration record, `clap`/`pasp`/`colr`, the `tkhd` matrix and display size; the track layout rule (§5 *Presentation*, vectors 160–162) | none: *frames not compared*, never *verified clip*; a proof that predates the field binds no clip (vectors 89, 94) |
+| Timeline edit | re-muxes a genuine video with an edit list that trims, repeats or reorders what a player shows, every sample untouched | an edit list with more than one edit after the leading delay, or a rate change, is a timeline §5 does not model: no segment is located (§5, vector 156) | none: *frames not compared*, never *verified clip*; an original is covered whole by `media.hash` |
 | Proof transplant | moves a genuine trailer or sidecar onto another file | `media.hash` mismatch; on video, a signed segment counts only where a GOP of the received file names it and recomputes (§5, *Locating segments*) | none: red on a photo; *frames not compared* on a video whose GOPs name no segment of the proof, never *verified clip* |
 | Clip from a genuine video | cuts segments, keeps the trailer | per-segment chain over messages; `segment_count`; `media.hash` mismatch → *verified clip*, amber, ranges shown | accepted and **labelled**: a clip is a clip, never an original |
 | Reassembled video | reorders, repeats or relabels genuine GOPs, or inserts a foreign one next to them | every GOP of the file is accounted for in decode order: one vcap SEI naming this capture and a signed segment, indices strictly increasing, each at most once (§5) | none: red |
@@ -133,8 +135,9 @@ Boundaries, each enforced by code and tested:
 | Relayed attestation | forwards a genuine device's attestation to register an attacker session (Quarkslab 2026) | single-use challenge issued by us, consumed atomically before any check; proof of possession over `"vcap/1.0/pop" ‖ challenge ‖ channel_binding` (Android) / nonce in the App Attest certificate and assertions (iOS); short RKP certificate validity checked; channel binding when the control plane provides one | **medium** until a spike confirms against Frida on a rooted device; channel binding without a TLS exporter is weaker and the verdict says so |
 | Key extraction | reads the private key out of the device | secure hardware; not our control | accepted: the platform's promise, not ours |
 | Compromised app | a modified build of our app, or another app, uses the key | `attestationApplicationId` (package + signing digest) / App ID, per tenant; token rotation stops a leaked build | low; a re-signed app has a different digest |
-| Imported key | key created elsewhere, imported into the TEE | `origin` must be `GENERATED` | none |
-| Unlocked bootloader / rooted device with virtual camera | genuine hardware signs an injected frame | verified boot state and locked device required in the attestation; integrity statement (Play Integrity / App Attest) signed by the registry as an attachment; both prominent on the verdict | **high and accepted**: see §2. The verdict names it. Green requires a registry-signed `hardware` verdict from Play Integrity (`vcap-proof-1.0.md` §6.2, §7); anything else — absent, `basic`, `failed`, App Attest — is amber with *integrity not proven*, so stripping a `failed` verdict cannot raise the colour. What remains is a device that passes Google's strongest check while compromised, which a leaked attestation key has made possible before |
+| Imported key | key created elsewhere, imported into the TEE: the chain shows `tee` and a verified boot while the importer keeps the private key | hardware-enforced `origin` must be `GENERATED`, else the proven level is `none` (`vcap-proof-1.0.md` §7 rule 6, vector 152) | none. Until corpus 4.0.0 no verifier checked it, while this row said one did |
+| Stolen key, backdated clock | a thief holding a device key revoked for loss or rotation — not retroactive — sets `time.device_clock` before the revocation | with no trusted instant the log is asked about the verifier's clock, never the device's; revoked then → *key revoked*, red (§6.2, vector 155) | none on the key's standing. A capture an honest TSA stamped before the revocation keeps it, as it should |
+| Unlocked bootloader / rooted device with virtual camera | genuine hardware signs an injected frame | verified boot state and locked device required in the attestation; integrity statement (Play Integrity / App Attest) signed by the registry as an attachment; both prominent on the verdict | **high and accepted**: see §2. The verdict names it. Green requires a registry-signed `hardware` verdict from Play Integrity (`vcap-proof-1.0.md` §6.2, §7); anything else — absent, `basic`, `failed`, App Attest — is amber with *integrity not proven*, so stripping a `failed` verdict cannot raise the colour. What remains is a device that passes Google's strongest check while compromised, which a leaked attestation key has made possible before. The verdict counts only for the platform it attests (Play Integrity beside an iOS proof proves nothing, vector 153) and only under the key of the log the proof names (vector 154) |
 | Cloned Secure Enclave key (theoretical) | two devices with one key | App Attest counter must increase on every assertion; the receipt (future) | low |
 
 ### 5.3 Against the registry and the log
@@ -272,6 +275,15 @@ like, and it is the true one.
   *authenticated* level waits for a smartphone chipset with OSNMA.
 
 ## 7. Change log
+
+- 2026-10-01 — Verdict hardening. §5.2: the imported-key row claimed a check
+  no verifier made; `origin` is now §7 rule 6 and the residual holds. A
+  device key revoked for a non-retroactive reason can no longer be dated
+  before its revocation by the device clock. Integrity proves only the
+  platform it attests, under the named log's key. §5.1: an edit list that
+  reorders a genuine video is no longer *verified clip*, and neither is one
+  whose presentation — parameter sets, matrix, extra tracks — is not the one
+  the core signs.
 
 - 2026-09-27 — Device integrity is a condition for green. §1 claims it, and
   no longer claims green for iOS; §5.2: stripping a `failed` verdict no
