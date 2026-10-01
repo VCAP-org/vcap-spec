@@ -4,4 +4,4 @@ The proof of vector 36 as a sidecar over `_media/base.mp4`, a two-frame H.264 fi
 
 A verifier MUST NOT fall back to position — the first GOP of the file is not segment 0 of a proof just because it comes first (§5).
 
-Derived by `tools/src/generate.ts` from the device capture in vector 36 or 37 (a Samsung SM-S908B, Android 16, StrongBox, sealed by the reference Android SDK); the device signatures are not touched.
+Derived by `tools/src/generate.ts` from the device capture in vector 36 or 37 (a Samsung SM-S908B, Android 16, StrongBox, sealed by the reference Android SDK). The container, its NAL units and its vcap SEIs are the device's; the core and the segment chain are re-signed with the test key in `tools/src/testkey.ts`, over the same capture id and the same content hashes, so that the core carries `media.presentation`, which the device proof predates (corpus 5.0.0).

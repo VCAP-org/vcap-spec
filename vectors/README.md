@@ -35,7 +35,7 @@ every certificate path was validated at, and what proved it) appear on the
 vectors that carry attestation evidence. `location` (§7.1: `claimed`, the
 level the core asks for, and `level`, the one the evidence reaches — `none`,
 `declared`, `corroborated`, `authenticated`) appears on the position vectors
-(74–84) and on 36 and 47, which declare no position and pin `none`.
+(74–84) and on 47 and 166, which declare no position and pin `none`.
 `proof_source` (where the proof was read: `trailer`, `sidecar`, or `c2pa` with
 the carrying manifest's label and its depth on the `parentOf` chain) and
 `frames_name_capture` (whether a GOP of the file names the proof's capture)
@@ -109,16 +109,20 @@ cannot make them — it has no camera and no device key — and it now owns only
 directories it declares, printing the ones it left alone. It used to delete
 every numbered directory before rewriting, which for these was not a rewrite
 but a loss. Two scripts rebuild them instead, each pointed at the artifacts a
-device produced: `tools/src/derive-container-vectors.ts` for 36-39 (Android) and
-`tools/src/derive-ios-vectors.ts` for 47-48 and 85 (iOS). That is what keeps the
-edited cases (38, 39) auditable rather than asserted. The later edits of
-those captures — 86-94, a stolen proof, a cut clip, reordered and duplicated
-GOPs, a relabelled SEI — need no device: `npm run generate` derives them from
-the committed 36 and 37 through `tools/src/remux.ts`, which rewrites sample
-tables and leaves every device signature as it was.
+device produced: `tools/src/derive-container-vectors.ts` for 36-37 (Android) and
+`tools/src/derive-ios-vectors.ts` for 47-48 and 85 (iOS). The edits of
+those captures — 38 and 39, 86-94, a stolen proof, a cut clip, reordered and
+duplicated GOPs, a relabelled SEI — need no device: `npm run generate` derives
+them from the committed 36 and 37 through `tools/src/remux.ts`, which rewrites
+sample tables only, and that is what keeps them auditable rather than
+asserted. Since corpus 5.0.0 it also re-signs their core and segment chain
+with the test key, over the device's capture id and content hashes: the
+device proofs predate `media.presentation`, a required core field, and read
+*no proof found*, so an edit under them would test nothing else. 166–168 are
+the device containers of 36, 48 and 85 under such a core, unedited.
 
 They are not all the same weight of evidence, and each `NOTES.md` says which it
-is. 36-39, 47 and 85 carry a **real device signature**: an implementation that
+is. 36, 37, 47 and 85 carry a **real device signature**: an implementation that
 only ever meets this repository's test key never learns whether it can read a
 real one, and 47 and 85 are the proofs here made by a Secure Enclave — 85 is
 the only one where a Secure Enclave signed a **segment chain** and not just a
@@ -141,7 +145,7 @@ The numbered corpus (`vectors/NN-*`) has its own version, in `vectors/VERSION`
 — separate from `vcap/1.0`, the proof format version. The format version says
 what a proof looks like; the corpus version says which exact vectors an
 implementation checked itself against, so a third party can claim "conformant
-with vcap-spec corpus 4.0.0" and mean something a consumer can check.
+with vcap-spec corpus 5.0.0" and mean something a consumer can check.
 
 `vectors/MANIFEST.json` is that check: for every `vectors/NN-*` directory, its
 `kind`, its `outcome`, and a SHA-256 over its files (name and length included,
@@ -157,7 +161,7 @@ npm run manifest:check   # exits 1 if the committed file is stale — CI runs th
 ```
 
 `vectors/CONFORMANCE.md` says what the sentence "conformant with corpus
-4.0.0" has to contain to be checkable — corpus version, manifest hash, and
+5.0.0" has to contain to be checkable — corpus version, manifest hash, and
 how many vectors actually ran — and why a suite that ran zero vectors must be
 red. `vectors/conformance-report.json` is this repository's own claim in that
 format, regenerated and checked by CI (`npm run conformance:report` /
@@ -187,7 +191,17 @@ changed its verdict); vector 54's `key_status` input became the log's answer
 about the verifier's clock (§6.2); `_trust/logs.json` gained a second trusted
 log; vectors 89, 94 and 145 changed verdict because a clip is now verified
 only when its core binds its presentation (§5 *Presentation*), which their
-device proofs cannot; and 152–164 were added (`CHANGELOG.md`).
+device proofs cannot; and 152–164 were added (`CHANGELOG.md`). **5.0.0 is
+major**: `media.presentation` became a required core field of every proof
+that carries `segments`, so every video proof. The device proofs of 36, 37,
+48 and 85, and the C2PA vectors 145–147 that carry 36's, cannot gain it: their
+bytes stay and their verdict is now *no proof found* (see *Errata*); 146 was
+*tampered* and 36, 37, 48 and 85 *authentic*. The vectors `npm run generate`
+derives from 36 and 37 (38, 39, 86–94, 156) moved bytes under a re-signed
+core, and 89 and 94 went back to *verified clip*; 33 and 34 gained the field,
+and 143 and 144 were re-sealed over their committed Content Credentials with
+33's new proof (their manifests are the same bytes, so their `c2pa` blocks
+and notes stand); 165–168 were added.
 
 `vectors/edge-cases/` (below) is not in the manifest and not part of the
 versioned corpus: it is regenerated on demand by its own tool, not hand-curated
@@ -274,8 +288,25 @@ the sidecar, and a `*.c2pa` file as the caller-supplied C2PA store.
 ## Errata
 
 A vector's bytes never change once it is published, `NOTES.md` included — its
-digest is in `MANIFEST.json`, and five runners pin that manifest. So a note that
-turns out to be wrong is corrected here, not in place.
+digest is in `MANIFEST.json`, and five runners pin that manifest. A major
+corpus bump is the one exception, and even then only for the vectors a
+generator rebuilds; the device captures and the C2PA vectors keep their bytes,
+since no run can reproduce them. So a note that turns out to be wrong, or that
+a major bump overtook, is corrected here, not in place, and `expected.json`
+carries the verdict in force.
+
+- **36, 37, 48, 85 · the device video captures** — their notes describe
+  *authentic* originals with every segment recomputed. From the 5.0.0 corpus
+  they are **no proof found**, `schema_valid` false: none of their cores
+  carries `media.presentation`, which §6.1 requires of every proof carrying
+  `segments`, and a missing required core field is a proof that is not well
+  formed (§8), before any signature or GOP is read. What their notes say about
+  the container — the 473 ms empty edit and the audio rule of 36, HEVC in 37,
+  `AVAssetWriter`'s files in 48 and 85 — still holds, and is now exercised
+  under a re-signed core by 166 (36), 158 (37), 167 (48) and 168 (85). The
+  Secure Enclave signatures of 85 and the StrongBox ones of 36 and 37 are
+  still the corpus's only real device signatures, now on the path to *no
+  proof found*.
 
 - **85 · `85-mp4-container-ios-sealed`** — its note explains the five one-frame
   segments as VideoToolbox answering a forced keyframe with two IDRs. That is
@@ -289,12 +320,30 @@ turns out to be wrong is corrected here, not in place.
   configuration, not to Apple's encoder.
 
 - **145 · `145-mp4-c2pa-clip-parent-of`** — its note says the outcome is
-  *verified clip*, 1 and 2 of 3. From corpus 4.0.0 it is **no proof found**
-  (`SOURCE_CAPTURE`, `frames_name_capture` true): vector 36's proof binds no
-  `media.presentation`, so the cut is *frames not compared* (§5
+  *verified clip*, 1 and 2 of 3. In the 4.0.0 corpus it was **no proof found**
+  (`SOURCE_CAPTURE`, `frames_name_capture` true): vector 36's proof bound no
+  `media.presentation`, so the cut was *frames not compared* (§5
   *Presentation*), and a proof found at depth 1 is never held against the
-  derivation (§3.2). `expected.json` carries the new verdict; the C2PA vectors
-  are not regenerated for a note (their salts are random), so the note stays.
+  derivation (§3.2). From 5.0.0 it is still **no proof found**, for an earlier
+  reason: that proof lacks a required core field (§6.1), so it is not well
+  formed and no GOP is read — `expected.json` keeps `proof_source` and drops
+  `core_hash` and `frames_name_capture`, which a proof that is not well formed
+  does not reach. The C2PA vectors are not regenerated for a note (their salts
+  are random), so the note stays.
+
+- **146 · `146-mp4-c2pa-clip-gop-replaced`** — its note says **tampered**,
+  segment 1 verified. From the 5.0.0 corpus it is **no proof found** at depth
+  0, for 145's reason: the proof its manifest carries is vector 36's, which
+  lacks `media.presentation`. The depth-0 rule the note describes (a proof in
+  the active manifest reads like a sidecar, §3.2) is unchanged and still
+  pinned by vector 128, a JPEG; the video case under it waits for a C2PA
+  run that can re-mint this file over a re-signed core.
+
+- **147 · `147-mp4-c2pa-clip-reencoded`** — its note reaches **no proof found**
+  through *Content Credentials carry the proof of a source capture* (§3.2).
+  The outcome stands; from the 5.0.0 corpus the reason is that vector 36's
+  proof lacks `media.presentation`, and `expected.json` drops `core_hash` and
+  `frames_name_capture` for that reason.
 
 - **158 · `158-mp4-presentation-original`** — its note says the sample entry
   has no `clap`, `pasp` or `colr` box. It has a `colr` (`nclx`), the one

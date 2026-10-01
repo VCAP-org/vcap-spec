@@ -41,6 +41,10 @@ import { validateProof } from './schema.js'
  *
  *   npm run generate:c2pa                 # rewrite 123–147
  *   npm run generate:c2pa -- --mint-ca    # re-mint the test CA first
+ *   npm run generate:c2pa -- --only 143,144   # rewrite only these; every vector is still checked
+ *
+ * `--only` exists because a run rewrites every salt: a change that concerns
+ * two vectors should move two vectors, not twenty-five.
  *
  * With `C2PATOOL` pointing at a c2patool binary, each vector's NOTES.md
  * records what that validator reports too.
@@ -304,6 +308,8 @@ interface C2paVector {
   proof?: Proof
   verifierClock?: number
   expected: Partial<Verdict> & { outcome: Verdict['outcome'] }
+  // Whether proof.json is schema-valid, as the review decided; true unless said.
+  schemaValid?: boolean
   writer?: { expect: string, error?: string, reason?: string }
   notes: string
 }
@@ -519,10 +525,10 @@ const withStore = await c2paSign({ asset: baseJpeg, mime: 'image/jpeg', label: l
   const provenance = 'The source is the Android capture of vector 36 (Samsung SM-S908B, StrongBox, device signatures untouched); the clip bytes are vector 89\'s cut.'
 
   add({ name: '145-mp4-c2pa-clip-parent-of', ext: 'mp4', kind: 'container', file: await clipOf(145, cutClip, ['c2pa.trimmed']), proof: deviceProof,
-    // Corpus 4.0.0: vector 36's proof binds no presentation (§5), so the cut
-    // is not a verified clip, and at depth 1 that is *no proof found*.
-    expected: { outcome: 'no_proof_found', labels: [], not_evaluated: [], core_hash: hashOf(deviceProof), proof_source: src(1, label(145, 0)), frames_name_capture: true },
-    notes: `A clip made by a C2PA-aware cutter: vector 89's cut of vector 36 — GOP 0 removed, no re-encoding, the vcap SEIs intact — with no trailer, signed with a manifest that opens the source as \`parentOf\` and records \`c2pa.trimmed\`. The source's manifest (generation 0, ${label(145, 0)}) carries vector 36's proof and travels in the clip's store as its ingredient.\n\nNo footer, no proof at depth 0, no sidecar: the proof is found at depth 1 (§3.2), the nearest ancestor that carries one. The frames name the capture (\`frames_name_capture\`, a locating hint), GOPs 1 and 2 are located and recompute under §5, and the outcome is vector 89's, reached without a trailer: since corpus 4.0.0 that is *frames not compared* (*presentation not bound*: vector 36's proof predates \`media.presentation\`), which at depth 1 reads **no proof found** — a proof found up the chain is the source's, and what it cannot vouch for is never held against the derivation. ${provenance}` })
+    // Corpus 5.0.0: vector 36's proof has no `media.presentation`, a required
+    // core field (§6.1), so the proof is not well formed wherever it is found.
+    expected: { ...NOT_FOUND, proof_source: src(1, label(145, 0)) }, schemaValid: false,
+    notes: `A clip made by a C2PA-aware cutter: vector 89's cut of vector 36 — GOP 0 removed, no re-encoding, the vcap SEIs intact — with no trailer, signed with a manifest that opens the source as \`parentOf\` and records \`c2pa.trimmed\`. The source's manifest (generation 0, ${label(145, 0)}) carries vector 36's proof and travels in the clip's store as its ingredient.\n\nNo footer, no proof at depth 0, no sidecar: the proof is found at depth 1 (§3.2), the nearest ancestor that carries one. Since corpus 5.0.0 that proof is **no proof found** before any GOP is read: vector 36's core predates \`media.presentation\`, which every proof carrying \`segments\` requires (§6.1). ${provenance}` })
 
   {
     // One byte of the last GOP's IDR slice data changed, then signed by a
@@ -538,13 +544,13 @@ const withStore = await c2paSign({ asset: baseJpeg, mime: 'image/jpeg', label: l
     const at = idr.offset + idr.size - 16
     edited[at] = (edited[at] as number) ^ 0x55
     add({ name: '146-mp4-c2pa-clip-gop-replaced', ext: 'mp4', kind: 'container', file: await clipOf(146, edited, ['c2pa.trimmed'], { parent: device, proof: deviceProof }), proof: deviceProof,
-      expected: { outcome: 'tampered', labels: [], not_evaluated: [], core_hash: hashOf(deviceProof), segments: { verified: [1] }, proof_source: src(0, label(146, 1)), frames_name_capture: true },
-      notes: `Vector 145's clip with one byte of the last GOP's IDR slice data changed (clip byte ${at}), signed by a cutter that opens vector 36 as \`parentOf\` and carries its proof in **its own** manifest, as the clip's: a GOP whose vcap SEI still names the capture and segment 2, and whose bytes are not the ones segment 2 signs. The cutter's manifest is valid — it vouches for the bytes it saw — and declares a trim, not this.\n\nDepth 0 reads like a sidecar (§3.2): §5 applies, a located segment that does not recompute is **tampered**, with segment 1 verified. Vector 147 is the other side of the rule: at depth ≥ 1 the same failure would read *no proof found*, because a proof found up the chain is the source's and is never held against a derivation. ${provenance}` })
+      expected: { ...NOT_FOUND, proof_source: src(0, label(146, 1)) }, schemaValid: false,
+      notes: `Vector 145's clip with one byte of the last GOP's IDR slice data changed (clip byte ${at}), signed by a cutter that opens vector 36 as \`parentOf\` and carries its proof in **its own** manifest, as the clip's: a GOP whose vcap SEI still names the capture and segment 2, and whose bytes are not the ones segment 2 signs. The cutter's manifest is valid — it vouches for the bytes it saw — and declares a trim, not this.\n\nSince corpus 5.0.0 the outcome is **no proof found**, at depth 0 as anywhere: vector 36's core predates \`media.presentation\`, which every proof carrying \`segments\` requires (§6.1), so the proof is not well formed and no GOP is read. Before, depth 0 read like a sidecar (§5) and the located segment that does not recompute made the file *tampered*, with segment 1 verified. ${provenance}` })
   }
 
   add({ name: '147-mp4-c2pa-clip-reencoded', ext: 'mp4', kind: 'container', file: await clipOf(147, baseMp4, ['c2pa.transcoded']), proof: deviceProof,
-    expected: { outcome: 'no_proof_found', labels: [], not_evaluated: [], core_hash: hashOf(deviceProof), proof_source: src(1, label(145, 0)), frames_name_capture: false },
-    notes: `What a re-encoding editor leaves: new frames with no vcap SEI (the two-frame MP4 of \`_media/\` stands in for them), signed with a manifest that opens the capture of vector 36 as \`parentOf\` and records \`c2pa.transcoded\`. The proof is found at depth 1; no GOP names the capture (\`frames_name_capture\` false) and \`media.hash\` does not match. §5 alone would say *frames not compared*; at depth ≥ 1 that becomes **no proof found**, reason *Content Credentials carry the proof of a source capture* (§3.2) — never *tampered*. A detector may still add *origin traced* from the watermark. ${provenance}` })
+    expected: { ...NOT_FOUND, proof_source: src(1, label(145, 0)) }, schemaValid: false,
+    notes: `What a re-encoding editor leaves: new frames with no vcap SEI (the two-frame MP4 of \`_media/\` stands in for them), signed with a manifest that opens the capture of vector 36 as \`parentOf\` and records \`c2pa.transcoded\`. The proof is found at depth 1, and since corpus 5.0.0 it is **no proof found** before any GOP is read: vector 36's core predates \`media.presentation\`, which every proof carrying \`segments\` requires (§6.1). Before, no GOP named the capture and \`media.hash\` did not match, and at depth ≥ 1 that read *no proof found* too, reason *Content Credentials carry the proof of a source capture* (§3.2) — never *tampered*. A detector may still add *origin traced* from the watermark. ${provenance}` })
 }
 
 // ---- helpers used above --------------------------------------------------------
@@ -561,12 +567,15 @@ for (const v of vectors) {
   const verdict = verifyFile({ file: v.file, sidecar: v.sidecar, externalStore: v.externalStore, recomputeSegments: v.kind === 'container', trust, clock: v.verifierClock ? new Date(v.verifierClock) : undefined })
   const got = pick(verdict, v.expected)
   if (JSON.stringify(got) !== JSON.stringify(v.expected)) { failures++; console.error(`[vcap] ${v.name}: expected ${JSON.stringify(v.expected)} got ${JSON.stringify(got)} (${verdict.reason ?? ''})`) }
-  if (v.proof && !validateProof(v.proof).valid) { failures++; console.error(`[vcap] ${v.name}: proof.json is not schema-valid`) }
+  if (v.proof && validateProof(v.proof).valid !== (v.schemaValid ?? true)) { failures++; console.error(`[vcap] ${v.name}: the schema disagrees with the review about proof.json`) }
   written.push({ v, c2pa: await c2paReport(v.file, v.ext === 'jpg' ? 'image/jpeg' : 'video/mp4', v.externalStore) })
 }
 if (failures) { console.error(`[vcap] ${failures} disagreement(s): nothing written`); process.exit(1) }
 
+const onlyAt = process.argv.indexOf('--only')
+const only = onlyAt < 0 ? null : new Set((process.argv[onlyAt + 1] ?? '').split(',').map((n) => parseInt(n, 10)))
 for (const { v, c2pa } of written) {
+  if (only && !only.has(parseInt(v.name, 10))) continue
   const dir = join(VECTORS, v.name)
   if (existsSync(dir)) rmSync(dir, { recursive: true })
   mkdirSync(dir)
@@ -578,11 +587,11 @@ for (const { v, c2pa } of written) {
     kind: v.kind,
     ...(v.verifierClock ? { verifier_clock: v.verifierClock } : {}),
     ...v.expected,
-    ...(v.proof ? { schema_valid: true } : {}),
+    ...(v.proof ? { schema_valid: v.schemaValid ?? true } : {}),
     writer: v.writer,
     c2pa
   }, null, 2) + '\n')
   const tool = c2patool(dir, `input.${v.ext}`, v.externalStore ? 'input.c2pa' : null)
   writeFileSync(join(dir, 'NOTES.md'), `# ${v.name}\n\n${v.notes}\n\n## C2PA\n\n- \`expected.json\` \`c2pa\`: what ${VALIDATOR} reports. Informative: no vcap verdict reads it.\n- ${tool}\n\nMinted by \`tools/src/make-c2pa-vectors.ts\` with the test key in \`tools/src/testkey.ts\` and the C2PA test signer in \`vectors/_trust/c2pa-test/\`. Committed, not regenerated: c2pa-rs salts every assertion at random (\`vectors/README.md\`).\n`)
 }
-console.log(`[vcap] ${written.length} C2PA vectors written`)
+console.log(`[vcap] ${only ? written.filter(({ v }) => only.has(parseInt(v.name, 10))).length : written.length} C2PA vectors written`)

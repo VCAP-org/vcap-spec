@@ -4,4 +4,4 @@ Vector 36 with the vcap SEI NAL of GOP 1 rebuilt to carry a **second** SEI messa
 
 **Tampered**, 0 and 2 verified. The sample is rewritten through `remux.ts` (it grew by twenty-two bytes) and the audio track is untouched.
 
-Derived by `tools/src/generate.ts` from the device capture in vector 36 or 37 (a Samsung SM-S908B, Android 16, StrongBox, sealed by the reference Android SDK); the device signatures are not touched.
+Derived by `tools/src/generate.ts` from the device capture in vector 36 or 37 (a Samsung SM-S908B, Android 16, StrongBox, sealed by the reference Android SDK). The container, its NAL units and its vcap SEIs are the device's; the core and the segment chain are re-signed with the test key in `tools/src/testkey.ts`, over the same capture id and the same content hashes, so that the core carries `media.presentation`, which the device proof predates (corpus 5.0.0).

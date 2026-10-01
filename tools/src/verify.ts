@@ -129,15 +129,18 @@ const shapeProblem = (proof: Proof): string | null => {
   if (!Number.isInteger(proof.media.w) || !Number.isInteger(proof.media.h) || (proof.media.w as number) < 1 || (proof.media.h as number) < 1) return 'media.w or media.h missing'
   if (!isObject(proof.device) || typeof proof.device.platform !== 'string' || typeof proof.device.secure_hw !== 'string' || typeof proof.device.key_id !== 'string') return 'device incomplete'
   if (!isObject(proof.sig) || typeof proof.sig.value !== 'string' || typeof proof.sig.pub !== 'string' || typeof proof.sig.alg !== 'string') return 'sig incomplete'
+  // §8: media.mime alone decides that a proof is a video proof, and a video
+  // proof needs its segments — the container and duration_ms decide nothing.
+  if ((proof.media.mime as string).startsWith('video/') && !('segments' in proof)) return 'video proof without segments'
   if ('segments' in proof) {
     if (!Array.isArray(proof.segments)) return 'segments not an array'
     if (!Number.isInteger(proof.media.segment_count)) return 'media.segment_count missing'
+    // §6.1 `media.presentation`: required wherever segments are, so every
+    // video proof. Without it a clip's frames could be shown under parameter
+    // sets, a matrix or tracks nobody signed; a core that omits it is missing
+    // a required field like any other, not a weaker clip.
+    if (!('presentation' in proof.media)) return 'media.presentation missing'
   }
-  // §8: media.mime alone decides that a proof is a video proof, and a video
-  // proof needs its segments — the container and duration_ms decide nothing.
-  if ((proof.media.mime as string).startsWith('video/') && !('segments' in proof && Number.isInteger(proof.media.segment_count))) return 'video proof without segments'
-  // §6.1 `media.presentation`: a reader takes its absence as a clip that is
-  // not bound, and its malformation as a payload two readers read two ways.
   if ('presentation' in proof.media && !presentationShape(proof.media.presentation)) return 'media.presentation malformed'
   if (hasNonInteger(coreObject(proof))) return 'floating-point number in the core'
   return null
@@ -367,7 +370,8 @@ const judge = (
     if (binding.located && binding.problems.length > 0) return { ...tampered(binding.problems.join('; ')), segments }
 
     // §5 *Presentation*: what the core signs about how the frames are shown.
-    const signed = (proof.media as Proof).presentation as { config: string, matrix: number[], display: number[] } | undefined
+    // Present whenever segments are: the shape check refused a core without it.
+    const signed = (proof.media as Proof).presentation as { config: string, matrix: number[], display: number[] }
     const read = reading?.kind === 'gops' ? reading : null
     if (!mediaMatches) {
       // A file that is not the original, and in which no GOP of this capture
@@ -376,15 +380,14 @@ const judge = (
       if (!binding.located) {
         return { outcome: 'frames_not_compared', labels: labels.sort(), not_evaluated: notEvaluated, core_hash: hash, segments, location, reason: `media.hash does not match and ${binding.reason}` }
       }
-      // Located and matching, and still not a verified clip unless the core
-      // binds how the frames are presented and this file presents them so: a
-      // rotated matrix, an edited parameter set or a track nobody signed
-      // shows the signed frames as something they were not. No segment is
-      // credited, and the label names what is not bound.
-      const unbound = signed === undefined ? 'presentation not bound'
-        : read?.layout ? 'tracks not bound'
-          : read && presentationDiffers(signed, read.presentation) ? 'presentation differs'
-            : null
+      // Located and matching, and still not a verified clip unless this file
+      // presents the frames as the core says: a rotated matrix, an edited
+      // parameter set or a track nobody signed shows the signed frames as
+      // something they were not. No segment is credited, and the label names
+      // what is not bound.
+      const unbound = read?.layout ? 'tracks not bound'
+        : read && presentationDiffers(signed, read.presentation) ? 'presentation differs'
+          : null
       if (unbound !== null) {
         labels.push(unbound)
         return { outcome: 'frames_not_compared', labels: labels.sort(), not_evaluated: notEvaluated, core_hash: hash, segments: { verified: [] }, location, reason: `media.hash does not match and the presentation is not the signed one (${unbound})` }
@@ -394,7 +397,7 @@ const judge = (
     // The original: `media.hash` covers its presentation with every other
     // byte, so a signed presentation that does not describe it is the
     // writer's false claim about its own file — flagged, amber, never red.
-    if (signed !== undefined && read && presentationDiffers(signed, read.presentation)) labels.push('presentation differs')
+    if (read && presentationDiffers(signed, read.presentation)) labels.push('presentation differs')
     // media.hash matches: these are the bytes the device sealed. A chain with
     // segments missing from the proof is still a clip of the proof, and says
     // so even over the original file.

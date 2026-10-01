@@ -12,6 +12,54 @@ else.
 
 ## Unreleased
 
+### `media.presentation` required — corpus 4.0.0 → **5.0.0**
+
+**Breaking.** §5 *Presentation*, §6.1, §8: `media.presentation` is a
+**required** core field of every proof that carries `segments`, so of every
+video proof (`media.mime` `video/…` already requires `segments`). Absent →
+the proof is not well formed: **no proof found**, the outcome §8 gives any
+missing required core field (`media.segment_count`, `segments`, `media.w`),
+reached before the signature is read. The schema requires it in both
+conditionals (`segments` present, `media.mime` `video/…`).
+
+Before: required of writers and optional to readers. An original without it
+read *authentic* and every clip of it *frames not compared*, *presentation
+not bound*. A core is signed once and attached to every file cut from it, so a
+field a clip depends on cannot be optional to the original; and an optional
+field is one a writer can leave out without any verifier noticing on the
+file it tests. The **label *presentation not bound* is removed**: no proof
+that reaches the clip branch can lack the field. *tracks not bound* and
+*presentation differs* are unchanged.
+
+Corpus 5.0.0 (168 vectors). No backward compatibility: the device captures
+are not re-signed and carry no fallback.
+
+- **Changed verdicts, bytes kept**: 36, 37, 48, 85 (*authentic* → *no proof
+  found*, `schema_valid` false) — device proofs that predate the field; 145,
+  147 (*no proof found*, now for the missing field: `core_hash` and
+  `frames_name_capture` dropped) and 146 (*tampered* → *no proof found*) — C2PA
+  vectors carrying 36's proof. Their notes are corrected in the errata
+  (`vectors/README.md`), not in place.
+- **Moved bytes, re-signed**: 38, 39, 86–94 and 156, the edits
+  `npm run generate` derives from 36 and 37, now under a core and segment
+  chain re-signed with the test key over the device's capture id and content
+  hashes, with the presentation read back from the device's container. 89
+  and 94 go back to **verified clip** (1–2 of 3, and 0–2); every other
+  verdict is unchanged. `derive-container-vectors.ts` now writes 36 and 37
+  only; 38 and 39 moved to `generate.ts`.
+- **Moved bytes, gained the field**: 33 and 34 (verdicts unchanged); 143 and
+  144 re-sealed with 33's new proof over their committed Content Credentials
+  — the manifests are the same bytes, so `c2pa` and the notes stand.
+  `make-c2pa-vectors.ts` gained `--only` for the next run that needs one.
+- **New**: 165 (a video proof signed without the field → *no proof found*),
+  166–168 (the containers of 36, 48 and 85 under a re-signed core that
+  carries it → *authentic*, every segment recomputed).
+
+**What a verifier that predates 5.0.0 does**: it reads 36, 37, 48, 85 and 165
+*authentic* and 146 *tampered* — it has not learned the field is required —
+fails 89 and 94 (it says *frames not compared*, *presentation not bound*, for
+*verified clip*), and fails the moved vectors' `core_hash`.
+
 ### Writer requirements: what muxers actually write
 
 Text only, no corpus change. §5 *Presentation* said either muxer "may add
