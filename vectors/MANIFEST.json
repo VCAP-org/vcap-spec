@@ -1,6 +1,6 @@
 {
-  "corpus_version": "3.1.0",
-  "vector_count": 151,
+  "corpus_version": "4.0.0",
+  "vector_count": 164,
   "vectors": [
     {
       "name": "01-jpeg-sealed",
@@ -285,35 +285,35 @@
       "name": "41-jpeg-attested-tee",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "5101695bfc13f592652be3ff26646bb2dc1e0d34517255feca2742561e9b3ef5",
+      "sha256": "aa373a189f6105f1abe265e5c051b29275307e293639cd3233b05d8f719c9a35",
       "files": 4
     },
     {
       "name": "42-jpeg-attested-strongbox",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "b58973bc290a8d11c3b844652e1b9e262e9cbb6fe16a1b5476dfcd47b4788674",
+      "sha256": "852546747561dd3fa068dda1505b957c2861fa2bed4a964918befc65afeb4af7",
       "files": 4
     },
     {
       "name": "43-jpeg-attestation-expired-since",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "392c58c15d57073606c7f33e293a17ec29d5574612c2e699d05dcbbc8d489d15",
+      "sha256": "b8b159de911b6d7b7e8127b0c35a2ae6ed819d2b0634202f01b76e20171c9a5f",
       "files": 4
     },
     {
       "name": "44-jpeg-attestation-revoked-before-capture",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "2dfc8c401d3f0af0061eadbad9f5330ecd92cb4ae93785b3d35aeff3c3ea251a",
+      "sha256": "15833ee3e3ffe04b54cf1a083249ba1740f153c10ec726bfc814b8146b382e38",
       "files": 4
     },
     {
       "name": "45-jpeg-attestation-revoked-after-capture",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "6431c13ff37d01d15e7985d7d250d26113b99426b74dc1f548473e602b8d9236",
+      "sha256": "7bb6cb607593f94bd354babbf521e0576055de62efcf73b2064188be501731f1",
       "files": 4
     },
     {
@@ -341,42 +341,42 @@
       "name": "49-jpeg-registry-verified",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "c1873d28a01e180c142a1c0c31b8b363369f2f496a367e30be7788be7b6d641f",
+      "sha256": "14ce182ea3a490d475963b79b3fbbf16087609350841a06b05b0d3a16148a789",
       "files": 4
     },
     {
       "name": "50-jpeg-registry-path-forged",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "3aa79333af170e8c224f1ad4eff03738e7e73a56b2e9e1c3b9f95667202822a1",
+      "sha256": "709a408c59dc421e191d5f6985d5082f3cc66f27d8f6f8ee2d9a32f652ff5e03",
       "files": 4
     },
     {
       "name": "51-jpeg-registry-other-key",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "49706b45f00c6e2db842e614f038bac671e73b7aa46dab3d60e9250884b69c75",
+      "sha256": "41601d97b5787e9aff7e22e7cd852c3eeeb8814c5e72129d32efb63535f672f0",
       "files": 4
     },
     {
       "name": "52-jpeg-registry-log-not-trusted",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "b7660ef898b8ef918b66f7ced45f81d760f85c13fb15536ac1ff9eed0d25c783",
+      "sha256": "fd720d35aadf447aff991b70655234496fcc974972ed0fda1a6fc274658216fb",
       "files": 4
     },
     {
       "name": "53-jpeg-registry-after-capture",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "ba9889f7a36181f80a08df0ad8a9a70570b0e8ae74f3ca21de542d5c4eb369ca",
+      "sha256": "ab26a3307a9c0c66069d6c325a2bc3e7dd6901d8a06787a901b6ec049d668de2",
       "files": 4
     },
     {
       "name": "54-jpeg-registry-green",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "481f2f1133cdca71bf8a3421db8ef9760d89a8d180be7c61ee855bd8185bf74f",
+      "sha256": "cf1ac384017c4fbf9cd5d10d33ba75105d635f3fa11721bdc3ef2bd593d837fd",
       "files": 4
     },
     {
@@ -439,7 +439,7 @@
       "name": "63-jpeg-expired-chain-timestamped",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "ce7942a0bfdde06c44776fafeb3e479f004525542c609a8448c1fa59bd586575",
+      "sha256": "1bf5402cbe087280251491b020d8adfd6f3c81685770e86727cd181f3d957d50",
       "files": 4
     },
     {
@@ -620,8 +620,8 @@
     {
       "name": "89-mp4-container-cut-clip",
       "kind": "container",
-      "outcome": "verified_clip",
-      "sha256": "d4f08ba071c6b6c83cead4fdf5ec020d8552539ba97b9bf4b3fae4bd766a3a42",
+      "outcome": "frames_not_compared",
+      "sha256": "9360e990dcf19f962f948c59c2b7620c658043275146f0d8156dc6a0851b9a40",
       "files": 4
     },
     {
@@ -655,8 +655,8 @@
     {
       "name": "94-mp4-container-sync-table-not-idr",
       "kind": "container",
-      "outcome": "verified_clip",
-      "sha256": "2e033aa7830214b81653a5bb35d929c5a53ab69f272aa81491a81c5c9cf1d239",
+      "outcome": "frames_not_compared",
+      "sha256": "6a9ca68d23206fb88afad0b9a1d0b8a2df079a6f5417a56e94e0e54271d3eaa3",
       "files": 4
     },
     {
@@ -670,49 +670,49 @@
       "name": "96-jpeg-attestation-revoked-after-device-clock",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "b378c4be63e956a8311a9e93ff95063bc41b8ef93d78e8c77137195eb15b4a8f",
+      "sha256": "40170b2fb6a24fcb9f48023ed59a7184adc20bf5445be8812036902e8ae7216c",
       "files": 4
     },
     {
       "name": "97-jpeg-attestation-revoked-without-date",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "9ded8d875dc4c2d5ef5d7b9dd2fe11084c7900be2a10c6914aef6d98f25aec7b",
+      "sha256": "46e7fcb255468d8b0157d74f3df52666f457ebe1429c8bc5737a4d9078acd84f",
       "files": 4
     },
     {
       "name": "98-jpeg-attestation-status-unknown",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "969a9a7e54d6a28e850b58c669a8a89b7fe15b20650da2f90b51602f79f7ffb4",
+      "sha256": "3ab67db4aca7c1f693382a3207bd7153d081cb4f330c9dd262da077f0bbae2cd",
       "files": 4
     },
     {
       "name": "99-jpeg-attestation-status-uncovered",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "88a1e8512c985a820cbcdc7d04b9e6272d71dd49d16d5a3f9dac0e77b46851f7",
+      "sha256": "009d51e48e5acab9a0a8f0903b52afe437bc2f096822f9a9f95e39d4ae532c10",
       "files": 4
     },
     {
       "name": "100-jpeg-registry-green-timestamped",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "20d50e1c0133d4524f8f6a49f5a4d93c3f72f4ff0b48c830d8df3507501ab93c",
+      "sha256": "6e3180435a3009be9aec5eaa0cc98698fca925e74d578819b325be1efa7f95b9",
       "files": 4
     },
     {
       "name": "101-jpeg-registry-no-device-clock",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "2a2a0f795c5f2e8e61454b84e861b09e42f27f137c7bc282bb26e69273f2433f",
+      "sha256": "2738fcc9c8bfe6fcf11cf02882669e24332e79c14b44ea697cc5a98eada2a4c7",
       "files": 4
     },
     {
       "name": "102-jpeg-registry-after-trusted-time",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "bbb351567f83ca5dd70c113bdc68a79cc9511c2bf4415d8e3d26686a561763c5",
+      "sha256": "af3cf6214515e3cd0b93ebb96d09cc4af14243f4c86eab1f9824fec7e47a28de",
       "files": 4
     },
     {
@@ -733,35 +733,35 @@
       "name": "105-jpeg-attestation-forged-leaf",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "d3c4a25c020302f17a14e417ef89375718d3bece5a3be65bd7d1bb56739fed43",
+      "sha256": "a86167461b6d8471ea04994021826ff90e68d9882ca583d11545d23207f95402",
       "files": 4
     },
     {
       "name": "106-jpeg-attestation-app-not-admitted",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "ab4d9599cb58c85cd0b80ce96088c89113f5740d213885178d01467579cd0442",
+      "sha256": "5ecb96f02528c827bb8cb6cad1c2446a4c423553b64af3bbd34fc454c22a4536",
       "files": 4
     },
     {
       "name": "107-jpeg-attestation-app-not-checked",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "3e2c4f355809943abd0887f47f03489821ada86b6a923d56bda757c5bbf57bd9",
+      "sha256": "0150f79b097913f9aa134bd8c9ecc36e85ae60fe1e47358d27c206ba9ecdc012",
       "files": 4
     },
     {
       "name": "108-jpeg-attestation-leaf-not-signing-key",
       "kind": "file",
       "outcome": "tampered",
-      "sha256": "8920d34aa10c8959fdd3199691a8ee5d66b42cd8718378e82a45fc0d4f11fa33",
+      "sha256": "70d76e3d223a8764b28b399101846551077e6f70d97c8fe2adb6aef679435749",
       "files": 4
     },
     {
       "name": "109-jpeg-integrity-failed-caps-green",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "2173be68eaf4a93f11a0e688c6e8669e1ff4b4e437dbbbaa6a6ed0c963960c5c",
+      "sha256": "365ca3267a1bbbbf8583704325a6fa61e7098d28e5ba48c5b448a194cf6907e1",
       "files": 4
     },
     {
@@ -1011,8 +1011,8 @@
     {
       "name": "145-mp4-c2pa-clip-parent-of",
       "kind": "container",
-      "outcome": "verified_clip",
-      "sha256": "14f2222bfaf7a0e19f5704d2c3bea3c7657658c26a213d4384caca65e7304c2a",
+      "outcome": "no_proof_found",
+      "sha256": "9b028b860c799e3028a588d1c9231f652b511b04b0e792ede34359e6b9d536ab",
       "files": 4
     },
     {
@@ -1033,14 +1033,14 @@
       "name": "148-jpeg-registry-timestamped-integrity-absent",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "32588afe6a6ba16a99905d376372c316f378d6db109b50caf0793e7255d25cf4",
+      "sha256": "576031948a06fed1ecf83960555442114c261f6cfdb6ed223be53213b5b73685",
       "files": 4
     },
     {
       "name": "149-jpeg-integrity-basic-not-green",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "98e86c949a1b512ddbc9508ed697eb339a823259fda1603803b59a935639d7e4",
+      "sha256": "c5ab328529614e8151f7fa777165db74213ddc2c0f387b1548ec8c8d275fb138",
       "files": 4
     },
     {
@@ -1056,12 +1056,103 @@
       "outcome": "authentic",
       "sha256": "9624c94036358f9edfa501a2a1fbb08dde7c2afa9c961fb75e2075c373857ff4",
       "files": 4
+    },
+    {
+      "name": "152-jpeg-attestation-key-imported",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "33cca9f56063092c6016e0183e8041f723f65e61f494a1bc9c86caf01d8e613c",
+      "files": 4
+    },
+    {
+      "name": "153-jpeg-ios-play-integrity-not-green",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "d4aacc2ffba6ad0944092069eb62dda03e530aad31b277ce5403151593f9d679",
+      "files": 4
+    },
+    {
+      "name": "154-jpeg-integrity-other-trusted-log",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "b3b4dea186df55b69ac978839d5a3cce265eff8acd0c97f520ce9e8e8128563b",
+      "files": 4
+    },
+    {
+      "name": "155-jpeg-key-revoked-device-clock",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "d605ab35f68783d3663798cd37aedc1c0ec7e59ec270f00f5f867c088fc75931",
+      "files": 4
+    },
+    {
+      "name": "156-mp4-container-edit-list-reorders",
+      "kind": "container",
+      "outcome": "frames_not_compared",
+      "sha256": "c87b02820443931dea172e08cfb73e30b9da18df4c9c8e4132ff544adad4a9f3",
+      "files": 4
+    },
+    {
+      "name": "157-jpeg-attestation-holds-proves-none",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "6e0a17672b0dd8a30e20a7a99f8e75a8650914478e68574d0409bb8bf0482234",
+      "files": 4
+    },
+    {
+      "name": "158-mp4-presentation-original",
+      "kind": "container",
+      "outcome": "authentic",
+      "sha256": "96f6dc665dc233eaa5e2faa5284bf829d1d36a00db685c4dba8e25a00d2087fd",
+      "files": 4
+    },
+    {
+      "name": "159-mp4-presentation-clip",
+      "kind": "container",
+      "outcome": "verified_clip",
+      "sha256": "4713cd32f70632711af67e274b8d7132b224a31215644fb2e1b8963a6668c997",
+      "files": 4
+    },
+    {
+      "name": "160-mp4-presentation-clip-rotated",
+      "kind": "container",
+      "outcome": "frames_not_compared",
+      "sha256": "9db883c98c5e8959c8486d69250d1d6201dca8f05cb86aeed01fe1a1c64868db",
+      "files": 4
+    },
+    {
+      "name": "161-mp4-presentation-clip-sps-edited",
+      "kind": "container",
+      "outcome": "frames_not_compared",
+      "sha256": "6178f6d837bb1d7f6d911924f6d1b1fe5958043943a8666f6cc13c23cd7f1cf7",
+      "files": 4
+    },
+    {
+      "name": "162-mp4-presentation-clip-extra-track",
+      "kind": "container",
+      "outcome": "frames_not_compared",
+      "sha256": "e403c2d6edc13486b913aacecaf26887bd052a1d6570f1c9c291a33461dc4a23",
+      "files": 4
+    },
+    {
+      "name": "163-mp4-presentation-original-misdescribed",
+      "kind": "container",
+      "outcome": "authentic",
+      "sha256": "71a3f063ad2437c0eec178bdfc76ab63d379856d4e49560063674669e58dafa1",
+      "files": 4
+    },
+    {
+      "name": "164-jpeg-attestation-revoked-proves-none",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "09b7ea6ed61a9202015e041a8b3d633cdfde8fc8bcf6b69dd7f9d98a6bf50153",
+      "files": 4
     }
   ],
   "fixtures": {
     "_media": "c8ae0d49e385dfb73f93f60bbf51b94faf18a32da46314416033f6ab309258bd",
-    "_trust": "2d3821e107da7d0eddd97e6503a36f0fde55947ec456caac35e8473306e1dbae",
-    "_chains": "4bdb7ecf3a4ca84217dfc1652259fd416743cc41199da3b346968074b8647f34",
+    "_trust": "729ed79e545bad7255cdf2c98978f0afa17724a636fa3b94a8e142de3fa07a56",
+    "_chains": "4d9b04892dc0c9506b0e88011b08b9f5fd2f8ebf1992898e323917b711a91d6b",
     "_timestamps": "9d215df2fc7b14490a40aca6dce7a24fa03c67a12cc54a120a1a19c662f9ffa0",
     "_watermark": "4eb32f0ef3f43ffa33d61cba8d43a1805f1cf39441b83e6d9eb20d075cfc9f80"
   }

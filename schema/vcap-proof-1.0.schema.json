@@ -55,6 +55,42 @@
           "minimum": 1,
           "maximum": 4294967295,
           "description": "uint32: n in the §5 segment message is uint32 BE"
+        },
+        "presentation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "config",
+            "matrix",
+            "display"
+          ],
+          "description": "§5 Presentation, video proofs: how the frames are shown, bound to the core so a clip cannot crop, rotate or re-describe them",
+          "properties": {
+            "config": {
+              "$ref": "#/$defs/bytes32",
+              "description": "SHA-256 of the presentation message: the decoder configuration's parameter sets, then clap, pasp and colr"
+            },
+            "matrix": {
+              "type": "array",
+              "minItems": 9,
+              "maxItems": 9,
+              "items": {
+                "type": "integer",
+                "minimum": -2147483648,
+                "maximum": 2147483647
+              },
+              "description": "the video tkhd matrix, nine int32 as stored"
+            },
+            "display": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {
+                "$ref": "#/$defs/uint32"
+              },
+              "description": "the video tkhd width and height, 16.16 fixed point as stored"
+            }
+          }
         }
       }
     },

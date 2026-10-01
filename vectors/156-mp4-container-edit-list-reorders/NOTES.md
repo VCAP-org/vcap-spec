@@ -1,0 +1,7 @@
+# 156-mp4-container-edit-list-reorders
+
+Vector 37 with an edit list added to its video track, and nothing else: the samples, their decode order and every vcap SEI are where the device put them, so each GOP still hashes to its signed `content_hash`. The edit list has **two** media edits — GOP 2 first, then GOPs 0 and 1 — so a player shows the last second before the first two. A re-muxer can trim, repeat or reorder a recording this way without touching a sample.
+
+§5 places segments on the presentation timeline, and an edit list with more than one edit after the leading delay — or one that changes rate — describes a timeline a verifier does not model: it MUST NOT recompute segments over it as if the extra edits were not there. Nothing is located, so nothing is credited, and `media.hash` does not match: **frames not compared**, with *segment content not recomputed*. A verifier that read only the first edit, as both implementations did before corpus 4.0.0, verified all three segments and reported **verified clip** over frames shown in an order nobody signed. An original is unaffected — `media.hash` covers its edit list with everything else.
+
+Derived by `tools/src/generate.ts` from the device capture in vector 36 or 37 (a Samsung SM-S908B, Android 16, StrongBox, sealed by the reference Android SDK); the device signatures are not touched.

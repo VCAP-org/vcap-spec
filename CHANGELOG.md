@@ -12,6 +12,100 @@ else.
 
 ## Unreleased
 
+### Verdict hardening and presentation binding — corpus 3.1.0 → **4.0.0**
+
+**Breaking.** A major corpus bump: the attestation chains were minted again
+(every committed chain lacked `origin`), so the 26 attested vectors moved
+bytes and none changed its verdict; vector 54's `key_status` input changed;
+`_trust/logs.json` gained a second trusted log; 89, 94 and 145 changed
+verdict (below); 152–164 are new (164 in all).
+Six verdict rules changed. Five closed a verdict both the reference verifier
+and the published one gave too generously; one aligned the two where they
+disagreed:
+
+- **§7 rule 6: an imported key proves no level** (vector 152). The
+  hardware-enforced `origin` (tag 702) MUST be `GENERATED`; absent,
+  `IMPORTED` or `SECURELY_IMPORTED` → proven level `none`, *origin not
+  hardware-attested* alone, like an unlocked boot (a genuine chain that
+  proves too little, not *evidence invalid*). Before: a key imported into the
+  TEE read `tee` with a verified boot, and could reach green while whoever
+  imported it kept the private key. `threat-model.md` §5.2 said `origin` was
+  checked; nothing checked it.
+- **§6.2 *Revocation, online*: the device clock never dates the question**
+  (vectors 54, 155). The log is asked about the proven instant only when a
+  valid token or a verified anchor proved it; otherwise about the verifier's
+  own clock. Revoked there → *key revoked*, **red**. Before: the verifier
+  asked about `time.device_clock`, which the holder of a stolen key revoked
+  for a non-retroactive reason sets before the revocation, and the verdict
+  was amber where it should be red. The same rule `attestation_status`
+  already applied to the chain (vector 96). A key valid at the verifier's
+  clock was valid at any earlier instant, so vector 54 keeps its verdict.
+- **§6.2 `integrity`: a source proves only its own platform** (vector 153).
+  `playIntegrity` `hardware` proves device integrity on an `android` proof
+  and nothing on any other. Before: a Play Integrity verdict relayed beside an
+  iOS proof made it **green**, against "no iOS capture is green in this
+  version".
+- **§6.2 *Which key*: the log the `registry` attachment names, and no other**
+  (vector 154). When a `registry` attachment names a trusted log, its key
+  alone verifies `attestation_status`, `integrity`, `location_corroboration`
+  and the online key status. Before: the text said so and both
+  implementations tried every trusted key, so a second trusted log could
+  supply the integrity verdict for a device the first one admitted. A
+  `registry` naming a log the verifier does not trust names nothing, and
+  every trusted key is tried as before — such a proof is never green (vector
+  52 unchanged).
+- **§5: an edit list with more than one edit is not recomputed over**
+  (vector 156). Leading empty edits and one rate-1 media edit are the
+  timeline §5 models; anything after that edit on the video or audio track →
+  no segment located, *segment content not recomputed*, *frames not
+  compared* over a file that is not the original. Before: only the first
+  media edit was read, so a re-mux that reordered presentation with the
+  samples untouched read **verified clip**. Originals are unaffected:
+  `media.hash` covers the edit list.
+
+- **§7 *Claimed above proven*: a chain that holds and proves `none` is
+  evidence** (vector 157). A device claiming `tee` beside a genuine chain
+  that proves `none` (unlocked boot, imported key, `software`) is
+  *inconsistent claim*, measured against the level before revocation. The
+  published verifier did this and the reference verifier did not; the text
+  said neither. Vector 152 hid it: its registry leaf raised the same label.
+  The same chains now have their revocation and app checked in both
+  implementations (§6.2 *Revoked*, vector 164): a revoked certificate is
+  evidence against the file, so a chain that proves `none` and is revoked is
+  red, where the reference verifier read amber.
+- **§5 *Presentation*, §6.1 `media.presentation`: a clip is verified only
+  where the core binds how its frames are shown** (vectors 158–163). New core
+  member for video, required of writers: `config` (SHA-256 over the decoder
+  configuration's parameter sets in NAL-type order, then `clap`, `pasp`,
+  `colr`), `matrix` (the video `tkhd` matrix, nine `int32` as stored) and
+  `display` (`tkhd` width and height, `uint32` as stored); plus a track
+  layout rule — one `vide`, at most one `soun`, one sample description each,
+  every other track disabled. A file that is not the original with the field
+  absent, the layout broken or a value different → *frames not compared*,
+  *presentation not bound* / *tracks not bound* / *presentation differs*, no
+  segment credited. On an original a value that differs is the writer's false
+  claim: *presentation differs*, amber. Before: a re-mux keeping every sample
+  could rotate the matrix, edit the out-of-band SPS (crop, VUI colour) or add
+  an enabled track and still read *verified clip*. Photos: nothing, since
+  `media.hash` covers every byte.
+  - **Changed verdicts**: 89 and 94 (*verified clip* → *frames not
+    compared*, *presentation not bound*: their device proofs cannot gain the
+    field) and 145 (*verified clip* at depth 1 → *no proof found*,
+    `SOURCE_CAPTURE`; its `NOTES.md` is corrected in the errata, not in
+    place). Originals 36, 37, 47, 48, 85 are unchanged.
+  - **Writers**: compute the field from the file the muxer produced, before
+    the trailer (§5 *Writer requirements*). The schema accepts it and does
+    not yet require it.
+
+**What a verifier that predates 4.0.0 does**: it passes the 26 moved
+vectors once it loads the new `_trust/` (the attestation root changed), and
+fails the new ones — 152–154 green, 155 amber, 156 and 160–162 *verified
+clip*, 157 without *inconsistent claim*, 164 red where the old reference verifier
+read it amber — and 89, 94 and 145, which it reads
+as *verified clip*. It ignores `media.presentation`'s meaning but hashes it
+with the core (JCS covers every member), so 158–163 still verify their
+signatures.
+
 ### `location.source: fused` — corpus 3.0.0 → **3.1.0**
 
 A minor corpus bump: vector 151 is new (151 in all), no existing vector

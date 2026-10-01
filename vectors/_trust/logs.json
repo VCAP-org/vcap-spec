@@ -6,6 +6,10 @@
       "app_signing_digests": [
         "0195aac1dbeecff25bc14d6ebd59720dbb10f4c03e832f9deae5780c7cd3d1d9"
       ]
+    },
+    {
+      "log_id": "J8hchOgCtq8nt-xkhuG4bddofwpmTseBlW8ZQOLRqL4",
+      "spki": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE9DTNZi6gEOZfXB+5TYekZCW3uWzbZhe1pUArdbfPb+ja5FIJKSbNyUWJf4Gbh9lgFwX4SJtdhMHfh3vdE7y8bw=="
     }
   ]
 }

@@ -87,6 +87,13 @@ interface Track {
    */
   delay: { num: bigint, den: bigint }
   mediaStart: bigint
+  /**
+   * Set when the edit list does more than delay the track and say where its
+   * media starts: a second edit, a gap after the media, a rate other than 1.
+   * The samples could still be hashed, but not in the order or extent a
+   * player presents them, so §5 refuses to place segments on that timeline.
+   */
+  unsupportedEdit?: string
   /** NAL length prefix width from avcC/hvcC; 0 for audio. */
   lengthSize: number
   /** H.265 rather than H.264: the NAL header is two bytes. */
@@ -123,12 +130,15 @@ export const find = (list: Box[], type: string): Box | undefined => list.find((b
 /**
  * The leading delay and the media start of a track, from `edts/elst`.
  *
- * Only the shape that matters here is read: leading empty edits are a delay,
- * and the first real edit says which media time the track starts at. Rate
- * changes and multi-segment edits are not something a capture pipeline writes,
- * and a vector that needed them would need a writer that emits them first.
+ * Only the shape a capture pipeline writes is read: leading empty edits are a
+ * delay, and the one real edit says which media time the track starts at.
+ * Anything after that edit — a second media edit, an empty one, a rate other
+ * than 1 — is reported, never skipped: a re-muxer that appends edits can
+ * trim, repeat or reorder what a player shows while every GOP still hashes to
+ * its signed value, and a verifier that read only the first edit would call
+ * that *verified clip* (vector 156).
  */
-const editsOf = (file: Buffer, trak: Box, movieTimescale: bigint): { delay: { num: bigint, den: bigint }, mediaStart: bigint } => {
+const editsOf = (file: Buffer, trak: Box, movieTimescale: bigint): { delay: { num: bigint, den: bigint }, mediaStart: bigint, unsupportedEdit?: string } => {
   const none = { delay: { num: 0n, den: 1n }, mediaStart: 0n }
   const edts = find(children(file, trak), 'edts')
   if (!edts) return none
@@ -147,7 +157,12 @@ const editsOf = (file: Buffer, trak: Box, movieTimescale: bigint): { delay: { nu
       delayTicks += duration
       continue
     }
-    return { delay: { num: delayTicks, den: movieTimescale }, mediaStart: mediaTime }
+    // media_rate_integer, then media_rate_fraction: 1.0 is 0x0001 0000.
+    const rate = file.readInt16BE(at + entrySize - 4)
+    const delay = { num: delayTicks, den: movieTimescale }
+    if (rate !== 1) return { delay, mediaStart: mediaTime, unsupportedEdit: 'edit list changes rate' }
+    if (i + 1 < count) return { delay, mediaStart: mediaTime, unsupportedEdit: 'edit list has more than one edit after the leading delay' }
+    return { delay, mediaStart: mediaTime }
   }
   return { delay: { num: delayTicks, den: movieTimescale }, mediaStart: 0n }
 }
@@ -401,7 +416,129 @@ const instantOf = (track: Track, dts: bigint): Instant => {
  */
 export type ContainerReading =
   | { kind: 'unreadable', reason: string }
-  | { kind: 'gops', gops: Segment[] }
+  | { kind: 'gops', gops: Segment[], presentation: Presentation | null, layout: string | null }
+
+/**
+ * §5 *Presentation*, read from the received file: `config` is SHA-256 of the
+ * presentation message, `matrix` and `display` the video `tkhd` values as
+ * stored — null when the record or the header cannot be read. `layout` is why
+ * the tracks are not the ones a segment hash covers, or null when they are.
+ * Neither keeps a GOP from being located: a file that contradicts its proof
+ * is *tampered* whatever its presentation.
+ */
+export interface Presentation { config: Buffer, matrix: number[], display: [number, number] }
+
+/**
+ * The parameter sets of an `avcC` or `hvcC` record, in record order. Every
+ * length is held against the box; one that runs past it is a record this
+ * reader cannot read.
+ */
+const parameterSets = (file: Buffer, config: Box, hevc: boolean): Buffer[] => {
+  let at = config.payload
+  const byte = (): number => {
+    if (at >= config.end) throw new Error(`${hevc ? 'hvcC' : 'avcC'} truncated`)
+    return file[at++] as number
+  }
+  const unit = (): Buffer => {
+    const length = (byte() << 8) | byte()
+    if (length === 0 || at + length > config.end) throw new Error('parameter set length out of range')
+    const out = file.subarray(at, at + length)
+    at += length
+    return out
+  }
+  const units: Buffer[] = []
+  if (!hevc) {
+    // configurationVersion, AVCProfileIndication, profile_compatibility,
+    // AVCLevelIndication, lengthSizeMinusOne; then the SPS and PPS lists.
+    const profile = file[at + 1]
+    at += 5
+    for (let n = byte() & 0x1f; n > 0; n--) units.push(unit())
+    for (let n = byte(); n > 0; n--) units.push(unit())
+    // High profiles may carry the SPS extension list after three bytes of
+    // chroma and bit depth; a record that ends before them has none.
+    if ((profile === 100 || profile === 110 || profile === 122 || profile === 144) && at + 4 <= config.end) {
+      at += 3
+      for (let n = byte(); n > 0; n--) units.push(unit())
+    }
+  } else {
+    // 22 fixed bytes, numOfArrays, then { completeness|type, numNalus, units }.
+    at += 22
+    for (let arrays = byte(); arrays > 0; arrays--) {
+      at++
+      for (let n = (byte() << 8) | byte(); n > 0; n--) units.push(unit())
+    }
+  }
+  return units
+}
+
+const u32be = (n: number): Buffer => { const b = Buffer.alloc(4); b.writeUInt32BE(n); return b }
+
+/**
+ * §5 *Presentation*: `uint32 n ‖ (uint32 length ‖ NAL unit) × n` over the
+ * decoder configuration's parameter sets, ordered by NAL unit type and, within
+ * a type, as the record lists them; then the sample entry's `clap`, `pasp`
+ * and `colr` boxes, whole, in file order.
+ */
+export const presentationMessage = (file: Buffer, entry: Box, config: Box, hevc: boolean): Buffer => {
+  const type = (u: Buffer): number => hevc ? ((u[0] as number) >> 1) & 0x3f : (u[0] as number) & 0x1f
+  const units = parameterSets(file, config, hevc).map((u, i) => ({ u, i })).sort((a, b) => type(a.u) - type(b.u) || a.i - b.i).map(({ u }) => u)
+  const extras = boxes(file, entry.payload + 78, entry.end).filter((b) => b.type === 'clap' || b.type === 'pasp' || b.type === 'colr')
+  return Buffer.concat([u32be(units.length), ...units.flatMap((u) => [u32be(u.length), u]), ...extras.map((b) => file.subarray(b.start, b.end))])
+}
+
+/**
+ * The presentation of the file's first H.264/H.265 track and the layout rule
+ * over every track of `moov`: one `vide` track, at most one `soun`, one sample
+ * description each, every other track disabled.
+ */
+const presentationOf = (file: Buffer): { presentation: Presentation | null, layout: string | null } => {
+  const moov = find(boxes(file, 0, file.length), 'moov') as Box
+  let presentation: Presentation | null = null
+  let seenVideo = false
+  const handlers: { handler: string, enabled: boolean, entries: number }[] = []
+  for (const trak of children(file, moov).filter((b) => b.type === 'trak')) {
+    const tkhd = find(children(file, trak), 'tkhd')
+    const mdia = find(children(file, trak), 'mdia')
+    const hdlr = mdia ? find(children(file, mdia), 'hdlr') : undefined
+    const minf = mdia ? find(children(file, mdia), 'minf') : undefined
+    const stbl = minf ? find(children(file, minf), 'stbl') : undefined
+    const stsd = stbl ? find(children(file, stbl), 'stsd') : undefined
+    // tkhd: matrix after the times, duration and 16 reserved/layer/volume
+    // bytes. A header that cannot be read may be shown by a player for all
+    // this reader knows, so its track counts as enabled.
+    const at = tkhd ? tkhd.payload + (file[tkhd.payload] === 1 ? 52 : 40) : -1
+    const header = tkhd && at + 44 <= tkhd.end ? tkhd : null
+    handlers.push({
+      handler: hdlr && hdlr.payload + 12 <= hdlr.end ? file.toString('latin1', hdlr.payload + 8, hdlr.payload + 12) : '',
+      enabled: header ? ((file[header.payload + 3] as number) & 1) === 1 : true,
+      entries: stsd && stsd.payload + 8 <= stsd.end ? u32(file, stsd.payload + 4) : 0
+    })
+    if (seenVideo || !stsd) continue
+    for (const entry of boxes(file, stsd.payload + 8, stsd.end)) {
+      const hevc = entry.type === 'hvc1' || entry.type === 'hev1'
+      if (!hevc && entry.type !== 'avc1' && entry.type !== 'avc3') continue
+      seenVideo = true
+      const config = find(boxes(file, entry.payload + 78, entry.end), hevc ? 'hvcC' : 'avcC')
+      if (!config || !header) break
+      let message: Buffer
+      try { message = presentationMessage(file, entry, config, hevc) } catch { break }
+      presentation = {
+        config: createHash('sha256').update(message).digest(),
+        matrix: Array.from({ length: 9 }, (_, i) => file.readInt32BE(at + 4 * i)),
+        display: [u32(file, at + 36), u32(file, at + 40)]
+      }
+      break
+    }
+  }
+  const video = handlers.filter((h) => h.handler === 'vide')
+  const audio = handlers.filter((h) => h.handler === 'soun')
+  const layout = video.length !== 1 ? `${video.length} video tracks`
+    : audio.length > 1 ? `${audio.length} audio tracks`
+      : [...video, ...audio].some((h) => h.entries !== 1) ? 'a video or audio track with more than one sample description'
+        : handlers.some((h) => h.handler !== 'vide' && h.handler !== 'soun' && h.enabled) ? 'an enabled track that no segment hash covers'
+          : null
+  return { presentation, layout }
+}
 
 const isBmff = (file: Buffer): boolean => file.length >= 8 && file.toString('latin1', 4, 8) === 'ftyp'
 
@@ -435,6 +572,13 @@ export const readContainer = (file: Buffer): ContainerReading => {
   const video = tracks.find((t) => t.kind === 'video')
   if (!video) return { kind: 'unreadable', reason: 'no H.264 or H.265 video track' }
   const audio = tracks.find((t) => t.kind === 'audio')
+  // §5: segments are placed on the presentation timeline, and one this reader
+  // does not model is a file it cannot compare — never one it reads as if
+  // the extra edits were not there. Only the tracks a segment hash covers
+  // decide.
+  const edit = video.unsupportedEdit ?? audio?.unsupportedEdit
+  if (edit !== undefined) return { kind: 'unreadable', reason: edit }
+  const bound = presentationOf(file)
 
   // One pass over the video samples: split into NAL units, find the IDRs.
   const units = video.samples.map((sample) => {
@@ -447,6 +591,7 @@ export const readContainer = (file: Buffer): ContainerReading => {
 
   return {
     kind: 'gops',
+    ...bound,
     gops: starts.map((from, gop): Segment => {
       const to = starts[gop + 1] ?? units.length
       const hash = createHash('sha256')

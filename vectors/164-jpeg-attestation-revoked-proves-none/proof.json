@@ -1,0 +1,62 @@
+{
+  "v": "vcap/1.0",
+  "capture_id": "ABEiM0RVZneImaq7zN3u_w",
+  "media": {
+    "mime": "image/jpeg",
+    "w": 16,
+    "h": 16,
+    "hash": "OAbzVz4A9m1LqjF---miCdM2Bap6wRuTWbiuW41LzRA"
+  },
+  "device": {
+    "platform": "android",
+    "secure_hw": "tee",
+    "key_id": "4aF24UJH_AHu_CuygIW3PB-AMEWVoQy3iaeBh4yDSBM"
+  },
+  "watermark": {
+    "algo": "videoseal",
+    "layout": "photo-bch-v3",
+    "payload_bits": 128,
+    "ecc": "bch-255-131",
+    "strength": 8
+  },
+  "time": {
+    "device_clock": 1757332800000
+  },
+  "location": {
+    "level": "declared",
+    "lat_udeg": 45464664,
+    "lon_udeg": 9188540,
+    "acc_cm": 1250,
+    "evidence": []
+  },
+  "policy": {
+    "pseudonymous": false
+  },
+  "sig": {
+    "alg": "ES256",
+    "value": "qpjuFIpPNSSzyGyo1b0EFM9MdTrtruCI4myP_1RfueUcAGuOsfS78kzwJf1tUoYAz-6JzZwRuDlAYLLWrR6v9g",
+    "pub": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEp2C_SxUua1GBx-6u3KBIJKPwOb6yEYmTqfdbgzJbVJCy1_wvmKAjjmvD-d5EdVWpGx0Jxcduppsd0SspNPHKyA"
+  },
+  "attestation": [
+    "MIICFjCCAb2gAwIBAgIBAzAKBggqhkjOPQQDAjAtMSswKQYDVQQDEyJ2Y2FwIHRlc3QgYXR0ZXN0YXRpb24gaW50ZXJtZWRpYXRlMB4XDTI1MDkwNzEyMDAwMFoXDTQwMDEwMTAwMDAwMFowHzEdMBsGA1UEAxMUQW5kcm9pZCBLZXlzdG9yZSBLZXkwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAASnYL9LFS5rUYHH7q7coEgko_A5vrIRiZOp91uDMltUkLLX_C-YoCOOa8P53kR1VakbHQnFx26mmx3RKyk08crIo4HbMIHYMAwGA1UdEwEB_wQCMAAwgccGCisGAQQB1nkCAREEgbgwgbUCAgEsCgEBAgIBLAoBAQQDAQIDBAAwRb-FRUEEPzA9MRcwFQQQb3JnLnZjYXAudGVzdGFwcAIBATEiBCABlarB2-7P8lvBTW69WXINuxD0wD6DL53q5XgMfNPR2TBXv4U-AwIBAr-FQEwwSgQgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAf8KAQAEIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMAoGCCqGSM49BAMCA0cAMEQCH2ietBvLvs2rwIofSKrt-ezJ8R9WX2-hHDVm8p6NWeoCIQC3wnzTYf6-CCdnUk9ruEu5UlT95_OGDeDHgZNirv6yrg",
+    "MIIBZDCCAQqgAwIBAgIBAjAKBggqhkjOPQQDAjAlMSMwIQYDVQQDExp2Y2FwIHRlc3QgYXR0ZXN0YXRpb24gcm9vdDAeFw0yNTA5MDcxMjAwMDBaFw00MDAxMDEwMDAwMDBaMC0xKzApBgNVBAMTInZjYXAgdGVzdCBhdHRlc3RhdGlvbiBpbnRlcm1lZGlhdGUwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAASPVnA3nTPq_ezXRAEriXQFPwZADPIHig-AsfWPnRers4BLT4larVTADG_yBHoOzqGDw2jMfMF5gRd0hS_n2fVqoyMwITAPBgNVHRMBAf8EBTADAQH_MA4GA1UdDwEB_wQEAwIBBjAKBggqhkjOPQQDAgNIADBFAiA3Mb_8C59AGr-iDKFk-XzBpuIdIBFm8jOoFGY9SzsmOgIhAJuDFxepimKbBdc_UooH0vp5bV7NM73NGngqp8EYxwj2",
+    "MIIBXDCCAQKgAwIBAgIBATAKBggqhkjOPQQDAjAlMSMwIQYDVQQDExp2Y2FwIHRlc3QgYXR0ZXN0YXRpb24gcm9vdDAeFw0yNTAxMDEwMDAwMDBaFw00NTAxMDEwMDAwMDBaMCUxIzAhBgNVBAMTGnZjYXAgdGVzdCBhdHRlc3RhdGlvbiByb290MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE6xKkz2b29B8haamle55FJT5uI_kHMUPKYrCWfR7xFRMR7jAN_QJH4dqMoZ7t8YQ5pM0BsMBT8Jd9yNn1ZXh7LaMjMCEwDwYDVR0TAQH_BAUwAwEB_zAOBgNVHQ8BAf8EBAMCAQYwCgYIKoZIzj0EAwIDSAAwRQIgaAIcLnlt09NPeFYe8ylnwlu7XRp8lQgAHDRu9TmTkxwCIQDhD68bpPO-JasLssvqFebyi9tT3EaBPimMnSGvDHTx8g"
+  ],
+  "attestation_status": {
+    "source": "googleStatusList",
+    "fetched_at": 1757329200000,
+    "entries": [
+      {
+        "serial": "03",
+        "status": "valid"
+      },
+      {
+        "serial": "02",
+        "status": "revoked",
+        "reason": "KEY_COMPROMISE",
+        "revoked_at": 1757325600000
+      }
+    ],
+    "sig": "Mz4TAF0van79oaV0Pcwhh0YDd6PvmXP-3QFP6Y3AMXlsA1wxuyddkj1yRulYCZtfbNt9rG7bc9VPpru-Tb2ffg"
+  }
+}

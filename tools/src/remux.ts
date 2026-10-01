@@ -27,6 +27,12 @@ export interface TrackPlan {
   samples: number[]
   /** Empty-edit delay on the movie timeline, in new movie ticks; 0 writes no edit list. */
   delay?: bigint
+  /**
+   * An edit list written as given, in place of the one `delay` writes:
+   * `duration` in movie ticks, `mediaTime` in media ticks (-1 for an empty
+   * edit). For the files a re-muxer makes by editing the timeline alone.
+   */
+  edits?: { duration: bigint, mediaTime: bigint }[]
   /** Replacement bytes for original sample indexes, stored in an appended `mdat`. */
   replace?: Map<number, Buffer>
   /** `stss`: keep the sync flags of the original samples, or mark every sample. */
@@ -104,6 +110,18 @@ const tablesFor = (file: Buffer, stbl: Box, plan: TrackPlan, offsets: number[]):
 const elstFor = (delay: bigint, duration: bigint): Buffer =>
   box('edts', fullBox('elst', u32(2), u32(delay), Buffer.from([0xff, 0xff, 0xff, 0xff]), u32(0x00010000), u32(duration), u32(0), u32(0x00010000)))
 
+/** A version-0 edit list, rate 1 on every entry. */
+const elstOf = (edits: { duration: bigint, mediaTime: bigint }[]): Buffer => {
+  const entry = (e: { duration: bigint, mediaTime: bigint }): Buffer => {
+    const out = Buffer.alloc(12)
+    out.writeUInt32BE(Number(e.duration), 0)
+    out.writeInt32BE(Number(e.mediaTime), 4)
+    out.writeUInt32BE(0x00010000, 8)
+    return out
+  }
+  return box('edts', fullBox('elst', u32(edits.length), ...edits.map(entry)))
+}
+
 export const remux = (file: Buffer, plan: Plan): Buffer => {
   const top = boxes(file, 0, file.length)
   const moov = find(top, 'moov')
@@ -178,7 +196,8 @@ export const remux = (file: Buffer, plan: Plan): Buffer => {
             // The delay has to be exact; the duration of the edit that follows
             // it is informative (§5 reads where a track starts, not how long
             // the edit claims it lasts), so it is rounded down.
-            if ((trackPlan.delay ?? 0n) > 0n) parts.push(elstFor(trackPlan.delay as bigint, media * BigInt(newScale) / mediaScale))
+            if (trackPlan.edits) parts.push(elstOf(trackPlan.edits))
+            else if ((trackPlan.delay ?? 0n) > 0n) parts.push(elstFor(trackPlan.delay as bigint, media * BigInt(newScale) / mediaScale))
           }
           parts.push(box('mdia', rebuilt(child, trackPlan, kind)))
           continue

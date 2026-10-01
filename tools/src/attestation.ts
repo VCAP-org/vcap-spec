@@ -19,6 +19,11 @@ const BOOT_STATES: Record<number, string> = { 0: 'verified', 1: 'selfSigned', 2:
 // KeyDescription.hardwareEnforced holds a sparse, version-dependent set; the
 // tag number identifies rootOfTrust, never the position.
 const ROOT_OF_TRUST_TAG = 704
+// KeyMint `origin` and its one value that proves the key was made where it
+// lives: GENERATED. IMPORTED (2) and SECURELY_IMPORTED (4) keys were made
+// elsewhere, and whoever made them may keep a copy.
+const ORIGIN_TAG = 702
+const ORIGIN_GENERATED = 0
 
 // --- DER, only as much as the extension needs.
 interface Node { cls: number, tagNumber: number, body: Buffer, end: number }
@@ -61,6 +66,8 @@ export interface KeyDescription {
   attestationLevel: Level
   keyMintLevel: Level
   rootOfTrust?: { locked: boolean, state: string }
+  /** `origin` from hardwareEnforced; undefined when that list carries none. */
+  origin?: number
   /**
    * `attestationApplicationId.signature_digests`, lowercase hex: the signing
    * certificates of the app that created the key. Null when the extension
@@ -87,8 +94,14 @@ export const parseKeyDescription = (der: Buffer): KeyDescription => {
     return value
   }
   let rootOfTrust: KeyDescription['rootOfTrust']
+  let origin: number | undefined
   const hardware = fields[7]
   if (hardware) {
+    // [702] EXPLICIT INTEGER. Read from hardwareEnforced only: the
+    // softwareEnforced list is the OS's word, and an imported key's owner may
+    // control the OS.
+    const tagged = children(hardware.body).find((n) => n.tagNumber === ORIGIN_TAG)
+    if (tagged) origin = asNumber(read(tagged.body, 0))
     const entry = children(hardware.body).find((n) => n.tagNumber === ROOT_OF_TRUST_TAG)
     if (entry) {
       // RootOfTrust ::= SEQUENCE { verifiedBootKey, deviceLocked,
@@ -114,6 +127,7 @@ export const parseKeyDescription = (der: Buffer): KeyDescription => {
     attestationLevel: level(fields[1], 'attestationSecurityLevel'),
     keyMintLevel: level(fields[3], 'keyMintSecurityLevel'),
     rootOfTrust,
+    origin,
     appSigningDigests
   }
 }
@@ -236,6 +250,13 @@ export const validateChain = (
   if (!description.rootOfTrust) failures.push('no hardware-enforced rootOfTrust')
   else if (!(description.rootOfTrust.locked && description.rootOfTrust.state === 'verified')) {
     failures.push(`boot state ${description.rootOfTrust.state}, device ${description.rootOfTrust.locked ? 'locked' : 'unlocked'}`)
+  }
+
+  // §7: the key was generated in the secure hardware. An imported key carries
+  // the TEE's level and the device's boot state, and proves neither about who
+  // else holds it.
+  if (description.origin !== ORIGIN_GENERATED) {
+    failures.push(description.origin === undefined ? 'no hardware-enforced origin' : `key origin ${description.origin}, not generated in the secure hardware`)
   }
 
   // The weaker of the two levels: a StrongBox attestation of a TEE key proves

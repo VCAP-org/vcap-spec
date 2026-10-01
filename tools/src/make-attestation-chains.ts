@@ -4,7 +4,7 @@ import { createPrivateKey, webcrypto } from 'node:crypto'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { TEST_KEY_PKCS8_BASE64 } from './testkey.js'
-import { TEST_LOG_KEY_PKCS8_BASE64 } from './testlogkey.js'
+import { TEST_LOG_KEY_PKCS8_BASE64, TEST_SECOND_LOG_KEY_PKCS8_BASE64 } from './testlogkey.js'
 import { testChain, testRoot } from './testchain.js'
 import { APP_SIGNING_DIGEST } from './testapp.js'
 import { spkiOf } from './core.js'
@@ -53,7 +53,10 @@ const chains = {
   expiring: await testChain({ root, leafPublicKey: leafKey, attestation: 'tee', keyMint: 'tee', appSigningDigest: app, ...short }),
   'forged-leaf': await testChain({ root, leafPublicKey: leafKey, attestation: 'tee', keyMint: 'tee', forgedLeaf: 'strongbox', appSigningDigest: app, ...long }),
   'other-app': await testChain({ root, leafPublicKey: leafKey, attestation: 'tee', keyMint: 'tee', appSigningDigest: otherApp, ...long }),
-  'no-app-id': await testChain({ root, leafPublicKey: leafKey, attestation: 'tee', keyMint: 'tee', appSigningDigest: null, ...long })
+  'no-app-id': await testChain({ root, leafPublicKey: leafKey, attestation: 'tee', keyMint: 'tee', appSigningDigest: null, ...long }),
+  // A key imported into the TEE (KeyMint origin IMPORTED): the level, the
+  // boot state and the app are all genuine, and the key was made elsewhere.
+  imported: await testChain({ root, leafPublicKey: leafKey, attestation: 'tee', keyMint: 'tee', appSigningDigest: app, origin: 2, ...long })
 }
 
 mkdirSync(TRUST, { recursive: true })
@@ -64,12 +67,19 @@ for (const [name, built] of Object.entries(chains)) {
 writeFileSync(join(TRUST, 'attestation-roots.pem'), chains.tee.rootPem)
 
 const logSpki = spkiOf(createPrivateKey({ key: Buffer.from(TEST_LOG_KEY_PKCS8_BASE64, 'base64'), format: 'der', type: 'pkcs8' }))
+// The second log is trusted and declares no app: it is in the bundle only so
+// that a signature under it is a signature under a *trusted* key, which §6.2
+// still refuses when the proof's registry names the first one.
+const secondLogSpki = spkiOf(createPrivateKey({ key: Buffer.from(TEST_SECOND_LOG_KEY_PKCS8_BASE64, 'base64'), format: 'der', type: 'pkcs8' }))
 writeFileSync(join(TRUST, 'logs.json'), JSON.stringify({
   logs: [{
     log_id: createHash('sha256').update(logSpki).digest('base64url'),
     spki: logSpki.toString('base64'),
     app_signing_digests: [app.toString('hex')]
+  }, {
+    log_id: createHash('sha256').update(secondLogSpki).digest('base64url'),
+    spki: secondLogSpki.toString('base64')
   }]
 }, null, 2) + '\n')
 
-console.log(`[vcap] wrote ${Object.keys(chains).length} chains, one attestation root and one log key`)
+console.log(`[vcap] wrote ${Object.keys(chains).length} chains, one attestation root and two log keys`)

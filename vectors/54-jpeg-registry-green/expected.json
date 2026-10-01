@@ -3,10 +3,10 @@
   "verifier_clock": 1757419200000,
   "key_status": {
     "log_id": "n86HEwJWvHOhbryJkD8Q18_41VkQcVInSIqNa1EaBVs",
-    "at": 1757332800000,
+    "at": 1757419200000,
     "tree_size": 7,
     "status": 1,
-    "signature": "pa4ohagL2IE6Vu39N3fEKOnF7qmyCRtcWa8IoXLuNJ1H716ZxQypeF6UKEQEe_F7EK7FgPqPFeYucnvWXUT5Ew"
+    "signature": "LMxisjR5DrwHNmGE0QhxUV0Qr6RPES81OrlWV8iODf5KIeNXBKxSFsCE_xYokeGSz3DoS6YJZ6hFQVGdIhAo0Q"
   },
   "outcome": "authentic",
   "labels": [

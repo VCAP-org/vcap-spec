@@ -12,7 +12,7 @@ import { type SegmentEntry, SEPARATOR, ZERO_LINK, linkOf, segmentMessage } from 
 // change its bytes. See sign.ts.
 import { signChain, signEs256 } from './sign.js'
 import { TEST_KEY_PKCS8_BASE64, TEST_OTHER_KEY_PKCS8_BASE64 } from './testkey.js'
-import { TEST_LOG_KEY_PKCS8_BASE64 } from './testlogkey.js'
+import { TEST_LOG_KEY_PKCS8_BASE64, TEST_SECOND_LOG_KEY_PKCS8_BASE64 } from './testlogkey.js'
 import { type KeyStatusStatement, integrityMessage, keyStatusMessage, leafHash, leafKeyId, nodeHash, treeHeadMessage } from './registry.js'
 import { type ChainRead } from './anchor.js'
 import { corroborationMessage } from './location.js'
@@ -482,8 +482,8 @@ const videoCore = (media: Buffer, extra: Proof = {}): Proof => photoCore(media, 
       audio: { samples: keptAudio.map(({ i }) => i), delay: audioDelay }
     })
     device({ name: '89-mp4-container-cut-clip', file: Buffer.concat([cut, h264.trailer]), proof: h264.proof,
-      expected: { outcome: 'verified_clip', labels: DEVICE_LABELS, not_evaluated: [], core_hash: hashOf(h264.proof), segments: { verified: [1, 2] }, location: { claimed: 'none', level: 'none' } },
-      notes: 'Vector 36 **cut**: its first GOP removed from the video track, the audio frames before the cut removed with it, and the full proof — all three segments — still in the trailer. This is what a clip is: the file lacks segment 0, the proof does not.\n\nEvery surviving sample keeps its instant on the movie timeline (the movie timescale becomes 90 kHz and each track gets an empty edit for the time that was cut), so §5\'s audio rule assigns the same frames to segments 1 and 2 as in the original, and both recompute. **Verified clip**, 1 and 2 of 3. Segment 0 is signed and absent, which is the clip case and never *tampered*; `media.hash` does not match, which is what says this is not the original.\n\nVector 38, which used to be the corpus\'s clip, removed segment 0 from the **proof** and left it in the file; under the binding rule that is a GOP no signature covers, and it now reads *tampered*.' })
+      expected: { outcome: 'frames_not_compared', labels: [...DEVICE_LABELS, 'presentation not bound'].sort(), not_evaluated: [], core_hash: hashOf(h264.proof), segments: { verified: [] }, location: { claimed: 'none', level: 'none' } },
+      notes: 'Corpus 4.0.0: this file is **frames not compared**, *presentation not bound*, and no segment is credited. Its proof was sealed before `media.presentation` existed (§5 *Presentation*), so nothing in the core says how the frames are shown, and a clip whose parameter sets, matrix or tracks nobody signed is not a verified clip. The device signature cannot gain the field; vector 159 is the same cut under a core that carries it, and reads *verified clip*. What follows is what the file is, and was *verified clip* for until then.\n\nVector 36 **cut**: its first GOP removed from the video track, the audio frames before the cut removed with it, and the full proof — all three segments — still in the trailer. This is what a clip is: the file lacks segment 0, the proof does not.\n\nEvery surviving sample keeps its instant on the movie timeline (the movie timescale becomes 90 kHz and each track gets an empty edit for the time that was cut), so §5\'s audio rule assigns the same frames to segments 1 and 2 as in the original, and both recompute. **Verified clip**, 1 and 2 of 3. Segment 0 is signed and absent, which is the clip case and never *tampered*; `media.hash` does not match, which is what says this is not the original.\n\nVector 38, which used to be the corpus\'s clip, removed segment 0 from the **proof** and left it in the file; under the binding rule that is a GOP no signature covers, and it now reads *tampered*.' })
   }
 
   {
@@ -498,8 +498,128 @@ const videoCore = (media: Buffer, extra: Proof = {}): Proof => photoCore(media, 
       notes: 'Vector 37 with its second GOP played twice: 0, 1, 1, 2. Both copies of segment 1 recompute to its signed hash. A signed segment counts only when **exactly one** GOP of the file carries its index (§5), so segment 1 is not verified, and a duplicated index is **tampered** — a recording in which one second of footage appears twice is not the recording that was signed, however genuine each copy is.' })
 
     device({ name: '94-mp4-container-sync-table-not-idr', file: Buffer.concat([remux(hevc.media, { video: { samples: [...range(g0), ...range(g1), ...range(g2)], sync: 'all' } }), hevc.trailer]), proof: hevc.proof,
-      expected: { outcome: 'verified_clip', labels: DEVICE_LABELS, not_evaluated: [], core_hash: hashOf(hevc.proof), segments: { verified: [0, 1, 2] } },
-      notes: 'Vector 37 with its sync sample table rewritten to mark **every** sample as a sync sample; the frames are untouched. Segment boundaries are IDR access units, read from the NAL unit types (§5), not `stss`: a verifier that cut at sync samples would find seventy GOPs, sixty-seven of them without a vcap SEI, and call the file tampered. Read by IDR, the three GOPs are where they were and all three recompute. **Verified clip**, not authentic, because the rewritten table is inside the canonical bytes and `media.hash` no longer matches.\n\nThe real-world version of this trap is HEVC\'s CRA picture: a random-access point `stss` lists that is not an IDR.' })
+      expected: { outcome: 'frames_not_compared', labels: [...DEVICE_LABELS, 'presentation not bound'].sort(), not_evaluated: [], core_hash: hashOf(hevc.proof), segments: { verified: [] } },
+      notes: 'Corpus 4.0.0: **frames not compared**, *presentation not bound*, no segment credited — the device proof predates `media.presentation`, and a file that is not the original is a verified clip only when its core binds how its frames are shown (§5 *Presentation*). The point of the vector is unchanged: the GOPs are found by IDR, not by `stss`, and all three are located and recompute; a verifier that cut at sync samples would call the file tampered instead.\n\nVector 37 with its sync sample table rewritten to mark **every** sample as a sync sample; the frames are untouched. Segment boundaries are IDR access units, read from the NAL unit types (§5), not `stss`: a verifier that cut at sync samples would find seventy GOPs, sixty-seven of them without a vcap SEI, and call the file tampered. Read by IDR, the three GOPs are where they were and all three recompute. **Verified clip**, not authentic, because the rewritten table is inside the canonical bytes and `media.hash` no longer matches.\n\nThe real-world version of this trap is HEVC\'s CRA picture: a random-access point `stss` lists that is not an IDR.' })
+
+    // The same frames in the same decode order, presented in another: an
+    // edit list that plays GOP 2 first, then GOPs 0 and 1.
+    const kids = children(hevc.media, find(boxes(hevc.media, 0, hevc.media.length), 'moov') as Box)
+    const trak = kids.find((b) => b.type === 'trak') as Box
+    const mdia = find(children(hevc.media, trak), 'mdia') as Box
+    const mdhd = find(children(hevc.media, mdia), 'mdhd') as Box
+    const mvhd = find(kids, 'mvhd') as Box
+    const mediaScale = BigInt(hevc.media.readUInt32BE(mdhd.payload + 12))
+    const movieScale = BigInt(hevc.media.readUInt32BE(mvhd.payload + 12))
+    const samples = samplesOf(hevc.media, find(children(hevc.media, find(children(hevc.media, mdia), 'minf') as Box), 'stbl') as Box)
+    const at = (index: number): bigint => (samples[index] as { dts: bigint }).dts
+    const last = samples.length - 1
+    // The last sample's duration is the step before it: the length of the
+    // track only bounds the edit, and §5 reads where an edit starts.
+    const end = at(last) + (at(last) - at(last - 1))
+    const movie = (ticks: bigint): bigint => ticks * movieScale / mediaScale
+    const edits = [
+      { duration: movie(end - at(g2.first)), mediaTime: at(g2.first) },
+      { duration: movie(at(g2.first)), mediaTime: 0n }
+    ]
+    device({ name: '156-mp4-container-edit-list-reorders', file: Buffer.concat([remux(hevc.media, { video: { samples: [...range(g0), ...range(g1), ...range(g2)], sync: 'keep', edits } }), hevc.trailer]), proof: hevc.proof,
+      expected: { outcome: 'frames_not_compared', labels: [...DEVICE_LABELS, 'segment content not recomputed'].sort(), not_evaluated: [], core_hash: hashOf(hevc.proof), segments: { verified: [] } },
+      notes: 'Vector 37 with an edit list added to its video track, and nothing else: the samples, their decode order and every vcap SEI are where the device put them, so each GOP still hashes to its signed `content_hash`. The edit list has **two** media edits — GOP 2 first, then GOPs 0 and 1 — so a player shows the last second before the first two. A re-muxer can trim, repeat or reorder a recording this way without touching a sample.\n\n§5 places segments on the presentation timeline, and an edit list with more than one edit after the leading delay — or one that changes rate — describes a timeline a verifier does not model: it MUST NOT recompute segments over it as if the extra edits were not there. Nothing is located, so nothing is credited, and `media.hash` does not match: **frames not compared**, with *segment content not recomputed*. A verifier that read only the first edit, as both implementations did before corpus 4.0.0, verified all three segments and reported **verified clip** over frames shown in an order nobody signed. An original is unaffected — `media.hash` covers its edit list with everything else.' })
+  }
+
+  // ---- §5 *Presentation*: how the signed frames are shown -----------------
+  //
+  // Vector 37's container and its vcap SEIs, under a proof re-signed with the
+  // test key so its core can carry `media.presentation`: a device proof
+  // cannot gain a field without the device. Same capture id, same content
+  // hashes, a new chain over them.
+  {
+    const reading = readContainer(hevc.media)
+    if (reading.kind !== 'gops' || reading.presentation === null) throw new Error('vector 37 no longer reads')
+    const bound = { config: reading.presentation.config.toString('base64url'), matrix: reading.presentation.matrix, display: reading.presentation.display }
+    const presented = (presentation: Json): Proof => {
+      const core: Proof = {
+        v: 'vcap/1.0',
+        capture_id: hevc.proof.capture_id as string,
+        media: { ...(hevc.proof.media as Proof), presentation },
+        device: { platform: 'android', secure_hw: 'strongbox', key_id: KEY_ID },
+        time: hevc.proof.time as Json
+      }
+      const hashes = (hevc.proof.segments as unknown as SegmentEntry[]).map((e) => Buffer.from(e.hash, 'base64url'))
+      return sign({ ...core, segments: signChain(Buffer.from(core.capture_id as string, 'base64url'), hashes, privateKey) as unknown as Json })
+    }
+    const proof = presented(bound as unknown as Json)
+    const LABELS = ['integrity unevaluated', 'key not in transparency log', 'no trusted time', 'no watermark', 'not anchored', 'origin not hardware-attested']
+    const testKey = 'The container is the device capture of vector 37 (a Samsung SM-S908B, HEVC, no audio); the core and the segment chain are re-signed with the test key in `tools/src/testkey.ts`, over the same capture id and the same content hashes, so that the core can carry `media.presentation`.'
+    const presentationVector = (name: string, bytes: Buffer, expected: FileVector['expected'], notes: string, signed: Proof = proof): void =>
+      file({ name, container: true, ext: 'mp4', file: bytes, proof: signed, expected, notes: `${notes}\n\n${testKey}` })
+
+    presentationVector('158-mp4-presentation-original', seal(hevc.media, proof),
+      { outcome: 'authentic', labels: LABELS, not_evaluated: [], core_hash: hashOf(proof), segments: { verified: [0, 1, 2] } },
+      'Vector 37\'s file with a core that carries `media.presentation` (§6.1): the SHA-256 of the presentation message over the `hvcC` parameter sets — VPS, SPS, PPS, in NAL type order — and the sample entry\'s `clap`, `pasp` and `colr` boxes (this file has none), the video `tkhd` matrix (identity) and its display size, 640×360 in 16.16. **Authentic**: an original is covered whole by `media.hash`, and the presentation read back from it is the signed one.')
+
+    // GOP 0 cut; no audio track, so no delay is needed to keep instants.
+    const gops = gopsOf(hevc.media)
+    const clip = remux(hevc.media, { video: { samples: gops.slice(1).flatMap(range), sync: 'keep' } })
+    presentationVector('159-mp4-presentation-clip', Buffer.concat([clip, buildTrailer(jcs(proof as Json), { flags: flagsFor(proof) })]),
+      { outcome: 'verified_clip', labels: LABELS, not_evaluated: [], core_hash: hashOf(proof), segments: { verified: [1, 2] } },
+      'Vector 158 cut: GOP 0 dropped from the sample tables by `remux.ts`, which copies the track header and the sample description as they were. Both remaining GOPs are located and recompute, and the clip presents them exactly as the core says — the same parameter sets, the same matrix, the same display size, one video track. **Verified clip**, 1 and 2 of 3: the case §5 *Presentation* must leave alone.')
+
+    // The clip's moov, rewritten in place: lengths never change.
+    const moovOf = (b: Buffer): Box => find(boxes(b, 0, b.length), 'moov') as Box
+    const videoTrak = (b: Buffer): Box => children(b, moovOf(b)).find((t) => t.type === 'trak') as Box
+    const sealedClip = (b: Buffer): Buffer => Buffer.concat([b, buildTrailer(jcs(proof as Json), { flags: flagsFor(proof) })])
+
+    const rotated = Buffer.from(clip)
+    const tkhd = find(children(rotated, videoTrak(rotated)), 'tkhd') as Box
+    if (rotated[tkhd.payload] !== 0) throw new Error('expected a version-0 tkhd')
+    // 90° clockwise: a = 0, b = 1, c = -1, d = 0 in 16.16; w = 1 in 2.30.
+    ;[0, 0x10000, 0, -0x10000, 0, 0, 0, 0, 0x40000000].forEach((v, i) => rotated.writeInt32BE(v, tkhd.payload + 40 + 4 * i))
+    presentationVector('160-mp4-presentation-clip-rotated', sealedClip(rotated),
+      { outcome: 'frames_not_compared', labels: [...LABELS, 'presentation differs'].sort(), not_evaluated: [], core_hash: hashOf(proof), segments: { verified: [] } },
+      'Vector 159 with its video track header\'s matrix turned 90°: every sample untouched, every GOP still located and recomputing, and a player shows the frames on their side. A rotation, a mirror or a translation changes what a reader sees without touching a signed byte, and before `media.presentation` a clip carried no claim it could be held to. The matrix read back differs from the signed one: **frames not compared**, *presentation differs*, and no segment is credited — the signed frames are here, the way they are shown is not what was signed. Not *tampered*: re-muxing a clip is not an accusation, as a `media.hash` that does not match is not one (§5 *Presentation*).')
+
+    const edited = Buffer.from(clip)
+    const entry = boxes(edited, (find(children(edited, find(children(edited, find(children(edited, find(children(edited, videoTrak(edited)), 'mdia') as Box), 'minf') as Box), 'stbl') as Box), 'stsd') as Box).payload + 8, edited.length)[0] as Box
+    const hvcC = find(boxes(edited, entry.payload + 78, entry.end), 'hvcC') as Box
+    // Walk the arrays to the SPS (NAL type 33) and change its last byte.
+    let at = hvcC.payload + 22
+    let sps: { at: number, length: number } | null = null
+    for (let arrays = edited[at++] as number; arrays > 0 && !sps; arrays--) {
+      const type = (edited[at++] as number) & 0x3f
+      const n = edited.readUInt16BE(at)
+      at += 2
+      for (let i = 0; i < n; i++) {
+        const length = edited.readUInt16BE(at)
+        if (type === 33 && !sps) sps = { at: at + 2, length }
+        at += 2 + length
+      }
+    }
+    if (!sps) throw new Error('no SPS in the hvcC of vector 37')
+    edited[sps.at + sps.length - 1] = (edited[sps.at + sps.length - 1] as number) ^ 0x01
+    presentationVector('161-mp4-presentation-clip-sps-edited', sealedClip(edited),
+      { outcome: 'frames_not_compared', labels: [...LABELS, 'presentation differs'].sort(), not_evaluated: [], core_hash: hashOf(proof), segments: { verified: [] } },
+      `Vector 159 with one bit of the SPS in its \`hvcC\` flipped (file byte ${sps.at + sps.length - 1}, the last byte of the SPS). Parameter sets carried only in the decoder configuration are in no sample, so no \`content_hash\` covers them — and they decide the conformance window (the crop), the VUI colour description and how every slice is decoded. The frames' bytes are the signed ones; the decoder that reads them is told something else. The configuration hash read back differs from the signed one: **frames not compared**, *presentation differs*, nothing credited.`)
+
+    // A second, enabled copy of the video track, appended to moov. moov is the
+    // last box of the clip, so growing it moves no sample.
+    const doubled = (() => {
+      const moov = moovOf(clip)
+      if (moov.end !== clip.length) throw new Error('moov is not the last box of the clip')
+      const trak = videoTrak(clip)
+      const body = Buffer.concat([clip.subarray(moov.payload, moov.end), clip.subarray(trak.start, trak.end)])
+      const header = Buffer.alloc(8)
+      header.writeUInt32BE(8 + body.length)
+      header.write('moov', 4, 'latin1')
+      return Buffer.concat([clip.subarray(0, moov.start), header, body])
+    })()
+    presentationVector('162-mp4-presentation-clip-extra-track', sealedClip(doubled),
+      { outcome: 'frames_not_compared', labels: [...LABELS, 'tracks not bound'].sort(), not_evaluated: [], core_hash: hashOf(proof), segments: { verified: [] } },
+      'Vector 159 with a second enabled video track: a copy of the first, appended to `moov`. A segment hash covers the first video track and the first audio track; a player may show any enabled track, and an attacker\'s track would be one no signature covers — overlaid text, another picture, another soundtrack. §5 *Presentation*: a clip is bound only when its file has exactly one `vide` track, at most one `soun` track, one sample description each, and every other track disabled. **Frames not compared**, *tracks not bound*, nothing credited.')
+
+    const misdescribed = presented({ ...bound, matrix: [0, 0x10000, 0, -0x10000, 0, 0, 0, 0, 0x40000000] } as unknown as Json)
+    presentationVector('163-mp4-presentation-original-misdescribed', seal(hevc.media, misdescribed),
+      { outcome: 'authentic', labels: [...LABELS, 'presentation differs'].sort(), not_evaluated: [], core_hash: hashOf(misdescribed), segments: { verified: [0, 1, 2] } },
+      'Vector 158 with a core whose signed `media.presentation.matrix` says 90° while the file it seals is not rotated: a writer that computed the field from something other than the file it produced. The bytes are exactly the sealed ones — `media.hash` matches — so the outcome stays **authentic**, and the false claim is the device\'s: *presentation differs*, amber at best, the way a level claimed above its evidence is *inconsistent claim* and never *tampered* (§7). A writer conformance suite catches this on its first file.', misdescribed)
   }
 
   {
@@ -788,6 +908,41 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
   }
 
   {
+    // A chain that holds and proves `none`: an imported key, every
+    // certificate shown valid, no registry. The device claimed `tee`.
+    const base = attested({ chain: chainOf('imported') })
+    const proof = { ...base, attestation_status: statusAttachment(base, CAPTURE - 3600000, VALID) }
+    file({ name: '157-jpeg-attestation-holds-proves-none', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: {
+        outcome: 'authentic',
+        labels: [...PHOTO_LABELS, 'inconsistent claim'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'none', ceiling: 'amber' },
+        validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+      },
+      notes: 'The chain of vector 152 — genuine to the pinned root, TEE at both levels, a verified boot, an imported key — with a signed status snapshot showing every certificate valid and no `registry` attachment. It holds as evidence (§7 rules 1–3 and 5) and proves `none` (rule 6): *origin not hardware-attested*, and not *attestation evidence invalid*.\n\nAnd the device claimed `tee`. §7 *Claimed above proven* measures a claim against what a chain that holds proves, before any revocation: here that is `none`, so the claim is above the evidence and *inconsistent claim* is shown. A chain that does not hold (rules 1–3, 5) contradicts nothing, and with no chain the only label is *origin not hardware-attested* (vectors 01, 12, 15). The two implementations disagreed on exactly this case until corpus 4.0.0; vector 152 had hidden it, because its registry leaf raised the same label for another reason.' })
+  }
+
+  {
+    // Vector 157's chain, which proves `none`, with its intermediate revoked.
+    const base = attested({ chain: chainOf('imported') })
+    const proof = { ...base, attestation_status: statusAttachment(base, CAPTURE - 3600000, revokedIntermediate({ reason: 'KEY_COMPROMISE', revokedAt: CAPTURE - 7200000 })) }
+    file({ name: '164-jpeg-attestation-revoked-proves-none', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      expected: {
+        outcome: 'authentic',
+        labels: [...PHOTO_LABELS, 'attestation key revoked', 'inconsistent claim'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'none', ceiling: 'red' },
+        validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+      },
+      notes: 'Vector 157 — a chain that holds and proves `none`, an imported key — with a signed status snapshot listing its intermediate as revoked for `KEY_COMPROMISE` before the capture. The level was `none` already; the revocation is not missing evidence that changes nothing, it is evidence **against** the file: a compromised attestation key vouches for nothing it ever signed, this chain included. §6.2 *Revoked* applies to every chain that holds, whatever level it proves: *attestation key revoked*, **red**. *inconsistent claim* stays, measured against the level before revocation (§7).\n\nUntil corpus 4.0.0 the reference verifier read a chain\'s revocation only beside a proven level, and this file was amber there and red in the published verifier.' })
+  }
+
+  {
     // An attested key that signs a leaf of its own, claiming StrongBox.
     const proof = attested({ chain: chainOf('forged-leaf'), secureHw: 'strongbox' })
     file({ name: '105-jpeg-attestation-forged-leaf', ext: 'jpg', file: seal(baseJpeg, proof), proof,
@@ -998,7 +1153,10 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
     const proof = registered()
     file({ name: '54-jpeg-registry-green', ext: 'jpg', file: seal(baseJpeg, proof), proof,
       verifierClock: CAPTURE + day,
-      keyStatus: statusStatement(CAPTURE, 1),
+      // §6.2: with only the device clock to date the capture, the log is
+      // asked about the verifier's clock, never about the instant the device
+      // chose (vector 155).
+      keyStatus: statusStatement(CAPTURE + day, 1),
       expected: {
         outcome: 'authentic',
         labels: GREEN_LABELS,
@@ -1007,7 +1165,7 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
         level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
         validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
       },
-      notes: 'Everything §7 asks for except one thing, and the one thing is time. `tee` proven by a chain to the pinned root, every certificate of the chain valid in a signed status snapshot, the key in the log before the declared capture, the app that made the key one the log admits, and the log\'s signed answer that the key was not revoked at that instant — `key_status` in `expected.json` is an **input**, like `verifier_clock`, because §6.2 makes revocation an online question.\n\nAnd the ceiling is **amber**. The only instant is `time.device_clock`, and a device clock caps the verdict at amber whatever else holds (§7): it is set by whoever holds the device, so every check made "at the capture" is a check made at a moment the signer chose. This vector used to be the corpus\'s green, in contradiction with that sentence; the text was right and the vector was not. Vector 148 is this proof with an instant nobody can move, and vector 100 adds a proven device integrity: that one is green.' })
+      notes: 'Everything §7 asks for except one thing, and the one thing is time. `tee` proven by a chain to the pinned root, every certificate of the chain valid in a signed status snapshot, the key in the log before the declared capture, the app that made the key one the log admits, and the log\'s signed answer that the key is not revoked — `key_status` in `expected.json` is an **input**, like `verifier_clock`, because §6.2 makes revocation an online question. The answer is about the verifier\'s clock and not about the declared capture: a device clock never places a capture before a revocation (§6.2, vector 155), and a key valid now was valid then.\n\nAnd the ceiling is **amber**. The only instant is `time.device_clock`, and a device clock caps the verdict at amber whatever else holds (§7): it is set by whoever holds the device, so every check made "at the capture" is a check made at a moment the signer chose. This vector used to be the corpus\'s green, in contradiction with that sentence; the text was right and the vector was not. Vector 148 is this proof with an instant nobody can move, and vector 100 adds a proven device integrity: that one is green.' })
   }
 
   // The standard core is the one `_timestamps/valid.json` stamps; every
@@ -1298,6 +1456,90 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
         validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
       },
       notes: 'Valid evidence, a day late. The tree head was signed after `time.device_clock`, so what the log proves is that the key was registered **at some point**, not that it was registered when this capture claims to have happened — a key enrolled after the fact could have signed a file dated before it.\n\nAmber and shown, not rejected: the registration is real and the label says what is missing. `key not in transparency log` is **absent** here, which is the distinction the two labels exist to draw — the key is in the log, and the timing is what does not line up.' })
+  }
+
+  // ---- corpus 4.0.0: what the hardening review found accepted ------------
+
+  {
+    // A key imported into the TEE: every other input of vector 100.
+    const { proof: stamped, genTime } = stampedRegistered({}, undefined, 'imported')
+    const proof = integrityOver(stamped, 'playIntegrity', 'hardware')
+    file({ name: '152-jpeg-attestation-key-imported', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      keyStatus: statusStatement(Date.parse(genTime), 1),
+      expected: {
+        outcome: 'authentic',
+        labels: [...PROVEN_GREEN, 'inconsistent claim', 'origin not hardware-attested'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'none', ceiling: 'amber' },
+        validated_at: { instant: genTime, source: 'timestamp' }
+      },
+      notes: 'Vector 100 with one change in the attestation leaf: KeyMint\'s hardware-enforced `origin` is `IMPORTED` (2), not `GENERATED` (0). The chain is genuine to the pinned root, both security levels say TEE, the boot is verified on a locked device, the app is one the log admits — and the key was made **outside** the secure hardware and imported into it, so whoever made it may still hold the private half. A TEE level says where a key lives, and only `GENERATED` says nobody else has it.\n\n§7 rule 6: the proven level is `none`, *origin not hardware-attested*, and the chain is not *evidence invalid* — it holds, and proves too little, like a chain from an unlocked phone. *inconsistent claim* is the log\'s leaf recording `tee` above what the chain proves (§6.2). **Amber**, where it read green before corpus 4.0.0: the origin was never checked, while `threat-model.md` §5.2 said it was.' })
+  }
+
+  {
+    // Vector 110's iOS capture with a Play Integrity verdict a registry relayed.
+    const signed = sign(photoCore(baseJpeg, 'image/jpeg', { device: { platform: 'ios', secure_hw: 'secureEnclave', key_id: KEY_ID } }))
+    const leaves = [0, 1, 2].map((i) => i === 1 ? leafHash(coreHash(signed)) : leafHash(createHash('sha256').update(`another capture ${i}`).digest()))
+    const root = nodeHash(nodeHash(leaves[0] as Buffer, leaves[1] as Buffer), leaves[2] as Buffer)
+    const BLOCK = CAPTURE + 90_000
+    const anchored = {
+      ...signed,
+      registry: registryFor({ secureHw: 'secureEnclave' }),
+      anchor: { chain: 'base-sepolia', tx: '0x' + createHash('sha256').update('the ios anchoring transaction').digest('hex'), block: 46561942, anchor_id: 2, index: 1, tree_size: 3, root: root.toString('base64url'), merkle_path: [leaves[0] as Buffer, leaves[2] as Buffer].map((h) => h.toString('base64url')) }
+    }
+    const proof = integrityOver(anchored, 'playIntegrity', 'hardware')
+    file({ name: '153-jpeg-ios-play-integrity-not-green', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      keyStatus: statusStatement(BLOCK, 1),
+      chainRead: { root: root.toString('base64url'), tree_size: 3, block_time: BLOCK },
+      expected: {
+        outcome: 'authentic',
+        labels: [...GREEN_LABELS.filter((l) => l !== 'not anchored' && l !== 'integrity unevaluated'), 'integrity hardware', 'level from registry records'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'secureEnclave', proven: 'secureEnclave', ceiling: 'amber' },
+        validated_at: { instant: new Date(BLOCK).toISOString(), source: 'anchor' }
+      },
+      notes: 'Vector 110 with a registry-signed `integrity` statement from **`playIntegrity`** with verdict `hardware` — beside a proof whose `device.platform` is `ios`. The signature is valid and the statement is shown (*integrity hardware*), and it proves nothing about this device: Play Integrity attests Android devices, so a verdict from it next to an iPhone\'s proof is about some other device, or about none.\n\n§6.2, §7: a `hardware` verdict proves device integrity only from a source that attests the proof\'s own platform — `playIntegrity` for `android`. **Amber**, *integrity not proven*. Before corpus 4.0.0 this file was **green**: the source was checked and the platform was not, so the sentence "no iOS capture is green in this version" held only as long as no registry relayed the wrong source.' })
+  }
+
+  {
+    // Vector 100 with its integrity statement signed by the other trusted log.
+    const secondLogKey = createPrivateKey({ key: Buffer.from(TEST_SECOND_LOG_KEY_PKCS8_BASE64, 'base64'), format: 'der', type: 'pkcs8' })
+    const { proof: stamped, genTime } = stampedRegistered()
+    const body: { [key: string]: Json } = { source: 'playIntegrity', verdict: 'hardware', evaluated_at: CAPTURE + 1000 }
+    const proof = { ...stamped, integrity: { ...body, sig: signEs256(integrityMessage(coreHash(stamped), body), secondLogKey).toString('base64url') } }
+    file({ name: '154-jpeg-integrity-other-trusted-log', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      keyStatus: statusStatement(Date.parse(genTime), 1),
+      expected: {
+        outcome: 'authentic',
+        labels: STAMPED_GREEN,
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'amber' },
+        validated_at: { instant: genTime, source: 'timestamp' }
+      },
+      notes: 'Vector 100 with its `integrity` statement signed by the **second** log of `_trust/logs.json` — a log this verifier trusts, and not the one the proof\'s `registry` attachment names. §6.2 *Which key*: the countersignatures carry no key of their own, and when a `registry` attachment is present its `log_id` names the key for all of them. A verifier that tried every trusted key would accept a statement from a log that never admitted this device, under policies the reader did not choose to apply to it.\n\nThe signature verifies under no key the proof names, which is the case of a signer this verifier does not follow: *integrity unevaluated*, not *evidence invalid*, and with no proven device integrity *integrity not proven*. **Amber**; green before corpus 4.0.0. `attestation_status`, `location_corroboration` and the online key status follow the same rule.' })
+  }
+
+  {
+    // Vector 54's proof; the log, asked about the verifier's clock, answers revoked.
+    const proof = registered()
+    file({ name: '155-jpeg-key-revoked-device-clock', ext: 'jpg', file: seal(baseJpeg, proof), proof,
+      verifierClock: CAPTURE + day,
+      keyStatus: statusStatement(CAPTURE + day, 2),
+      expected: {
+        outcome: 'authentic',
+        labels: [...GREEN_LABELS, 'key revoked'].sort(),
+        not_evaluated: [],
+        core_hash: hashOf(proof),
+        level: { claimed: 'tee', proven: 'tee', ceiling: 'red' },
+        validated_at: { instant: new Date(CAPTURE).toISOString(), source: 'device_clock' }
+      },
+      notes: 'Vector 54\'s proof, and the device key has since been revoked for a reason that is not a compromise — the phone was reported lost, say — so the log does not revoke it retroactively. The only instant in the file is `time.device_clock`, which whoever holds the key sets. A thief who sets it before the revocation, and a verifier that asks the log about that instant, gets a signed *valid*, and the verdict reads amber for *no trusted time* where it should read red.\n\n§6.2: without a trusted instant — a valid token or a verified anchor — the verifier asks about **its own clock**. A revocation is never undone, so *valid now* is still *valid then* (vector 54), and *revoked now*, with nothing a third party vouches for placing the capture before it, is *key revoked*, **red**. The rule `attestation_status` already applies to the chain (vector 96), applied to the device key. `key_status` is the log\'s answer to that question, an input.' })
   }
 }
 
