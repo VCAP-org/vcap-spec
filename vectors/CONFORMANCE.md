@@ -1,6 +1,6 @@
 # Claiming conformance with a vcap-spec corpus
 
-This file says what the sentence *"conformant with vcap-spec corpus 5.0.0"*
+This file says what the sentence *"conformant with vcap-spec corpus 6.0.0"*
 has to mean for a consumer to be able to check it, and how to produce the
 report that backs it. `README.md` next to it describes the vectors themselves;
 this one is about the claim.
@@ -47,7 +47,7 @@ reference verifier, measured against the corpus in the same commit.
 ```json
 {
   "implementation": "acme-verify 3.2 (https://example.invalid/acme-verify)",
-  "corpus_version": "5.0.0",
+  "corpus_version": "6.0.0",
   "manifest_sha256": "…64 hex…",
   "vectors_declared": 168,
   "vectors_run": 168,
@@ -106,5 +106,5 @@ be read and re-implemented rather than imported.
   arithmetic and `vectors/_watermark/agreement-floor.json` for the 0.85 floor
   a `video-rep-v1` decoder must not report an id below.
 - **Not a claim about a newer corpus.** The corpus grows by addition, so
-  passing corpus 5.0.0 says nothing about the vectors a later corpus adds, and
-  everything about 5.0.0's. State the version you ran.
+  passing corpus 6.0.0 says nothing about the vectors a later corpus adds, and
+  everything about 6.0.0's. State the version you ran.

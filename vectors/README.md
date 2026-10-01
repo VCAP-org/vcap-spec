@@ -115,7 +115,7 @@ those captures — 38 and 39, 86-94, a stolen proof, a cut clip, reordered and
 duplicated GOPs, a relabelled SEI — need no device: `npm run generate` derives
 them from the committed 36 and 37 through `tools/src/remux.ts`, which rewrites
 sample tables only, and that is what keeps them auditable rather than
-asserted. Since corpus 5.0.0 it also re-signs their core and segment chain
+asserted. Since the 5.0.0 corpus it also re-signs their core and segment chain
 with the test key, over the device's capture id and content hashes: the
 device proofs predate `media.presentation`, a required core field, and read
 *no proof found*, so an edit under them would test nothing else. 166–168 are
@@ -145,7 +145,7 @@ The numbered corpus (`vectors/NN-*`) has its own version, in `vectors/VERSION`
 — separate from `vcap/1.0`, the proof format version. The format version says
 what a proof looks like; the corpus version says which exact vectors an
 implementation checked itself against, so a third party can claim "conformant
-with vcap-spec corpus 5.0.0" and mean something a consumer can check.
+with vcap-spec corpus 6.0.0" and mean something a consumer can check.
 
 `vectors/MANIFEST.json` is that check: for every `vectors/NN-*` directory, its
 `kind`, its `outcome`, and a SHA-256 over its files (name and length included,
@@ -161,7 +161,7 @@ npm run manifest:check   # exits 1 if the committed file is stale — CI runs th
 ```
 
 `vectors/CONFORMANCE.md` says what the sentence "conformant with corpus
-5.0.0" has to contain to be checkable — corpus version, manifest hash, and
+6.0.0" has to contain to be checkable — corpus version, manifest hash, and
 how many vectors actually ran — and why a suite that ran zero vectors must be
 red. `vectors/conformance-report.json` is this repository's own claim in that
 format, regenerated and checked by CI (`npm run conformance:report` /
@@ -201,7 +201,13 @@ derives from 36 and 37 (38, 39, 86–94, 156) moved bytes under a re-signed
 core, and 89 and 94 went back to *verified clip*; 33 and 34 gained the field,
 and 143 and 144 were re-sealed over their committed Content Credentials with
 33's new proof (their manifests are the same bytes, so their `c2pa` blocks
-and notes stand); 165–168 were added.
+and notes stand); 165–168 were added. **6.0.0 is major**: 145, 146 and 147
+were minted again from vector 166 — 36's container under the re-signed core
+that carries the field — so their bytes moved and their verdicts are the ones
+their notes describe: 145 *verified clip* (1–2 of 3, depth 1), 146 *tampered*
+(segment 1 verified, depth 0, the only video case of a tampered proof inside
+an active C2PA manifest), 147 *no proof found* through *Content Credentials
+carry the proof of a source capture*. Nothing else moved.
 
 `vectors/edge-cases/` (below) is not in the manifest and not part of the
 versioned corpus: it is regenerated on demand by its own tool, not hand-curated
@@ -290,8 +296,9 @@ the sidecar, and a `*.c2pa` file as the caller-supplied C2PA store.
 A vector's bytes never change once it is published, `NOTES.md` included — its
 digest is in `MANIFEST.json`, and five runners pin that manifest. A major
 corpus bump is the one exception, and even then only for the vectors a
-generator rebuilds; the device captures and the C2PA vectors keep their bytes,
-since no run can reproduce them. So a note that turns out to be wrong, or that
+generator rebuilds; the device captures keep their bytes, since no run can
+reproduce them, and a C2PA vector moves only when a bump needs it to (its salts
+are random, so a run never reproduces it either). So a note that turns out to be wrong, or that
 a major bump overtook, is corrected here, not in place, and `expected.json`
 carries the verdict in force.
 
@@ -319,31 +326,16 @@ carries the verdict in force.
   and a reader has to handle it — but the cause belongs to that writer's
   configuration, not to Apple's encoder.
 
-- **145 · `145-mp4-c2pa-clip-parent-of`** — its note says the outcome is
-  *verified clip*, 1 and 2 of 3. In the 4.0.0 corpus it was **no proof found**
-  (`SOURCE_CAPTURE`, `frames_name_capture` true): vector 36's proof bound no
-  `media.presentation`, so the cut was *frames not compared* (§5
-  *Presentation*), and a proof found at depth 1 is never held against the
-  derivation (§3.2). From 5.0.0 it is still **no proof found**, for an earlier
-  reason: that proof lacks a required core field (§6.1), so it is not well
-  formed and no GOP is read — `expected.json` keeps `proof_source` and drops
-  `core_hash` and `frames_name_capture`, which a proof that is not well formed
-  does not reach. The C2PA vectors are not regenerated for a note (their salts
-  are random), so the note stays.
-
-- **146 · `146-mp4-c2pa-clip-gop-replaced`** — its note says **tampered**,
-  segment 1 verified. From the 5.0.0 corpus it is **no proof found** at depth
-  0, for 145's reason: the proof its manifest carries is vector 36's, which
-  lacks `media.presentation`. The depth-0 rule the note describes (a proof in
-  the active manifest reads like a sidecar, §3.2) is unchanged and still
-  pinned by vector 128, a JPEG; the video case under it waits for a C2PA
-  run that can re-mint this file over a re-signed core.
-
-- **147 · `147-mp4-c2pa-clip-reencoded`** — its note reaches **no proof found**
-  through *Content Credentials carry the proof of a source capture* (§3.2).
-  The outcome stands; from the 5.0.0 corpus the reason is that vector 36's
-  proof lacks `media.presentation`, and `expected.json` drops `core_hash` and
-  `frames_name_capture` for that reason.
+- **145, 146, 147 · the C2PA video clips** — in the 5.0.0 corpus they carried
+  vector 36's device proof, which lacks `media.presentation`, and all three
+  read **no proof found**, `schema_valid` false; their notes, older than the
+  field, described the verdicts below. From the 6.0.0 corpus they are minted
+  again from vector 166 under a core that carries the field, their notes are
+  new and right as written, and the verdicts are back: 145 **verified clip**
+  (1–2 of 3, proof at depth 1), 146 **tampered** (segment 1 verified, proof at
+  depth 0), 147 **no proof found** (*Content Credentials carry the proof of a
+  source capture*). Their notes record c2patool 0.27.16, which reports no
+  informational codes on these files; the other C2PA vectors record 0.28.0.
 
 - **158 · `158-mp4-presentation-original`** — its note says the sample entry
   has no `clap`, `pasp` or `colr` box. It has a `colr` (`nclx`), the one

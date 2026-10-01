@@ -1,14 +1,29 @@
 {
   "kind": "container",
-  "outcome": "no_proof_found",
-  "labels": [],
+  "outcome": "verified_clip",
+  "labels": [
+    "integrity unevaluated",
+    "key not in transparency log",
+    "no trusted time",
+    "no watermark",
+    "not anchored",
+    "origin not hardware-attested"
+  ],
   "not_evaluated": [],
+  "core_hash": "99051d03e77c36e61cf13cd04ca64254667c0d77d45e791c6245446e1c2b928f",
+  "segments": {
+    "verified": [
+      1,
+      2
+    ]
+  },
   "proof_source": {
     "kind": "c2pa",
     "manifest": "urn:c2pa:76636170-0000-4000-8000-000001450000",
     "depth": 1
   },
-  "schema_valid": false,
+  "frames_name_capture": true,
+  "schema_valid": true,
   "writer": {
     "expect": "not_covered",
     "reason": "the proof travels in a C2PA manifest, which no vcap writer produces"

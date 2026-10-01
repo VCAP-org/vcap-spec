@@ -284,7 +284,11 @@ const baseMp4 = readFileSync(join(VECTORS, '_media', 'base.mp4'))
 const photo = proofOf('01-jpeg-sealed')
 const sealedJpeg = readVector('01-jpeg-sealed', 'input.jpg')
 const timestamped = proofOf('59-jpeg-timestamped')
-const device = readVector('36-mp4-container-verified', 'input.mp4')
+// Vector 166: vector 36's device container under the re-signed core that
+// carries media.presentation (corpus 5.0.0). The device proof of 36 predates
+// that required field, so a clip of it would read no proof found and test
+// nothing else. 89 is the cut of the same container under the same core.
+const device = readVector('166-mp4-container-h264-presentation', 'input.mp4')
 const deviceProof = JSON.parse((parseTrailer(device) as { payload: Buffer }).payload.toString('utf8')) as Proof
 const cutClip = unsealed(readVector('89-mp4-container-cut-clip', 'input.mp4'))
 
@@ -515,20 +519,19 @@ const withStore = await c2paSign({ asset: baseJpeg, mime: 'image/jpeg', label: l
 // ---- ISO-BMFF: a clip, and the `parentOf` chain (§3.2) -------------------------
 
 {
-  // Generation 0: the Android capture of vector 36, sealed, after a C2PA claim
-  // generator wrote a manifest carrying its proof. On ISO-BMFF that manifest
-  // sits inside media.hash, so this file itself reads tampered (vector 73) —
-  // it is an ingredient here, not a vector.
+  // Generation 0: vector 166 — the Android capture of vector 36 under a core
+  // that carries media.presentation — after a C2PA claim generator wrote a
+  // manifest carrying its proof. On ISO-BMFF that manifest sits inside
+  // media.hash, so this file itself reads tampered (vector 73) — it is an
+  // ingredient here, not a vector.
   const g0 = await c2paSign({ asset: device, mime: 'video/mp4', label: label(145, 0), proof: deviceProof })
   const clipOf = async (n: number, asset: Buffer, actions: string[], o: { parent?: Buffer, proof?: Proof } = {}): Promise<Buffer> =>
     (await c2paSign({ asset, mime: 'video/mp4', label: label(n, 1), parent: { asset: o.parent ?? g0.file, mime: 'video/mp4' }, actions, proof: o.proof })).file
-  const provenance = 'The source is the Android capture of vector 36 (Samsung SM-S908B, StrongBox, device signatures untouched); the clip bytes are vector 89\'s cut.'
+  const provenance = 'The source is vector 166: the container of vector 36\'s Android capture (Samsung SM-S908B), its NAL units and vcap SEIs the device\'s, under a core and segment chain re-signed with the test key so that it carries `media.presentation` (corpus 5.0.0); the clip bytes are vector 89\'s cut of it, under the same core. Rebuilt in corpus 6.0.0: the 5.0.0 files carried vector 36\'s device proof, which predates the field and read *no proof found*.'
 
   add({ name: '145-mp4-c2pa-clip-parent-of', ext: 'mp4', kind: 'container', file: await clipOf(145, cutClip, ['c2pa.trimmed']), proof: deviceProof,
-    // Corpus 5.0.0: vector 36's proof has no `media.presentation`, a required
-    // core field (§6.1), so the proof is not well formed wherever it is found.
-    expected: { ...NOT_FOUND, proof_source: src(1, label(145, 0)) }, schemaValid: false,
-    notes: `A clip made by a C2PA-aware cutter: vector 89's cut of vector 36 — GOP 0 removed, no re-encoding, the vcap SEIs intact — with no trailer, signed with a manifest that opens the source as \`parentOf\` and records \`c2pa.trimmed\`. The source's manifest (generation 0, ${label(145, 0)}) carries vector 36's proof and travels in the clip's store as its ingredient.\n\nNo footer, no proof at depth 0, no sidecar: the proof is found at depth 1 (§3.2), the nearest ancestor that carries one. Since corpus 5.0.0 that proof is **no proof found** before any GOP is read: vector 36's core predates \`media.presentation\`, which every proof carrying \`segments\` requires (§6.1). ${provenance}` })
+    expected: { outcome: 'verified_clip', labels: DEVICE_LABELS, not_evaluated: [], core_hash: hashOf(deviceProof), segments: { verified: [1, 2] }, proof_source: src(1, label(145, 0)), frames_name_capture: true },
+    notes: `A clip made by a C2PA-aware cutter: vector 89's cut of vector 166 — GOP 0 removed, no re-encoding, the vcap SEIs intact — with no trailer, signed with a manifest that opens the source as \`parentOf\` and records \`c2pa.trimmed\`. The source's manifest (generation 0, ${label(145, 0)}) carries vector 166's proof and travels in the clip's store as its ingredient.\n\nNo footer, no proof at depth 0, no sidecar: the proof is found at depth 1 (§3.2), the nearest ancestor that carries one. The frames name the capture (\`frames_name_capture\`, a locating hint), GOPs 1 and 2 are located and recompute under §5, the core binds the presentation the clip still has (§5 *Presentation*), and the outcome is **verified clip**, 1 and 2 of 3 — vector 89's verdict, reached without a trailer. ${provenance}` })
 
   {
     // One byte of the last GOP's IDR slice data changed, then signed by a
@@ -544,13 +547,13 @@ const withStore = await c2paSign({ asset: baseJpeg, mime: 'image/jpeg', label: l
     const at = idr.offset + idr.size - 16
     edited[at] = (edited[at] as number) ^ 0x55
     add({ name: '146-mp4-c2pa-clip-gop-replaced', ext: 'mp4', kind: 'container', file: await clipOf(146, edited, ['c2pa.trimmed'], { parent: device, proof: deviceProof }), proof: deviceProof,
-      expected: { ...NOT_FOUND, proof_source: src(0, label(146, 1)) }, schemaValid: false,
-      notes: `Vector 145's clip with one byte of the last GOP's IDR slice data changed (clip byte ${at}), signed by a cutter that opens vector 36 as \`parentOf\` and carries its proof in **its own** manifest, as the clip's: a GOP whose vcap SEI still names the capture and segment 2, and whose bytes are not the ones segment 2 signs. The cutter's manifest is valid — it vouches for the bytes it saw — and declares a trim, not this.\n\nSince corpus 5.0.0 the outcome is **no proof found**, at depth 0 as anywhere: vector 36's core predates \`media.presentation\`, which every proof carrying \`segments\` requires (§6.1), so the proof is not well formed and no GOP is read. Before, depth 0 read like a sidecar (§5) and the located segment that does not recompute made the file *tampered*, with segment 1 verified. ${provenance}` })
+      expected: { outcome: 'tampered', labels: [], not_evaluated: [], core_hash: hashOf(deviceProof), segments: { verified: [1] }, proof_source: src(0, label(146, 1)), frames_name_capture: true },
+      notes: `Vector 145's clip with one byte of the last GOP's IDR slice data changed (clip byte ${at}), signed by a cutter that opens vector 166 as \`parentOf\` and carries its proof in **its own** manifest, as the clip's: a GOP whose vcap SEI still names the capture and segment 2, and whose bytes are not the ones segment 2 signs. The cutter's manifest is valid — it vouches for the bytes it saw — and declares a trim, not this.\n\nDepth 0 reads like a sidecar (§3.2): §5 applies, a located segment that does not recompute is **tampered**, with segment 1 verified. The corpus's only video case of a tampered proof inside an active C2PA manifest; vector 128 is the JPEG one. Vector 147 is the other side of the rule: at depth ≥ 1 a failure reads *no proof found*, because a proof found up the chain is the source's and is never held against a derivation. ${provenance}` })
   }
 
   add({ name: '147-mp4-c2pa-clip-reencoded', ext: 'mp4', kind: 'container', file: await clipOf(147, baseMp4, ['c2pa.transcoded']), proof: deviceProof,
-    expected: { ...NOT_FOUND, proof_source: src(1, label(145, 0)) }, schemaValid: false,
-    notes: `What a re-encoding editor leaves: new frames with no vcap SEI (the two-frame MP4 of \`_media/\` stands in for them), signed with a manifest that opens the capture of vector 36 as \`parentOf\` and records \`c2pa.transcoded\`. The proof is found at depth 1, and since corpus 5.0.0 it is **no proof found** before any GOP is read: vector 36's core predates \`media.presentation\`, which every proof carrying \`segments\` requires (§6.1). Before, no GOP named the capture and \`media.hash\` did not match, and at depth ≥ 1 that read *no proof found* too, reason *Content Credentials carry the proof of a source capture* (§3.2) — never *tampered*. A detector may still add *origin traced* from the watermark. ${provenance}` })
+    expected: { ...NOT_FOUND, core_hash: hashOf(deviceProof), proof_source: src(1, label(145, 0)), frames_name_capture: false },
+    notes: `What a re-encoding editor leaves: new frames with no vcap SEI (the two-frame MP4 of \`_media/\` stands in for them), signed with a manifest that opens vector 166's capture as \`parentOf\` and records \`c2pa.transcoded\`. The proof is found at depth 1 and is well formed; no GOP names the capture (\`frames_name_capture\` false) and \`media.hash\` does not match. §5 alone would say *frames not compared*; at depth ≥ 1 that becomes **no proof found**, reason *Content Credentials carry the proof of a source capture* (§3.2) — never *tampered*. A detector may still add *origin traced* from the watermark. ${provenance}` })
 }
 
 // ---- helpers used above --------------------------------------------------------
