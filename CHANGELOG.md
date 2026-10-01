@@ -12,6 +12,14 @@ else.
 
 ## Unreleased
 
+### Writer requirements: what muxers actually write
+
+Text only, no corpus change. §5 *Presentation* said either muxer "may add
+`colr` or `pasp`"; it now says what was measured — `MediaMuxer` writes a
+`colr` (`nclx`) and no `pasp`, macOS `AVAssetWriter` writes `fiel`/`chrm` and
+neither — and that the writer reads back whichever of `clap`/`pasp`/`colr` are
+there. Erratum for vector 158's note (`vectors/README.md`).
+
 ### Verdict hardening and presentation binding — corpus 3.1.0 → **4.0.0**
 
 **Breaking.** A major corpus bump: the attestation chains were minted again

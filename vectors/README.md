@@ -296,6 +296,13 @@ turns out to be wrong is corrected here, not in place.
   derivation (§3.2). `expected.json` carries the new verdict; the C2PA vectors
   are not regenerated for a note (their salts are random), so the note stays.
 
+- **158 · `158-mp4-presentation-original`** — its note says the sample entry
+  has no `clap`, `pasp` or `colr` box. It has a `colr` (`nclx`), the one
+  vector 37's `MediaMuxer` wrote, and the signed `config` covers it, as §5
+  *Presentation* requires: the verdict and `expected.json` are right, the
+  parenthesis is not. Vectors 159–163 are built from the same file and carry
+  the same `colr`.
+
 ## Not here yet, and why
 
 Every attachment §6.2 defines now has vectors: `attestation`,
