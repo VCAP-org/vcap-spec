@@ -1,0 +1,119 @@
+{
+  "v": "vcap/1.0",
+  "capture_id": "b-rGD7NLTiLFhUb0YXzy9A",
+  "media": {
+    "duration_ms": 6099,
+    "h": 720,
+    "hash": "pQ5I6_mYjreGznIWltL_oq_qoTMKzfRuKSfTsqtTAOk",
+    "mime": "video/mp4",
+    "segment_count": 11,
+    "w": 1280,
+    "presentation": {
+      "config": "cWwZWk3wWp2vMlw91RvvDfAsEEoFCXvfO6IwRvpJerY",
+      "matrix": [
+        65536,
+        0,
+        0,
+        0,
+        65536,
+        0,
+        0,
+        0,
+        1073741824
+      ],
+      "display": [
+        83886080,
+        47185920
+      ]
+    }
+  },
+  "device": {
+    "platform": "ios",
+    "secure_hw": "secureEnclave",
+    "key_id": "4aF24UJH_AHu_CuygIW3PB-AMEWVoQy3iaeBh4yDSBM"
+  },
+  "watermark": {
+    "algo": "videoseal",
+    "ecc": "rep-8-crc8",
+    "layout": "video-rep-v1",
+    "mark_id": 9627292,
+    "payload_bits": 24,
+    "strength": 20
+  },
+  "time": {
+    "device_clock": 1789220011443
+  },
+  "segments": [
+    {
+      "gop": 0,
+      "hash": "cWZn8GaB8tFgQTlrb5ylnhMJibGryDD8nLDsSX1eoww",
+      "prev": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "sig": "S5wuBvUNFGTfzDhReU2zQxAkgmgJ9qag3NmmDzY6_0V4NTj8xekDy2Un7lQHzWfVuVkeblhSVSmZs-f4iETmTw"
+    },
+    {
+      "gop": 1,
+      "hash": "8atZsnVrrx2HkYjO8HzQVlvFq7rDeV8ogMldkiG6kPo",
+      "prev": "SxhRvbeDrk_N0gRzwECWy6C65ECoFQacknuBvcxGdqs",
+      "sig": "u7qu3trEcCWjL44nFDrIDozyZUhPolIgKSAemZNJuoZYBmuP2C3zLM9-i7j6Vl2SBaWV_TyvwEY6zNaz0M1CSg"
+    },
+    {
+      "gop": 2,
+      "hash": "O4BWiCirznm9ZkIn9EQVI2v0DNj87aDhCsnZ1Ig0dAs",
+      "prev": "LAu240-K2q5JrISaLaaDLCxfCBHoq44scJJ__n0xvKo",
+      "sig": "JXitnDwVsgBXyE0a28Aer68loriHk6poixcVDXqjRI9BdDq6R3k13CzGLDJP17X_-OSqj_sqfL8j_VTrEad7Zw"
+    },
+    {
+      "gop": 3,
+      "hash": "ryK7nGnwLS0UuqFio2sI4yhbTQu8H4ch9slRWQIfQrU",
+      "prev": "quhbjmzFyW45HrZnoKz9_LqYRzcv2_ExhscCSxV694Q",
+      "sig": "lcTXIPbxW7Pui2BDqzvdx1nlJZJ4KE4dIBS-JB_JhSgeD0Q1ABWVMam-_tDOTeP1yUV3wCKo6ZTQ7jf4FaaRQg"
+    },
+    {
+      "gop": 4,
+      "hash": "ucCCLUH8TLDm6WuZKwnvBTpeE3B8usxZ-fJ_rLUrmYM",
+      "prev": "ssKbT0Hlm_NvmqU_Fywp-nMa-x2hPOpDtZ7D0ynRIrc",
+      "sig": "4MOKaYbDvs9Li7GpNZGqnnIRK3Z1E0-usITak8zK9yhhUCE2-Wg4el6HaA-4kGY0ZIZXMwvQiKLohpg6JnSOkw"
+    },
+    {
+      "gop": 5,
+      "hash": "-UwLfeXxrBUMV9aUXNvCs7SH1x7UeJPEVmQiqPPsl3U",
+      "prev": "wj6EwyJHo_4Eh-XnxozJ2zC3C65kylsAw5TzEiODt9k",
+      "sig": "VpyOXl9BtA4bfycuXrRvOhDng7XkwSSL1OEIzjCAnel3fl2kFwWKTVb2yi1TI0s1TxIi3qVazhiJrsRU8m3tig"
+    },
+    {
+      "gop": 6,
+      "hash": "vyk4kQ0xL3heA3qV5_pW6iFewjMZAKC667GIlbtTYRE",
+      "prev": "nEHVAnIbVnHV4aIeBiSfMUT8KLqA0uRTKLSdsNycfnA",
+      "sig": "lIV1_qmI24pr_TIGrL4HeSSEfIG-YvoosHk0poDK0rJA4BbTbRO4dLiz3RhdLZ8c5JdSdG1ZqdlXHohKbL0M7w"
+    },
+    {
+      "gop": 7,
+      "hash": "fqUtoO3OgZezrXXLMklHdZ5udtbiw_k5pacrlG7NI68",
+      "prev": "EnvmFmWMpop5_SIXw0Hgu8CceNELCg7eJ0Hgv7am6EA",
+      "sig": "ZrP6i11QJll34rSwnQ7ZTdQozqkgLTTzkc5v3ql7WzhL_BwEcf-MtCdH5Kaqgxu1jHSGBjDqfcO2bhibpIVs5Q"
+    },
+    {
+      "gop": 8,
+      "hash": "JOQde8XJUeb1mCucog6fJ1Isx5ynDLqlt1R8OTi6MjY",
+      "prev": "6PlIeIVBcfMI1ns4fVV4Dz_qYg5UqGSAEyd1oYYwze4",
+      "sig": "Lz6yMT1Aw6rgltF9Z1EXbdReqdYIk93HEKAr5vxVXdZnCeOV8uRqmHL2CEQjqQRSYZ-F1N9xBDOPsAt_AdIVgg"
+    },
+    {
+      "gop": 9,
+      "hash": "CzDiIk0X5yOS2Rx1MOE9mH3AbSkK_ZdnRjnR2g94rX4",
+      "prev": "xplNeNuu-hqf4VoXRCY7IlWj90SmAV0uaVIbcSpGPyA",
+      "sig": "XHztShhD4oKf_vwjPQjU3fa4FRtMl16bzPgHEtJgOLt0IUym9_kHnVVEL7ckto3VDE_zmj053gFPMD2p4aUy0Q"
+    },
+    {
+      "gop": 10,
+      "hash": "_IW5H_2WNw8GxTifLToxQUsRAGF4OQlzY9-cvDndjvQ",
+      "prev": "sxMCi2ZPMaCM4L6UGN2FffIM6leFGNHU9LAsowSxml4",
+      "sig": "YWKBhe5VVc8jpH5nkk2jSYglZsEhVSHnCc739MEr94saNAp4r3AlnzkpvEi6l9bv6MONO_aV184A7UbhrXqqmQ"
+    }
+  ],
+  "sig": {
+    "alg": "ES256",
+    "value": "dC4C8tnpT62YaYSvh-hTgSzi1Xbjk3bmqOFUzMYzgcgnxdDPn7Jecfz9ieJFUGWCems13DW0BOyS0C-Vb74GbA",
+    "pub": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEp2C_SxUua1GBx-6u3KBIJKPwOb6yEYmTqfdbgzJbVJCy1_wvmKAjjmvD-d5EdVWpGx0Jxcduppsd0SspNPHKyA"
+  }
+}

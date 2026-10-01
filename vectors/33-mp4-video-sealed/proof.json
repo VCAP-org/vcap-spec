@@ -7,7 +7,25 @@
     "h": 16,
     "duration_ms": 67,
     "hash": "dHZ_-B2SW0MWk4ff54vKuSnETm7pcRHonTGPWIzGB-g",
-    "segment_count": 3
+    "segment_count": 3,
+    "presentation": {
+      "config": "17I-W-TgchCDabrlcW5KJK1-3O6xgFYfkWBNenLVn1Y",
+      "matrix": [
+        65536,
+        0,
+        0,
+        0,
+        65536,
+        0,
+        0,
+        0,
+        1073741824
+      ],
+      "display": [
+        1048576,
+        1048576
+      ]
+    }
   },
   "device": {
     "platform": "android",
@@ -56,7 +74,7 @@
   ],
   "sig": {
     "alg": "ES256",
-    "value": "ZajD8BnvnIhuBIIIVErahrMhBQ265SYVxuZxzRWXL50UrH4CA6kHaM8Pu1uL9TwS7iGOnavpYakKtQP2VgvPbA",
+    "value": "mO16jdYNHa9MTyJu6OKigKYWITUlqu0EcC_5QRT4-2J-qpl4uW0k8OsrFLCy1qpLc-lumVhpNBpgQwvoS8BpjQ",
     "pub": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEp2C_SxUua1GBx-6u3KBIJKPwOb6yEYmTqfdbgzJbVJCy1_wvmKAjjmvD-d5EdVWpGx0Jxcduppsd0SspNPHKyA"
   }
 }

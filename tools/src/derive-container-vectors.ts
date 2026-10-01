@@ -1,26 +1,26 @@
 /**
- * Builds the container-level video vectors from two files sealed by real
- * hardware, and derives the two negative cases from the first of them.
+ * Builds the two container-level video vectors sealed by real hardware, 36
+ * (H.264 with audio) and 37 (HEVC), from the files the device produced.
  *
- * Why a script and not four files dropped into `vectors/`: the clip and the
- * replaced-frame cases are *edits* of a real capture, and an edit nobody can
- * reproduce is an assertion. `npm run generate` cannot make these — it has no
- * camera and no device key — so this is the audit trail instead: point it at
- * the pair of files a device produced and it writes the same four vectors
- * again.
+ * Why a script and not two files dropped into `vectors/`: `npm run generate`
+ * cannot make these — it has no camera and no device key — so this is the
+ * audit trail instead: point it at the pair of files a device produced and it
+ * writes the same two vectors again.
  *
  *   npx tsx src/derive-container-vectors.ts <dir with sealed.mp4, sealed-hevc.mp4>
  *
  * The device signatures stay untouched. Nothing here re-signs anything: these
  * vectors carry a real device's key in `sig.pub`, which is the point — an
  * implementation that only ever meets the repository's own test key never
- * learns whether it reads a real one.
+ * learns whether it reads a real one. Their proofs predate `media.presentation`,
+ * so since corpus 5.0.0 they read *no proof found*; the edits of these
+ * captures (38, 39, 86-94, 156, 158-163, 166) are made by `npm run generate`
+ * under a core re-signed with the test key.
  */
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { buildTrailer, Flag, parseTrailer } from './trailer.js'
+import { parseTrailer } from './trailer.js'
 import { verifyFile } from './verify.js'
-import { containerSegments } from './container.js'
 
 const VECTORS = join(import.meta.dirname, '..', '..', 'vectors')
 
@@ -32,14 +32,6 @@ const open = (file: Buffer): { media: Buffer, proof: Record<string, unknown> } =
   const trailer = parseTrailer(file)
   if (trailer.kind !== 'ok') throw new Error(`the source file has no readable trailer: ${trailer.kind}`)
   return { media: file.subarray(0, trailer.mediaEnd), proof: JSON.parse(trailer.payload.toString('utf8')) }
-}
-
-/** Re-seals media with a proof, keeping the §3 flags the proof implies. */
-const seal = (media: Buffer, proof: Record<string, unknown>): Buffer => {
-  const payload = Buffer.from(JSON.stringify(proof), 'utf8')
-  const policy = proof.policy as { pseudonymous?: boolean } | undefined
-  const flags = ('segments' in proof ? Flag.SEGMENTS : 0) | (policy?.pseudonymous ? Flag.PSEUDONYMOUS : 0)
-  return Buffer.concat([media, buildTrailer(payload, { flags })])
 }
 
 const write = (name: string, input: Buffer, proof: Record<string, unknown>, notes: string): void => {
@@ -59,7 +51,7 @@ const provenance = 'Sealed by the reference Android SDK on a Samsung SM-S908B (E
 
 // ---- 36: the reference container run ---------------------------------------
 const h264 = readFileSync(join(source, 'sealed.mp4'))
-const { media: h264Media, proof: h264Proof } = open(h264)
+const { proof: h264Proof } = open(h264)
 write('36-mp4-container-verified', h264, h264Proof,
   `A real H.264 recording with an audio track, three segments, every \`content_hash\` recomputed from the container: the NAL units of each GOP with the vcap SEI excluded, then the audio frames of the GOP's time range (§5).
 
@@ -74,32 +66,5 @@ write('37-mp4-container-hevc', hevc, hevcProof,
   `The same rule on HEVC, with no audio track: a two-byte NAL header, SEI NAL types 39 and 40 instead of 6, \`hvcC\` instead of \`avcC\` for the length prefix width, and segments that close at the next IDR with no audio to select.
 
 No edit list here — with no audio track there is nothing for the muxer to delay the video behind, which is why the H.264 vector is the one that catches that mistake.
-
-${provenance}`)
-
-// ---- 38: an entry dropped from the proof, the GOP kept in the file ---------
-const clipProof = { ...h264Proof, segments: (h264Proof.segments as unknown[]).slice(1) }
-write('38-mp4-container-clip', seal(h264Media, clipProof), clipProof,
-  `The file of vector 36 with the entry for segment 0 removed from the **proof** and GOP 0 left in the **file**: \`media.segment_count\` is 3, two entries are present, and the file still carries all three GOPs.
-
-**Tampered**, 1 and 2 verified. GOP 0 carries a vcap SEI naming segment 0, and the proof signs no segment 0: that GOP is content no signature covers (§5, *Locating segments*). It is exactly the file an attacker produces by prepending a forged GOP to a genuine clip whose first segment is gone, and before the binding rule it read *verified clip*, 1 and 2, with the unsigned frames on screen. The genuine clip — the GOP cut from the file, the proof whole — is vector 89.
-
-${provenance}`)
-
-// ---- 39: one replaced frame ------------------------------------------------
-const recomputed = containerSegments(h264Media)
-const target = recomputed[1]
-if (!target) throw new Error('the source file has fewer than two segments')
-const edited = Buffer.from(h264)
-// The last byte of the segment's video range: inside a signed range, far from
-// any header, so nothing but the content hash and media.hash can notice.
-const at = target.range.end - 1
-edited[at] = (edited[at] as number) ^ 0x01
-write('39-mp4-container-frame-replaced', edited, h264Proof,
-  `Vector 36 with a single bit flipped inside segment 1's video samples: byte ${at} of the file, the last byte of that GOP's range.
-
-Every signature still verifies, because a signature covers the hash a writer declared and not the bytes a reader received. \`media.hash\` fails, and segment 1's \`content_hash\` recomputed from the container fails; segments 0 and 2 still match. The verdict is **tampered**, and it names the segments that survived — a clip is missing segments, this is a present segment whose content was replaced inside a range a signature covers.
-
-Without this vector the corpus cannot tell a verifier that recomputes from one that does not: every other container vector passes for both.
 
 ${provenance}`)

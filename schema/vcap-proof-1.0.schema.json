@@ -64,7 +64,7 @@
             "matrix",
             "display"
           ],
-          "description": "§5 Presentation, video proofs: how the frames are shown, bound to the core so a clip cannot crop, rotate or re-describe them",
+          "description": "§5 Presentation, required wherever segments are (so of every video proof): how the frames are shown, bound to the core so a clip cannot crop, rotate or re-describe them",
           "properties": {
             "config": {
               "$ref": "#/$defs/bytes32",
@@ -654,7 +654,8 @@
           "media": {
             "type": "object",
             "required": [
-              "segment_count"
+              "segment_count",
+              "presentation"
             ]
           }
         }
@@ -690,7 +691,8 @@
           "media": {
             "type": "object",
             "required": [
-              "segment_count"
+              "segment_count",
+              "presentation"
             ]
           }
         }

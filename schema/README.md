@@ -12,7 +12,8 @@ What it pins, beyond types: base64url lengths (16-byte ids, 32-byte hashes,
 core, enum values of `platform`, `secure_hw`, `layout`, `level`, `source`,
 `verdict`, `location_corroboration.result`, `additionalProperties: false`
 inside every known object (`location_corroboration` included), and
-`media.segment_count` required whenever `segments` is present.
+`media.segment_count` and `media.presentation` required whenever `segments`
+is present — which a video proof (`media.mime` `video/…`) always is.
 
 `expected.schema.json` is the shape of a vector's `expected.json`.
 
@@ -27,13 +28,17 @@ npm run validate -- path/to/proof.json [more.json …]     # exit 1 on the first
 
 Without arguments, `npm run validate` walks `vectors/`: every `expected.json`
 must be well formed, and every `proof.json` must be schema-valid exactly when
-its vector says so (`schema_valid`). Ten vectors are schema-invalid on
+its vector says so (`schema_valid`). Eleven vectors are schema-invalid on
 purpose — DER signature (13), major 2 (16), missing `capture_id` (21), a float
 in the core (22), a video proof without `segments` (34), an unknown
 `secure_hw` (40), missing `media.w`/`media.h` (46), an `integrity.verdict`
 outside the enumeration (67), a `location_corroboration.result` outside it
-(80), an unknown `location.level` (83) — and the generator refuses to write a vector
-whose review verdict and schema verdict disagree.
+(80), an unknown `location.level` (83), a video proof without
+`media.presentation` (165) — and the generator refuses to write a vector
+whose review verdict and schema verdict disagree. Seven more are
+schema-invalid because the format moved under them: the device captures 36,
+37, 48 and 85 and the C2PA vectors 145–147 that carry 36's proof predate
+`media.presentation` and cannot be re-signed (`vectors/README.md`, *Errata*).
 
 Programmatic use: `validateProof(json)` in `tools/src/schema.ts` returns
 `{ valid, errors }` with JSON pointers and messages, never values.

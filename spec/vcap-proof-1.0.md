@@ -597,7 +597,7 @@ sig(n)          = ECDSA-P256-SHA256( message(n) ), P1363, low s (§4.2)
   audio frames that precede the first IDR into segment 0 and makes every
   segment hash of the file wrong. Two implementations of this rule, one on the
   device and one from the text, disagreed exactly there until the sentence you
-  are reading existed (vector 36). Audio frames whose DTS
+  are reading existed (vectors 36, 166). Audio frames whose DTS
   precedes the first IDR are covered by `media.hash` and by no segment hash; a
   verifier MUST NOT report them as missing.
 - **A segment may be one frame.** Encoders place IDRs where they choose (two
@@ -643,7 +643,10 @@ sig(n)          = ECDSA-P256-SHA256( message(n) ), P1363, low s (§4.2)
   `media.hash` covers all of it; for a clip, nothing did, so a re-mux that
   kept every sample could crop, rotate or re-describe the signed frames and
   still read *verified clip*. `media.presentation` (§6.1) binds them into the
-  core, and a verifier reads them back from the received file:
+  core — it is **required** of every proof that carries `segments`, so of
+  every video proof, and a core without it is not well formed: *no proof
+  found* (§8, vector 165) — and a verifier reads them back from the received
+  file:
   - **The video track** is the one track whose `hdlr` `handler_type` is
     `vide`; its sample description (`stsd`) has exactly one entry, `avc1`,
     `avc3`, `hvc1` or `hev1`, and that entry has its `avcC` or `hvcC`.
@@ -668,14 +671,13 @@ sig(n)          = ECDSA-P256-SHA256( message(n) ), P1363, low s (§4.2)
     A segment hash covers those two tracks and no other, and a player may
     show any track that is enabled.
 
-  A file that is not the original reaches *verified clip* only when the core
-  carries `media.presentation`, the layout holds, and `config`, `matrix` and
-  `display` read back equal the signed ones. Otherwise the signed frames are
-  in the file under a presentation nobody signed: **frames not compared**,
-  no segment credited, with *presentation not bound* when the core carries no
-  `media.presentation` (vectors 89, 94), *tracks not bound* when the layout
-  does not hold (vector 162) and *presentation differs* when a value does not
-  match (vectors 160, 161). Not *tampered*: re-muxing a clip is not an
+  A file that is not the original reaches *verified clip* only when the
+  layout holds and `config`, `matrix` and `display` read back equal the
+  signed ones (vectors 89, 94, 159). Otherwise the signed frames are in the
+  file under a presentation nobody signed: **frames not compared**, no
+  segment credited, with *tracks not bound* when the layout does not hold
+  (vector 162) and *presentation differs* when a value does not match
+  (vectors 160, 161). Not *tampered*: re-muxing a clip is not an
   accusation, as a `media.hash` that does not match is not one. A genuine
   clip that keeps the configuration, the header and the tracks is a verified
   clip (vector 159). On an original the values are compared too: they cannot
@@ -687,7 +689,9 @@ sig(n)          = ECDSA-P256-SHA256( message(n) ), P1363, low s (§4.2)
   whose header it cannot read counts as enabled; neither stops a GOP being
   located, so a file that contradicts its proof is still *tampered*.
 - **Writer requirements for `media.presentation`.** A video writer MUST
-  include it. It MUST compute it from the file it produced, after the muxer
+  include it: a proof without it is *no proof found* over the original as
+  over every clip, so a writer that omits it has sealed nothing a verifier
+  will read. It MUST compute it from the file it produced, after the muxer
   finalised it and before the trailer is appended — the bytes a verifier will
   read — and never from the encoder's output format, the parameters it asked
   the muxer for or the platform's documentation: a muxer may rewrite the
@@ -858,12 +862,14 @@ Rules that keep five implementations byte-identical:
   `config`, base64url of 32 bytes, the SHA-256 of the presentation message;
   `matrix`, nine integers, the video `tkhd` matrix as stored, each `int32`;
   `display`, two integers, the `tkhd` width and height as stored, each
-  `uint32`. Required of every video writer. A reader that meets a video proof
-  without it does not refuse it — the original is still covered by
-  `media.hash` — and reads every clip of it as *presentation not bound*; one
-  whose member is malformed is *no proof found*, like any core field read two
-  ways. Photos carry none: `media.hash` covers every byte of a photo, and a
-  photo has no derivation that keeps its signature.
+  `uint32`. **Required** of every proof that carries `segments`, so of every
+  video proof: absent or malformed, the proof is not well formed and reads
+  *no proof found* (§8, vector 165), the original as much as any clip of it.
+  A core field a clip depends on cannot be optional to the original: the core
+  is signed once and has to hold for every file it is attached to. Photos
+  carry none: `media.hash` covers every byte of a photo, and a
+  photo has no derivation that keeps its signature (a still image that
+  carries `segments` anyway carries the field with them, §8).
 - `device.key_id = base64url( SHA-256( DER SPKI of sig.pub ) )`. Derived, never
   free; the identifier the registry and the transparency log use.
 - `device.secure_hw` is the **claimed** level. The verifier computes the
@@ -910,7 +916,7 @@ Field table — type, required, verified against:
 | `capture_id` | yes | watermark payload, segment messages |
 | `media.hash` | yes | recomputed canonical bytes (§4.1) |
 | `media.segment_count` | yes (video) | segments present (§5) |
-| `media.presentation` | yes (video), of writers | the received container's configuration, `tkhd` and tracks (§5 *Presentation*) |
+| `media.presentation` | yes (video, and wherever `segments` is) | the received container's configuration, `tkhd` and tracks (§5 *Presentation*) |
 | `device.secure_hw` | yes | proven level from `attestation` (§7) |
 | `device.key_id` | yes | `sig.pub`, attestation leaf, registry entry |
 | `watermark` | no | detector output, if the detector ran |
@@ -1581,15 +1587,17 @@ carries its reason and nothing else, because "no trusted time" on a tampered
 file is noise. A clip's outcome is amber whatever its ceiling would be.
 
 **Required.** `v`, `capture_id`, `media`, `media.mime`, `media.hash`,
-`media.w`, `media.h`, `device.secure_hw`, `device.key_id`, `sig`, and for a
-video proof `media.segment_count` and `segments`. The pixel dimensions are
+`media.w`, `media.h`, `device.secure_hw`, `device.key_id`, `sig`, for a
+video proof `segments`, and for a proof carrying `segments`
+`media.segment_count` and `media.presentation`. The pixel dimensions are
 required and are **not** evidence — nothing is proven by them — but every
 writer holds them at capture, and a reader that cannot say how large the frame
 is cannot place a watermark payload or a segment in it (vector 46). A proof is
 a **video proof** when `media.mime` starts with `video/`; nothing else decides
 it — not the container, not `duration_ms` — so a video proof without
-`segments` is *no proof found*, and a still image carrying `segments` is
-verified as §5 says. Missing or unparseable → *no proof found*. Present but
+`segments` is *no proof found* (vector 34), a video proof without
+`media.presentation` is *no proof found* (vector 165), and a still image
+carrying `segments` is verified as §5 says, `media.presentation` included. Missing or unparseable → *no proof found*. Present but
 invalid → *tampered*.
 
 **Optional, each with its exact label when absent.** Absence is never an error,
@@ -1624,7 +1632,6 @@ and the verifier states it rather than staying silent.
 | `attestation` valid, registry verified, app digests do not match | *attestation app not admitted* | the key was made by an app the log does not declare (§7) |
 | `attestation` valid, registry verified, nothing to compare | *attestation app not checked* | the log declares no digests, or the leaf names no app (§7) |
 | `attestation_status` absent, unreadable, `unknown` or incomplete | *chain revocation not checked* | the chain's certificates were not all shown valid while the chain was current (§6.2) |
-| a video that is not the original, its core without `media.presentation` | *presentation not bound* | the signed frames are located and nothing signed says how they are shown; *frames not compared* (§5 *Presentation*) |
 | a video that is not the original, a track beyond the hashed two enabled, or a second video or audio track or sample description | *tracks not bound* | a player may show what no segment hash covers; *frames not compared* (§5) |
 | a video whose configuration, matrix or display size read back differs from `media.presentation` | *presentation differs* | on a clip *frames not compared*; on an original the writer's false claim, amber (§5, §7) |
 | an iOS level from a registry leaf | *level from registry records* | the registry's word that the key is in a Secure Enclave; nothing in the file shows it (§7) |
@@ -1927,7 +1934,7 @@ says.
       device clock for an instant — is amber
 - [~] `REVIEW (mobile)` container-level video vectors: real MP4/MOV from each
       encoder, with `content_hash` recomputed from the NAL units and audio
-      frames — Android H.264 and HEVC done (vectors 36–39, `kind: container`);
+      frames — Android H.264 and HEVC done (vectors 36–39 and 166, `kind: container`);
       iOS HEVC in MOV (48) and H.264 in MP4 under a Secure Enclave chain (85)
       done, both without audio; an iOS clip with audio is still owed
 - [x] Whether a verifier that cannot recompute segment hashes must say so in

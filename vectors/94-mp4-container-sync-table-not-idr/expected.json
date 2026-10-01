@@ -1,19 +1,22 @@
 {
   "kind": "container",
-  "outcome": "frames_not_compared",
+  "outcome": "verified_clip",
   "labels": [
     "integrity unevaluated",
     "key not in transparency log",
     "no trusted time",
     "no watermark",
     "not anchored",
-    "origin not hardware-attested",
-    "presentation not bound"
+    "origin not hardware-attested"
   ],
   "not_evaluated": [],
-  "core_hash": "e0e5483611e760a5ce8ed1a13ecb5d4f52c0e254481eb58b9acf9f37d063d9e9",
+  "core_hash": "b93395d8a811f5b2511a9ce4009518b6b662a54ce0e12c3afb10c903cbe81b83",
   "segments": {
-    "verified": []
+    "verified": [
+      0,
+      1,
+      2
+    ]
   },
   "schema_valid": true
 }
