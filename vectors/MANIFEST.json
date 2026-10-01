@@ -1,5 +1,5 @@
 {
-  "corpus_version": "5.0.0",
+  "corpus_version": "6.0.0",
   "vector_count": 168,
   "vectors": [
     {
@@ -1011,22 +1011,22 @@
     {
       "name": "145-mp4-c2pa-clip-parent-of",
       "kind": "container",
-      "outcome": "no_proof_found",
-      "sha256": "509e2038c333ecd9bd4f1567783d4b2de2044780bda7ebb9260c6987a3499f60",
+      "outcome": "verified_clip",
+      "sha256": "13c443b68eb5a034a4e6ab23867b36bb2224643b7e637efb3344778ee0b89f37",
       "files": 4
     },
     {
       "name": "146-mp4-c2pa-clip-gop-replaced",
       "kind": "container",
-      "outcome": "no_proof_found",
-      "sha256": "b2b48ba4dda3d5226928a900fe6a4a8dca19f8f45dfcdb7ee0a50bceebd5f861",
+      "outcome": "tampered",
+      "sha256": "af440e10d4739698fef110c918c132898acac13799eaf8107a9897cd91f247fa",
       "files": 4
     },
     {
       "name": "147-mp4-c2pa-clip-reencoded",
       "kind": "container",
       "outcome": "no_proof_found",
-      "sha256": "29066cc99d06207fab49ede9639cb64325635caf3cc4257bf39d31a57d12d58b",
+      "sha256": "53c49233901c155e81264d8def9325148c996bd9c11ce5d028787a2e695d9093",
       "files": 4
     },
     {

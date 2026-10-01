@@ -12,6 +12,30 @@ else.
 
 ## Unreleased
 
+### C2PA video vectors rebuilt over a presentation-bound core — corpus 5.0.0 → **6.0.0**
+
+**Breaking** for the corpus, not the format: no spec text changes. A major
+bump because published vector bytes moved (`vectors/README.md`, *Bump
+policy*). Corpus 6.0.0 (168 vectors).
+
+- **Moved bytes, verdicts restored**: 145, 146 and 147, minted again by
+  `make-c2pa-vectors.ts --only 145,146,147` from vector 166 — vector 36's
+  container under the re-signed core that carries `media.presentation` —
+  instead of 36's device proof, which lacks it. 145 *no proof found* →
+  **verified clip** (1–2 of 3, proof at depth 1); 146 *no proof found* →
+  **tampered** (segment 1 verified, proof at depth 0: again the only video
+  case of a tampered proof inside an active C2PA manifest); 147 stays **no
+  proof found**, now for its original reason, *Content Credentials carry the
+  proof of a source capture* (§3.2), with `core_hash` and
+  `frames_name_capture` back. All three are `schema_valid` true. New salts
+  (c2pa-rs draws them at random), new notes; the 5.0.0 errata for 145–147 are
+  replaced by one entry. c2pa-rs's `c2pa` block is unchanged; the notes
+  record c2patool 0.27.16.
+
+**What a verifier that predates 6.0.0 does**: a 5.0.0 verifier reads the three
+files correctly — the rules did not change — and fails only the pinned
+manifest digest; one that predates 5.0.0 fails their `core_hash`.
+
 ### `media.presentation` required — corpus 4.0.0 → **5.0.0**
 
 **Breaking.** §5 *Presentation*, §6.1, §8: `media.presentation` is a
