@@ -105,6 +105,6 @@ be read and re-implemented rather than imported.
   outside this claim: `vectors/_watermark/layouts.json` for the payload
   arithmetic and `vectors/_watermark/agreement-floor.json` for the 0.85 floor
   a `video-rep-v1` decoder must not report an id below.
-- **Not a claim about a newer corpus.** The corpus grows by addition, so
-  passing corpus 6.0.0 says nothing about the vectors a later corpus adds, and
-  everything about 6.0.0's. State the version you ran.
+- **Not a claim about a newer corpus.** A minor bump adds vectors and a
+  major one moves some (`README.md`, *Bump policy*), so passing corpus 6.0.0
+  says nothing about a later corpus, and everything about 6.0.0's. State the version you ran.

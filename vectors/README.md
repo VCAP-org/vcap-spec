@@ -35,7 +35,8 @@ every certificate path was validated at, and what proved it) appear on the
 vectors that carry attestation evidence. `location` (§7.1: `claimed`, the
 level the core asks for, and `level`, the one the evidence reaches — `none`,
 `declared`, `corroborated`, `authenticated`) appears on the position vectors
-(74–84) and on 47 and 166, which declare no position and pin `none`.
+(74–84, 151) and on 47, 86, 87, 89, 166 and 168, which declare no position
+and pin `none`.
 `proof_source` (where the proof was read: `trailer`, `sidecar`, or `c2pa` with
 the carrying manifest's label and its depth on the `parentOf` chain) and
 `frames_name_capture` (whether a GOP of the file names the proof's capture)
@@ -168,13 +169,14 @@ format, regenerated and checked by CI (`npm run conformance:report` /
 `conformance:check`).
 
 **Bump policy**, the same additive-only rule as everywhere else in this
-repository: a vector's hash never changes once published (`AGENTS.md`), so
+repository: a vector's hash never changes once published (*Errata*, below), so
 `VERSION` only ever moves forward. Bump the minor version when vectors are
 added, the patch version for a manifest-only regeneration triggered by
 something outside `vectors/` (there is not expected to be one, since the
 manifest is a pure function of the directory and `VERSION`). A major bump
-would mean an existing vector's bytes moved — the one thing this corpus does
-not do — so seeing one asks the same question a breaking spec change does.
+means an existing vector's bytes or expected verdict moved — the one thing a
+published corpus otherwise never does — so seeing one asks the same question
+a breaking spec change does.
 **2.0.0 is one**, and the answer is in `CHANGELOG.md`: the review of
 24 September 2026 changed verdicts the format had got wrong (a stolen proof
 reading *verified clip*, a device clock reaching green) while the format is
@@ -312,8 +314,9 @@ carries the verdict in force.
   `AVAssetWriter`'s files in 48 and 85 — still holds, and is now exercised
   under a re-signed core by 166 (36), 158 (37), 167 (48) and 168 (85). The
   Secure Enclave signatures of 85 and the StrongBox ones of 36 and 37 are
-  still the corpus's only real device signatures, now on the path to *no
-  proof found*.
+  still the corpus's only real device signatures over video, now on the path
+  to *no proof found*; 47, a photo, still verifies under its Secure Enclave
+  signature.
 
 - **85 · `85-mp4-container-ios-sealed`** — its note explains the five one-frame
   segments as VideoToolbox answering a forced keyframe with two IDRs. That is

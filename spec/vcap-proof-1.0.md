@@ -1889,7 +1889,7 @@ says.
       the original store's `box_purpose` from `manifest` into `original` in
       place (C2PA A.5.3), inside `media.hash` (`c2pa-interop-1.0.md` §6)
 - [ ] `REVIEW (mobile)` per-segment signing cost in StrongBox on a long clip
-- [~] `REVIEW (mobile)` NAL byte definition and audio DTS rule reproducible on both encoders — the DTS clock is now named (M8) and the timeline with it (edit lists, §5); H.264 and HEVC on Android are reproduced byte for byte by a second implementation written from this text (`tools/src/container.ts`, vectors 36–37), which is what "reproducible" was asking; on iOS the NAL bytes are reproduced for HEVC in MOV (vector 48) and H.264 in MP4 (vector 85), and the audio DTS rule is not yet exercised: neither clip has an audio track
+- [~] `REVIEW (mobile)` NAL byte definition and audio DTS rule reproducible on both encoders — the DTS clock is now named (M8) and the timeline with it (edit lists, §5); H.264 and HEVC on Android are reproduced byte for byte by a second implementation written from this text (`tools/src/container.ts`, the containers of vectors 36 and 37, verified under a presentation-bound core in 166 and 158), which is what "reproducible" was asking; on iOS the NAL bytes are reproduced for HEVC in MOV (vector 48's container, 167) and H.264 in MP4 (vector 85's, 168), and the audio DTS rule is not yet exercised: neither clip has an audio track
 - [x] `REVIEW (mobile)` hashing two interleaved tracks during encoding — resolved: 8 KB and 0.5 ms per segment on a TEE device (M8)
 - [ ] `REVIEW (mobile)` metadata stripping before sealing for pseudonymous captures
 - [ ] `REVIEW (LEAD)` the `authenticated` position level (§7.1) is reserved
@@ -1921,7 +1921,10 @@ says.
       time, revocation and attestation rules (96–110), the JSON reading rules
       (111–120) and the extensible identifiers (95, 121), and **147** in
       corpus 2.1.0 with the JUMBF exclusion narrowed to the C2PA store (122)
-      and Content Credentials as a carrier of the proof (123–147),
+      and Content Credentials as a carrier of the proof (123–147), and
+      **168** by corpus 5.0.0 with device integrity (148–150), the fused
+      position source (151), the verdict hardening and presentation binding
+      (152–164) and `media.presentation` required (165–168),
       checked by the reference verifier in `tools/`. The §7 vectors
       trust the anchors in `vectors/_trust/`, whose attestation root is a test
       root: they prove the level logic, not that an implementation can walk a
@@ -1934,9 +1937,12 @@ says.
       device clock for an instant — is amber
 - [~] `REVIEW (mobile)` container-level video vectors: real MP4/MOV from each
       encoder, with `content_hash` recomputed from the NAL units and audio
-      frames — Android H.264 and HEVC done (vectors 36–39 and 166, `kind: container`);
+      frames — Android H.264 and HEVC done (vectors 36–39, `kind: container`);
       iOS HEVC in MOV (48) and H.264 in MP4 under a Secure Enclave chain (85)
-      done, both without audio; an iOS clip with audio is still owed
+      done, both without audio; an iOS clip with audio is still owed. The
+      device proofs of 36, 37, 48 and 85 predate `media.presentation` and
+      read *no proof found* since corpus 5.0.0; their containers are verified
+      under a re-signed core that carries it in 166, 158, 167 and 168
 - [x] Whether a verifier that cannot recompute segment hashes must say so in
       its labels: **yes** — *segment content not recomputed* (§5, §7), decided
       10 September 2026. Recomputation stays optional, declaring it does
