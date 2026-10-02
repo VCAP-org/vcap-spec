@@ -113,7 +113,7 @@ Boundaries, each enforced by code and tested:
 | Pixel or metadata edit | changes bytes after sealing | `media.hash` over canonical bytes, in the signed core (§4) | none: red |
 | Claim edit | changes location, time, level, capture id in the JSON | the core is signed (§4.2); `key_id` derived from `sig.pub`; proven level from attestation, claimed level capped | none: red / flagged |
 | Signature swap | re-signs the file with own key and attaches a genuine attestation chain | attestation leaf SPKI must equal `sig.pub` (§6.2) | none: red |
-| Presentation edit | re-muxes a genuine clip keeping every sample, and rotates the track matrix, edits the out-of-band SPS (crop, colour) or adds an enabled track | `media.presentation` in the core binds the configuration record, `clap`/`pasp`/`colr`, the `tkhd` matrix and display size; the track layout rule (§5 *Presentation*, vectors 160–162) | none: *frames not compared*, never *verified clip*; a proof that predates the field binds no clip (vectors 89, 94) |
+| Presentation edit | re-muxes a genuine clip keeping every sample, and rotates the track matrix, edits the out-of-band SPS (crop, colour) or adds an enabled track | `media.presentation` in the core binds the configuration record, `clap`/`pasp`/`colr`, the `tkhd` matrix and display size; the track layout rule (§5 *Presentation*, vectors 160–162) | none: *frames not compared*, never *verified clip*; a video proof without the field is not well formed, *no proof found* over the original and every clip (vector 165) |
 | Timeline edit | re-muxes a genuine video with an edit list that trims, repeats or reorders what a player shows, every sample untouched | an edit list with more than one edit after the leading delay, or a rate change, is a timeline §5 does not model: no segment is located (§5, vector 156) | none: *frames not compared*, never *verified clip*; an original is covered whole by `media.hash` |
 | Proof transplant | moves a genuine trailer or sidecar onto another file | `media.hash` mismatch; on video, a signed segment counts only where a GOP of the received file names it and recomputes (§5, *Locating segments*) | none: red on a photo; *frames not compared* on a video whose GOPs name no segment of the proof, never *verified clip* |
 | Clip from a genuine video | cuts segments, keeps the trailer | per-segment chain over messages; `segment_count`; `media.hash` mismatch → *verified clip*, amber, ranges shown | accepted and **labelled**: a clip is a clip, never an original |
@@ -275,6 +275,11 @@ like, and it is the true one.
   *authenticated* level waits for a smartphone chipset with OSNMA.
 
 ## 7. Change log
+
+- 2026-10-02 — §5.1: the presentation-edit residual no longer describes a
+  proof without `media.presentation` as one that binds no clip; the field is
+  required of every video proof and its absence is *no proof found*
+  (`vcap-proof-1.0.md` §6.1, §8).
 
 - 2026-10-01 — Verdict hardening. §5.2: the imported-key row claimed a check
   no verifier made; `origin` is now §7 rule 6 and the residual holds. A

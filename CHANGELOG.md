@@ -99,7 +99,8 @@ there. Erratum for vector 158's note (`vectors/README.md`).
 bytes and none changed its verdict; vector 54's `key_status` input changed;
 `_trust/logs.json` gained a second trusted log; 89, 94 and 145 changed
 verdict (below); 152–164 are new (164 in all).
-Six verdict rules changed. Five closed a verdict both the reference verifier
+Six verdict rules changed, and video gained a core member
+(`media.presentation`, the last item). Five of the rules closed a verdict both the reference verifier
 and the published one gave too generously; one aligned the two where they
 disagreed:
 
@@ -170,12 +171,15 @@ disagreed:
   `media.hash` covers every byte.
   - **Changed verdicts**: 89 and 94 (*verified clip* → *frames not
     compared*, *presentation not bound*: their device proofs cannot gain the
-    field) and 145 (*verified clip* at depth 1 → *no proof found*,
-    `SOURCE_CAPTURE`; its `NOTES.md` is corrected in the errata, not in
-    place). Originals 36, 37, 47, 48, 85 are unchanged.
+    field; back to *verified clip* under a re-signed core in 5.0.0) and
+    145 (*verified clip* at depth 1 → *no proof found*, `SOURCE_CAPTURE`;
+    its `NOTES.md` is corrected in the errata, not in place; *verified clip*
+    again in 6.0.0). Originals 36, 37, 47, 48, 85
+    are unchanged (36, 37, 48 and 85 read *no proof found* from 5.0.0).
   - **Writers**: compute the field from the file the muxer produced, before
     the trailer (§5 *Writer requirements*). The schema accepts it and does
-    not yet require it.
+    not yet require it (it does from 5.0.0, which also removes *presentation
+    not bound*).
 
 **What a verifier that predates 4.0.0 does**: it passes the 26 moved
 vectors once it loads the new `_trust/` (the attestation root changed), and
