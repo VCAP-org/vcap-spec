@@ -264,6 +264,18 @@ file({ name: '17-jpeg-sidecar-only', ext: 'jpg', file: baseJpeg, sidecar: jcs(jp
   file({ name: '18-jpeg-sidecar-differs', ext: 'jpg', file: jpegSealed, sidecar: jcs(other as Json), proof: jpegProof,
     expected: { outcome: 'authentic', labels: [...PHOTO_LABELS, 'sidecar differs'], not_evaluated: [], core_hash: hashOf(jpegProof) },
     notes: 'Trailer and sidecar both present and different. The trailer is authoritative; the sidecar is reported and not used (§3).' })
+
+  // §3.1: a valid-CRC trailer is no more authenticated as the file's than a
+  // manifest is. Appended to a trailer-stripped genuine file, another
+  // capture's proof does not overrule the genuine sidecar beside it.
+  const foreign = sign(photoCore(editPixels(baseJpeg), 'image/jpeg', { capture_id: Buffer.alloc(16, 0x72).toString('base64url') }))
+  file({ name: '172-jpeg-foreign-trailer-sidecar', ext: 'jpg', file: seal(baseJpeg, foreign), sidecar: jcs(jpegProof as Json), proof: jpegProof,
+    expected: { outcome: 'authentic', labels: [...PHOTO_LABELS, 'trailer copy differs'], not_evaluated: [], core_hash: hashOf(jpegProof), proof_source: { kind: 'sidecar' } },
+    notes: 'Vector 05\'s unsealed photo — the canonical bytes of vector 01 once its trailer is stripped — with **another capture\'s** proof appended as a valid trailer (a new capture id and the hash of different pixels, validly signed, CRC correct), next to a sidecar holding vector 01\'s proof. Anyone can append such a trailer: it proves nothing about which file it was sealed with.\n\nThe trailer\'s proof alone reads *tampered* — its `media.hash` is not these bytes — and before corpus 6.2.0 that was the verdict: step 1 made the trailer the proof and a genuine file next to its genuine proof was accused. §3.1 now judges both when the sidecar differs, over the same bytes (the file without the trailer), and the sidecar\'s verdict stands when its outcome ranks strictly above the trailer\'s: **authentic**, vector 01\'s verdict, with *trailer copy differs* and `proof_source` the sidecar. Nothing is gained by it that deleting the trailer would not give (vector 17). Vector 169 is the same case with the foreign proof in a C2PA manifest; vector 174 is a sidecar that does no better; vector 18 is a tie on *authentic*, where the trailer stands.' })
+
+  file({ name: '174-jpeg-trailer-sidecar-no-better', ext: 'jpg', file: seal(editPixels(baseJpeg), jpegProof), sidecar: jcs(other as Json), proof: jpegProof,
+    expected: { outcome: 'tampered', labels: [], not_evaluated: [], core_hash: hashOf(jpegProof), proof_source: { kind: 'trailer' } },
+    notes: 'Vector 11 — vector 01\'s proof sealed onto a photo whose pixels changed — next to vector 18\'s sidecar: a proof over the same pixels as vector 01 with `device_clock` one millisecond later, so it differs from the trailer byte for byte. Both proofs read *tampered* over these bytes. §3.1 lets a sidecar decide only when its outcome ranks **strictly above** the trailer\'s; this one ties, so the trailer\'s proof stands, with `proof_source` the trailer: **tampered**, vector 11\'s verdict. A red outcome carries no labels, *sidecar differs* included (§8). Vector 170 is the same tie against a manifest\'s proof.' })
 }
 
 file({ name: '19-jpeg-flags-disagree', ext: 'jpg', file: seal(baseJpeg, jpegProof, { flags: Flag.PSEUDONYMOUS }), proof: jpegProof,
@@ -574,6 +586,18 @@ const videoCore = (media: Buffer, extra: Proof = {}): Proof => photoCore(media, 
     device({ name: '89-mp4-container-cut-clip', file: Buffer.concat([cut, h264.trailer]), proof: h264.proof,
       expected: { outcome: 'verified_clip', labels: DEVICE_LABELS, not_evaluated: [], core_hash: hashOf(h264.proof), segments: { verified: [1, 2] }, location: { claimed: 'none', level: 'none' } },
       notes: 'Vector 36 **cut**: its first GOP removed from the video track, the audio frames before the cut removed with it, and the full proof — all three segments — still in the trailer. This is what a clip is: the file lacks segment 0, the proof does not.\n\nEvery surviving sample keeps its instant on the movie timeline (the movie timescale becomes 90 kHz and each track gets an empty edit for the time that was cut), so §5\'s audio rule assigns the same frames to segments 1 and 2 as in the original, and both recompute. `remux.ts` copies the decoder configuration, the track header and the track layout as they were, so the clip presents its frames as the core\'s `media.presentation` says (§5 *Presentation*). **Verified clip**, 1 and 2 of 3. Segment 0 is signed and absent, which is the clip case and never *tampered*; `media.hash` does not match, which is what says this is not the original.\n\nVector 38 removed segment 0 from the **proof** and left it in the file; under the binding rule that is a GOP no signature covers, and it reads *tampered*.' })
+
+    // §3.1 on a clip: another capture's video proof appended as a trailer to
+    // the trailer-stripped clip, the genuine proof beside it. The foreign
+    // proof is vector 166's core and content hashes under a new capture id,
+    // its core and segment chain re-signed for that id: every signature
+    // holds, and no GOP of the clip names its capture.
+    const capture = Buffer.alloc(16, 0x73)
+    const hashes = (h264.proof.segments as unknown as SegmentEntry[]).map((e) => Buffer.from(e.hash, 'base64url'))
+    const foreign = sign({ ...h264.proof, capture_id: capture.toString('base64url'), segments: signChain(capture, hashes, privateKey) as unknown as Json })
+    device({ name: '173-mp4-container-foreign-trailer-sidecar', file: seal(cut, foreign), sidecar: h264.payload, proof: h264.proof,
+      expected: { outcome: 'verified_clip', labels: [...DEVICE_LABELS, 'trailer copy differs'], not_evaluated: [], core_hash: hashOf(h264.proof), segments: { verified: [1, 2] }, location: { claimed: 'none', level: 'none' }, proof_source: { kind: 'sidecar' }, frames_name_capture: true },
+      notes: 'Vector 89\'s clip of vector 166 — GOP 0 removed — with its trailer stripped and **another capture\'s** video proof appended as a valid trailer in its place: vector 166\'s core and segment hashes under a new capture id, the core and every segment message re-signed for it. Next to it, a sidecar holding vector 166\'s proof. Every signature in the trailer\'s proof holds, and no GOP of the clip names its capture, so on its own it reads *frames not compared* (§5, *Locating segments*) — a genuine clip reduced to "nothing ties these signatures to these frames" by a trailer anyone can append.\n\n§3.1 judges both over the same bytes, the file without the trailer: the sidecar\'s proof locates GOPs 1 and 2 and recomputes them, **verified clip**, 1 and 2 of 3 — vector 89\'s verdict — which ranks above *frames not compared*, so it stands, with *trailer copy differs* and `proof_source` the sidecar. Vector 171 is the same case with the foreign proof in a C2PA manifest.' })
   }
 
   {

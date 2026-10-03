@@ -1,6 +1,6 @@
 {
-  "corpus_version": "6.1.0",
-  "vector_count": 171,
+  "corpus_version": "6.2.0",
+  "vector_count": 174,
   "vectors": [
     {
       "name": "01-jpeg-sealed",
@@ -1195,6 +1195,27 @@
       "kind": "container",
       "outcome": "verified_clip",
       "sha256": "b83b96d7c648f4a668166a10fa210e46517d3fd87f0057e9841c16adc81d2daf",
+      "files": 5
+    },
+    {
+      "name": "172-jpeg-foreign-trailer-sidecar",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "dd0e2605acc1c03c606733d59811c7ff371fd182e68275cd29eab7bcd0cb19f0",
+      "files": 5
+    },
+    {
+      "name": "173-mp4-container-foreign-trailer-sidecar",
+      "kind": "container",
+      "outcome": "verified_clip",
+      "sha256": "b1ded8090640c4cbbb4d03531eb49fb4144f63f4982a0d882a074e3d7c0ed916",
+      "files": 5
+    },
+    {
+      "name": "174-jpeg-trailer-sidecar-no-better",
+      "kind": "file",
+      "outcome": "tampered",
+      "sha256": "a4b4815d2d12d68bc02689d32171a1d087ed4881104a0de0fe28524e19d7f7a1",
       "files": 5
     }
   ],

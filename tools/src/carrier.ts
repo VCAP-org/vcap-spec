@@ -214,9 +214,10 @@ export type Extraction =
       /** *sidecar differs*, *manifest copy differs*. */
       labels: string[]
       /**
-       * §3.1 step 4: a sidecar that differs from a depth-0 proof. Judged too,
-       * and its verdict stands, with *manifest copy differs*, when its
-       * outcome ranks above the manifest proof's.
+       * §3.1: a sidecar that differs from the proof the file carries (a
+       * trailer, or a depth-0 manifest proof). Judged too, over the same
+       * bytes, and its verdict stands, with *trailer copy differs* or
+       * *manifest copy differs*, when its outcome ranks above the file's.
        */
       alternate?: { payload: Buffer, source: ProofSource, labels: string[] }
     }
@@ -225,7 +226,9 @@ export type Extraction =
  * §3.1–§3.2 precedence, from the end of the file:
  *
  * 1. a valid footer whose CRC matches: the trailer is the proof; a sidecar is
- *    compared byte for byte, the active manifest's copy as JCS;
+ *    compared byte for byte, the active manifest's copy as JCS. A sidecar
+ *    that differs is handed back as the alternate, as in step 4: a trailer
+ *    appended to a stripped file is no more authenticated than a manifest;
  * 2. a valid footer whose CRC fails: *corrupted proof*, whatever else exists;
  * 3. `VCAP` with a major ≠ 1: *unsupported format version*;
  * 4. no footer: the active manifest's proof, then the sidecar, then the first
@@ -240,11 +243,18 @@ export const extractProof = (file: Buffer, sidecar?: Buffer, externalStore?: Buf
   if (trailer.kind === 'ok') {
     const media = file.subarray(0, trailer.mediaEnd)
     if (parseTrailer(media).kind !== 'none') return { kind: 'nested' }
-    const labels: string[] = []
-    if (sidecar && !sidecar.equals(trailer.payload)) labels.push('sidecar differs')
     const copy = carrierOf(media, externalStore).active
-    if (copy && !sameProof(copy.bytes, trailer.payload)) labels.push('manifest copy differs')
-    return { kind: 'proof', payload: trailer.payload, media, flags: trailer.flags, source: { kind: 'trailer' }, labels }
+    // The active manifest's copy is compared with whichever proof is used.
+    const manifestLabel = (proof: Buffer): string[] => copy && !sameProof(copy.bytes, proof) ? ['manifest copy differs'] : []
+    const differs = sidecar !== undefined && !sidecar.equals(trailer.payload)
+    return {
+      kind: 'proof', payload: trailer.payload, media, flags: trailer.flags, source: { kind: 'trailer' },
+      labels: [...(differs ? ['sidecar differs'] : []), ...manifestLabel(trailer.payload)],
+      // §3.1: a valid-CRC trailer appended to a trailer-stripped file is no
+      // more authenticated than a manifest; the sidecar is judged over the
+      // bytes the trailer's proof is judged over, as deleting the trailer would.
+      ...(differs ? { alternate: { payload: sidecar, source: { kind: 'sidecar' as const }, labels: ['trailer copy differs', ...manifestLabel(sidecar)] } } : {})
+    }
   }
   const carrier = carrierOf(file, externalStore)
   const kind = 'c2pa' as const

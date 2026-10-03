@@ -40,7 +40,7 @@ and pin `none`.
 `proof_source` (where the proof was read: `trailer`, `sidecar`, or `c2pa` with
 the carrying manifest's label and its depth on the `parentOf` chain) and
 `frames_name_capture` (whether a GOP of the file names the proof's capture)
-appear on the carrier vectors (123–147, 169–171), and are compared where present.
+appear on the carrier vectors (123–147, 169–171) and on 172–174, and are compared where present.
 `debug`, where present, is for humans: intermediate bytes to compare before
 touching signatures.
 
@@ -146,7 +146,7 @@ The numbered corpus (`vectors/NN-*`) has its own version, in `vectors/VERSION`
 — separate from `vcap/1.0`, the proof format version. The format version says
 what a proof looks like; the corpus version says which exact vectors an
 implementation checked itself against, so a third party can claim "conformant
-with vcap-spec corpus 6.1.0" and mean something a consumer can check.
+with vcap-spec corpus 6.2.0" and mean something a consumer can check.
 
 `vectors/MANIFEST.json` is that check: for every `vectors/NN-*` directory, its
 `kind`, its `outcome`, and a SHA-256 over its files (name and length included,
@@ -162,7 +162,7 @@ npm run manifest:check   # exits 1 if the committed file is stale — CI runs th
 ```
 
 `vectors/CONFORMANCE.md` says what the sentence "conformant with corpus
-6.1.0" has to contain to be checkable — corpus version, manifest hash, and
+6.2.0" has to contain to be checkable — corpus version, manifest hash, and
 how many vectors actually ran — and why a suite that ran zero vectors must be
 red. `vectors/conformance-report.json` is this repository's own claim in that
 format, regenerated and checked by CI (`npm run conformance:report` /
@@ -211,7 +211,9 @@ their notes describe: 145 *verified clip* (1–2 of 3, depth 1), 146 *tampered*
 an active C2PA manifest), 147 *no proof found* through *Content Credentials
 carry the proof of a source capture*. Nothing else moved. 6.1.0 is a minor
 again: 169–171 added (a sidecar is no longer overruled by a depth-0 manifest
-proof that does worse over the same bytes, §3.1 step 4), none changed.
+proof that does worse over the same bytes, §3.1 step 4), none changed. 6.2.0
+is a minor too: 172–174 added (the same rule for a trailer, §3.1 *A sidecar
+that does better*), none changed.
 
 `vectors/edge-cases/` (below) is not in the manifest and not part of the
 versioned corpus: it is regenerated on demand by its own tool, not hand-curated
@@ -246,9 +248,9 @@ none, by design — see its file comment), so there is nothing here to hand a
 marred payload to. That boundary belongs to whichever component owns the
 decoder.
 
-**The sidecar vectors** (17, 18, 70, 71, 72) carry `input.<ext>.vcap` next to
+**The sidecar vectors** (17, 18, 70, 71, 72, 172–174) carry `input.<ext>.vcap` next to
 the input, and a verifier under test is handed both, as `tools/test/vectors.test.ts`
-does. They pin §3.1: the trailer wins when it is found and intact (18), a broken
+does. They pin §3.1: the trailer wins when it is found and intact and the sidecar does no better (18, 174), a sidecar that does better over the same bytes outranks an appended trailer (172, 173), a broken
 trailer is *corrupted* whatever the sidecar says (72), and a sidecar alone
 restores the full verdict over unchanged bytes (17) and nothing over changed
 ones (70, 71). **The C2PA co-existence vectors** (02, 03, 04, 68, 69, 73) carry

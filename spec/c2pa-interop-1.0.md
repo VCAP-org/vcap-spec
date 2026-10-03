@@ -356,7 +356,7 @@ precedence — the copy inside the bytes wins — and the same reason: it
 travelled with what it binds. Where the shapes part: a manifest is
 authenticated to a C2PA validator and not to a vcap reader, so a copy in the
 bytes that does worse over them than a differing sidecar does not win
-(`vcap-proof-1.0.md` §3.1, step 4; vectors 169–171) — anyone can write a
+(`vcap-proof-1.0.md` §3.1, *A sidecar that does better*; vectors 169–171) — anyone can write a
 manifest, and the sidecar is what deleting it would leave.
 
 ### 3.4 When we sign C2PA
@@ -404,7 +404,11 @@ the proof in its own manifest, or find it in its source's (`vcap-proof-1.0.md`
   file. Neither can forge a core — the signature is over it — but the
   attachments are where a downgrade would go (a dropped `registry`, a
   dropped `timestamp`), and the copy inside the file is the harder one to
-  edit quietly. A broken trailer is not replaced by a sidecar for the same
+  edit quietly. It wins **ties**, not outcomes: a valid-CRC trailer can be
+  appended to any trailer-stripped file, so one that does worse over the
+  bytes than a differing sidecar does not decide (`vcap-proof-1.0.md` §3.1,
+  *A sidecar that does better*; vectors 172–174) — the downgrade it guards
+  against is a ceiling, and ceilings are never ranked. A broken trailer is not replaced by a sidecar for the same
   reason (vector 72): the CRC failing says the file was edited, and a
   fallback that hid it would answer the question the CRC exists to raise.
 - **No label for "from sidecar"**, nor for "from a manifest". The location of
@@ -445,6 +449,7 @@ canonical bytes.
 | Copy, transfer, rename | kept | kept | kept | kept | as sealed (level per §7) | same; the sidecar is renamed with the file or is not found | 01, 17 |
 | Trailer stripped, bytes otherwise intact (a tool that truncates at EOI or drops trailing boxes) | lost | kept | kept, no proof in it | kept | *no proof found* | **full verdict restored**, identical to the embedded one | 05, 17 |
 | The same, with Content Credentials that carry the proof | lost | kept | kept | kept | **full verdict restored** from the active manifest (`vcap-proof-1.0.md` §3.2, depth 0) | the same: the manifest's copy outranks the sidecar, which *differs* if it is not the same proof — unless the sidecar's outcome is better over these bytes, when the sidecar decides and the manifest's copy *differs* | 124, 127, 169–171 |
+| Trailer stripped, another capture's valid trailer appended | replaced | kept | kept | kept | the appended proof's verdict: *tampered* on a photo, *frames not compared* on a video | **restored** from the sidecar when its outcome is better, with *trailer copy differs*; on a tie the appended trailer stands | 172–174 |
 | C2PA manifest added, replaced or removed on a JPEG | kept | kept | changed | kept | unchanged | unchanged | 02, 68 |
 | C2PA manifest inserted into a sealed BMFF file | kept | kept | added | kept | *tampered* (§4.1: inside the canonical bytes) | *tampered* | 73 |
 | C2PA update manifest appended to a sealed BMFF file | unreachable | kept | changed | kept | *no proof found* | *tampered* (whole file hashed) | 69, 70 |
@@ -486,7 +491,7 @@ Reading the table:
 - **What the verifier must say**, in §8's words, per outcome: *no proof
   found* is not an error and is never *corrupted*; *tampered* carries its
   reason and no absence labels; *verified clip* names the segments verified
-  out of `segment_count`; *sidecar differs*, *manifest copy differs* and
+  out of `segment_count`; *sidecar differs*, *trailer copy differs*, *manifest copy differs* and
   *flags disagree* are warnings on an otherwise valid verdict; a detector result is *watermark matched*,
   *watermark not recovered* or *watermark not evaluated*, and a match without
   a valid signature is *origin traced*.

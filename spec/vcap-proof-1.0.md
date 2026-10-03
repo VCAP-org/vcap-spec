@@ -177,16 +177,18 @@ restore are in `c2pa-interop-1.0.md` §4 and §5.
 - **Precedence.** Read the last 16 bytes first (§3), then:
   1. **Valid footer, CRC matches** → the trailer is the proof. A sidecar, if
      present, is compared **byte for byte** with the payload; not equal is
-     *sidecar differs*, a label, and the sidecar is not used for anything
-     (vector 18). Byte comparison, not semantic: a writer emits canonical bytes
+     *sidecar differs*, a label, and the sidecar is not used (vector 18) —
+     **unless it does better over the same bytes** (*A sidecar that does
+     better*, below; vectors 172–174). Byte comparison, not semantic: a writer emits canonical bytes
      in both places and the label is a writer bug or a swapped file, either of
      which the reader should say rather than resolve. The copy the file's
      active C2PA manifest carries, if any (§3.2), is compared too, as
      `JCS(parse(copy)) == JCS(parse(payload))` — a claim generator
      re-serializes the JSON it is given, so bytes are not comparable across a
      manifest (vector 123) — and not equal is *manifest copy differs*, a label;
-     the copy is not used for anything (vector 125). A copy that is not a
-     well-formed proof (§6.1) differs from any other.
+     the copy is not used for anything (vector 125). It is compared with the
+     proof that decides, the sidecar's when the sidecar does. A copy that is
+     not a well-formed proof (§6.1) differs from any other.
   2. **Valid footer, CRC fails** → *corrupted proof*, whatever the sidecar or
      a C2PA store says (vectors 72, 126). The sidecar is a fallback for a
      trailer that is absent, not a substitute for one that was found and is
@@ -202,25 +204,9 @@ restore are in `c2pa-interop-1.0.md` §4 and §5.
      sidecar, which is presented as this file's proof, outranks a source's
      (vector 130). A sidecar next to a depth-0 proof is compared with it as
      JCS; not equal is *sidecar differs*, and the sidecar is not used
-     (vector 127) — **unless it does better over the same bytes**. A
-     manifest is not authenticated to a reader and, on a JPEG, sits outside
-     the canonical bytes (§4.1): anyone can add one carrying another capture's
-     proof beside a genuine file and its genuine sidecar, and a depth-0 proof
-     that always won would turn that into an accusation (vector 169). So when
-     the two differ, a verifier computes the verdict of each, as this step
-     says for either, and ranks their outcomes: *authentic* above *verified
-     clip* above *frames not compared* above every other outcome, which rank
-     equal. When the sidecar's outcome ranks **strictly above** the depth-0
-     proof's, the sidecar's verdict is the verdict, `proof_source` is
-     `sidecar`, and it carries *manifest copy differs* instead of *sidecar
-     differs* (vectors 169, 171). Otherwise the depth-0 proof's verdict stands
-     with *sidecar differs* (vectors 127, 170). Only outcomes are ranked,
-     never ceilings: a sidecar stripped of a `revoked` `attestation_status`
-     reads amber where the manifest's complete copy reads red, and must not
-     win. Nothing is gained this way that
-     deleting the manifest would not give — the sidecar is the next proof in
-     this order — and the manifest's copy can still lower a ceiling on a tie,
-     never raise one. The same holds for a store the caller hands over.
+     (vector 127) — **unless it does better over the same bytes** (*A
+     sidecar that does better*, below; vectors 169–171). The same holds for
+     a store the caller hands over.
      The canonical bytes are the **whole** received file (§4.1
      step 1, `F' = F`), including whatever a stale or displaced trailer left
      behind (vector 70). The verdict is computed exactly as for an embedded
@@ -231,6 +217,38 @@ restore are in `c2pa-interop-1.0.md` §4 and §5.
      is a proof found at depth ≥ 1, which is not presented as this file's
      (§3.2, *The verdict*).
   5. **None of these** → *no proof found*.
+- **A sidecar that does better.** Neither the proof a file carries nor its
+  place is authenticated as this file's: a C2PA manifest is not authenticated
+  to a reader and, on a JPEG, sits outside the canonical bytes (§4.1), and a
+  trailer with a valid CRC can be appended to any trailer-stripped file. So
+  anyone can put another capture's proof in either beside a genuine file and
+  its genuine sidecar, and a file's proof that always won would turn that into
+  an accusation (vectors 169, 172). When a sidecar differs from the proof the
+  file carries — the trailer at step 1, the depth-0 proof at step 4 — a
+  verifier computes the verdict of each over the same canonical bytes (the
+  file without the trailer at step 1, the whole file at step 4), and ranks
+  their **outcomes**: *authentic* above *verified clip* above *frames not
+  compared* above every other outcome, which rank equal.
+  - The sidecar's outcome ranks **strictly above** the file's proof's → the
+    sidecar's verdict is the verdict, `proof_source` is `sidecar`, and it
+    carries *trailer copy differs* (step 1, vectors 172, 173) or *manifest
+    copy differs* (step 4, vectors 169, 171) instead of *sidecar differs*.
+  - Otherwise → the file's proof stands with *sidecar differs*, as without
+    this rule (vectors 18, 127, 170, 174).
+
+  Only outcomes are ranked, never ceilings: a sidecar stripped of a `revoked`
+  `attestation_status` reads amber where the file's complete copy reads red,
+  and must not win. Nothing is gained this way that deleting the trailer or
+  the manifest would not give — the sidecar, over those bytes, is what a
+  reader finds then — and the file's copy can still lower a ceiling on a tie,
+  never raise one. A sidecar identical to the trailer, byte for byte, or to
+  the depth-0 proof, as JCS, is no second verdict and changes nothing.
+  Outside the rule, unchanged: a nested trailer (§3) is *nested proof*, a
+  structural verdict no proof of the file is judged for, and deleting the
+  outer trailer leaves the inner one to step 1; a footer whose CRC fails
+  (step 2) or whose major is not 1 (step 3) stays *corrupted proof* or
+  *unsupported format version* whatever the sidecar says — no proof of the
+  file is judged there, so there is no outcome to rank.
 - **Video.** Recomputing §5 content hashes stays optional and, when skipped,
   declared (*segment content not recomputed*); a sidecar next to a demuxable
   container is the case §5 has in mind.
@@ -1903,11 +1921,12 @@ capture's, and where §4–§8 would give *tampered* or *frames not compared* th
 outcome is *no proof found*: the derivation is declared, and the proof is not
 presented as this file's.
 
-**Where the proof came from.** *Sidecar differs* and *manifest copy differs*
-(§3.1) are warnings on an otherwise valid verdict: a second copy of the proof
-that is not the one used. A depth-0 proof from Content Credentials never makes
-a verdict red over a differing sidecar that does better over the same bytes
-(§3.1, step 4). `proof_source` and `frames_name_capture` (§3.2) are
+**Where the proof came from.** *Sidecar differs*, *trailer copy differs* and
+*manifest copy differs* (§3.1) are warnings on an otherwise valid verdict: a
+second copy of the proof that is not the one used. Neither a trailer nor a
+depth-0 proof from Content Credentials makes a verdict red over a differing
+sidecar that does better over the same bytes (§3.1, *A sidecar that does
+better*). `proof_source` and `frames_name_capture` (§3.2) are
 diagnostics and never labels.
 
 **The rule that outranks the table.** A watermark match with no valid signature is
@@ -2060,7 +2079,8 @@ says.
       position source (151), the verdict hardening and presentation binding
       (152–164) and `media.presentation` required (165–168), and **171**
       in corpus 6.1.0 with a sidecar no longer overruled by a worse
-      depth-0 manifest proof (169–171),
+      depth-0 manifest proof (169–171), and **174** in corpus 6.2.0 with
+      the same rule for a trailer (172–174),
       checked by the reference verifier in `tools/`. The §7 vectors
       trust the anchors in `vectors/_trust/`, whose attestation root is a test
       root: they prove the level logic, not that an implementation can walk a
