@@ -204,10 +204,11 @@ export const verifyFile = (input: FileInput): Verdict => {
   const located: { frames?: boolean } = {}
   const verdict = { ...judge(extracted.payload, extracted.media, extracted.flags, [...extracted.labels], input, located), proof_source: extracted.source }
   if (located.frames !== undefined) verdict.frames_name_capture = located.frames
-  // §3.1 step 4: a manifest is unauthenticated — anyone can add one outside
-  // the canonical bytes — so a depth-0 proof that does worse over these bytes
-  // than a differing sidecar never decides the verdict. Whatever the sidecar
-  // wins here, deleting the manifest would win too; ties keep the manifest's.
+  // §3.1: neither a manifest nor a valid-CRC trailer is authenticated as the
+  // file's — anyone can add one to a stripped file — so the proof the file
+  // carries never decides the verdict when it does worse over these bytes
+  // than a differing sidecar. Whatever the sidecar wins here, deleting the
+  // trailer or the manifest would win too; ties keep the file's proof.
   if (extracted.alternate) {
     const alt = extracted.alternate
     const altLocated: { frames?: boolean } = {}
@@ -232,8 +233,8 @@ export const verifyFile = (input: FileInput): Verdict => {
 }
 
 /**
- * §3.1 step 4: how much an outcome says about the received bytes, for
- * choosing between a depth-0 proof and a differing sidecar. Every other
+ * §3.1: how much an outcome says about the received bytes, for
+ * choosing between the file's proof and a differing sidecar. Every other
  * outcome — red, no proof, unsupported — ranks 0.
  */
 const OUTCOME_RANK: Record<Outcome, number> = {

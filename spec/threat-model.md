@@ -129,6 +129,7 @@ Boundaries, each enforced by code and tested:
 | Timeline edit | re-muxes a genuine video with an edit list that trims, repeats or reorders what a player shows, every sample untouched | an edit list with more than one edit after the leading delay, or a rate change, is a timeline §5 does not model: no segment is located (§5, vector 156) | none: *frames not compared*, never *verified clip*; an original is covered whole by `media.hash` |
 | Clip re-timed | re-muxes a genuine clip keeping every sample and the single-edit timeline, and changes sample durations (`stts`), composition offsets (`ctts`), the `mdhd` timescales or the audio sample rate: a frame frozen, a passage slowed, frames reordered within a GOP | none for a clip: no signed byte carries timing; audio assignment by DTS breaks the hashes only when a change moves an IDR relative to the audio | **open**: such a clip reads *verified clip*. An original is covered by `media.hash`. A proposal is in `reviews/design-clip-timing.md` |
 | Proof transplant | moves a genuine trailer or sidecar onto another file | `media.hash` mismatch; on video, a signed segment counts only where a GOP of the received file names it and recomputes (§5, *Locating segments*) | none: red on a photo; *frames not compared* on a video whose GOPs name no segment of the proof, never *verified clip* |
+| Accusing trailer | strips a genuine file's trailer and appends another capture's valid trailer (CRC correct) beside the genuine sidecar, to have the file accused | beside a differing sidecar whose outcome is better over the same bytes, the sidecar decides, with *trailer copy differs* (`vcap-proof-1.0.md` §3.1, *A sidecar that does better*, vectors 172–173); ties keep the trailer (vector 174) | none with the sidecar present: the file reads as the sidecar says. Without it the appended proof decides, as it would on any file. **Open**: a footer whose CRC fails, or whose major is not 1, appended the same way still reads *corrupted proof* or *unsupported format version* whatever the sidecar says (§3.1 steps 2–3) |
 | Clip from a genuine video | cuts segments, keeps the trailer | per-segment chain over messages; `segment_count`; `media.hash` mismatch → *verified clip*, amber, ranges shown | accepted and **labelled**: a clip is a clip, never an original |
 | Reassembled video | reorders, repeats or relabels genuine GOPs, or inserts a foreign one next to them | every GOP of the file is accounted for in decode order: one vcap SEI naming this capture and a signed segment, indices strictly increasing, each at most once (§5) | none: red |
 | Audio replacement on a clip | keeps verified frames, swaps sound | audio frames inside the segment hash (§5) | none on originals and clips |
@@ -297,6 +298,11 @@ like, and it is the true one.
   *authenticated* level waits for a smartphone chipset with OSNMA.
 
 ## 7. Change log
+
+- 2026-10-03 — §5.1: a valid-CRC trailer appended to a trailer-stripped
+  genuine file beside its sidecar no longer accuses the file
+  (`vcap-proof-1.0.md` §3.1, *A sidecar that does better*); an appended
+  broken or unsupported footer still does, and is recorded as open.
 
 - 2026-10-03 — §5.1: a forged manifest added beside a genuine file and its
   sidecar no longer accuses the file (`vcap-proof-1.0.md` §3.1 step 4); a

@@ -1,0 +1,7 @@
+# 173-mp4-container-foreign-trailer-sidecar
+
+Vector 89's clip of vector 166 — GOP 0 removed — with its trailer stripped and **another capture's** video proof appended as a valid trailer in its place: vector 166's core and segment hashes under a new capture id, the core and every segment message re-signed for it. Next to it, a sidecar holding vector 166's proof. Every signature in the trailer's proof holds, and no GOP of the clip names its capture, so on its own it reads *frames not compared* (§5, *Locating segments*) — a genuine clip reduced to "nothing ties these signatures to these frames" by a trailer anyone can append.
+
+§3.1 judges both over the same bytes, the file without the trailer: the sidecar's proof locates GOPs 1 and 2 and recomputes them, **verified clip**, 1 and 2 of 3 — vector 89's verdict — which ranks above *frames not compared*, so it stands, with *trailer copy differs* and `proof_source` the sidecar. Vector 171 is the same case with the foreign proof in a C2PA manifest.
+
+Derived by `tools/src/generate.ts` from the device capture in vector 36 or 37 (a Samsung SM-S908B, Android 16, StrongBox, sealed by the reference Android SDK). The container, its NAL units and its vcap SEIs are the device's; the core and the segment chain are re-signed with the test key in `tools/src/testkey.ts`, over the same capture id and the same content hashes, so that the core carries `media.presentation`, which the device proof predates (corpus 5.0.0).
