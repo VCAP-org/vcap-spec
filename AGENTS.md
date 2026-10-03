@@ -37,7 +37,8 @@ the first build, SDK or sealed file that reaches somebody else. `CHANGELOG.md` i
   Decryption never establishes a proof verdict.
 - `reviews/` — historical review notes (cryptographic, implementability).
   Findings are graded BLOCKING / SHOULD / NOTE; the spec absorbed them and is
-  authoritative. Do not update a review to match the spec.
+  authoritative. Do not update a review to match the spec. A `design-*.md`
+  note there is a proposal the spec has not adopted (§11 points at it).
 - `schema/` — JSON Schema plus a validator runnable from CI, including the
   shape of a published conformance report.
 - `vectors/` — one directory per case, each with the input, the proof and the
@@ -48,7 +49,7 @@ the first build, SDK or sealed file that reaches somebody else. `CHANGELOG.md` i
   review decides which one is wrong — the generator refuses to write a vector
   the verifier fails. The C2PA carrier reader (`jumbf.ts`, `cbor.ts`,
   `carrier.ts`) reads structure only and has no dependency; the vectors with
-  real Content Credentials (123–147) are minted on demand by
+  real Content Credentials (123–147, 169–171) are minted on demand by
   `make-c2pa-vectors.ts` through `@contentauth/c2pa-node`, a devDependency
   nothing on the verification path imports, and committed because c2pa-rs
   salts every assertion at random.

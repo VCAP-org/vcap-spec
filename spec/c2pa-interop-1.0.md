@@ -35,7 +35,7 @@ entity exists, so no manifest signed by
 us exists either. Everything in §3 is therefore about a manifest **somebody
 else** writes on a sealed file — an editor, a platform, a camera pipeline that
 runs both — and about the day we write one. The corpus does carry real C2PA
-manifests (vectors 123–147): they are signed by a public test credential,
+manifests (vectors 123–147, 169–171): they are signed by a public test credential,
 *vcap-spec test CA* (`vectors/_trust/c2pa-test/`), which no trust list carries
 and which signs nothing but vectors.
 
@@ -353,7 +353,11 @@ vcap verifier never looks for a `.c2pa` file, never fetches one, and reads it
 only when the file embeds no store (`vcap-proof-1.0.md` §3.2). C2PA's rule
 that an embedded store outranks a remote one (15.5.2.1) has the same shape as §3.1's
 precedence — the copy inside the bytes wins — and the same reason: it
-travelled with what it binds.
+travelled with what it binds. Where the shapes part: a manifest is
+authenticated to a C2PA validator and not to a vcap reader, so a copy in the
+bytes that does worse over them than a differing sidecar does not win
+(`vcap-proof-1.0.md` §3.1, step 4; vectors 169–171) — anyone can write a
+manifest, and the sidecar is what deleting it would leave.
 
 ### 3.4 When we sign C2PA
 
@@ -440,7 +444,7 @@ canonical bytes.
 |---|---|---|---|---|---|---|---|
 | Copy, transfer, rename | kept | kept | kept | kept | as sealed (level per §7) | same; the sidecar is renamed with the file or is not found | 01, 17 |
 | Trailer stripped, bytes otherwise intact (a tool that truncates at EOI or drops trailing boxes) | lost | kept | kept, no proof in it | kept | *no proof found* | **full verdict restored**, identical to the embedded one | 05, 17 |
-| The same, with Content Credentials that carry the proof | lost | kept | kept | kept | **full verdict restored** from the active manifest (`vcap-proof-1.0.md` §3.2, depth 0) | the same: the manifest's copy outranks the sidecar, which *differs* if it is not the same proof | 124, 127 |
+| The same, with Content Credentials that carry the proof | lost | kept | kept | kept | **full verdict restored** from the active manifest (`vcap-proof-1.0.md` §3.2, depth 0) | the same: the manifest's copy outranks the sidecar, which *differs* if it is not the same proof — unless the sidecar's outcome is better over these bytes, when the sidecar decides and the manifest's copy *differs* | 124, 127, 169–171 |
 | C2PA manifest added, replaced or removed on a JPEG | kept | kept | changed | kept | unchanged | unchanged | 02, 68 |
 | C2PA manifest inserted into a sealed BMFF file | kept | kept | added | kept | *tampered* (§4.1: inside the canonical bytes) | *tampered* | 73 |
 | C2PA update manifest appended to a sealed BMFF file | unreachable | kept | changed | kept | *no proof found* | *tampered* (whole file hashed) | 69, 70 |

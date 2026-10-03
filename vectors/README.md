@@ -40,7 +40,7 @@ and pin `none`.
 `proof_source` (where the proof was read: `trailer`, `sidecar`, or `c2pa` with
 the carrying manifest's label and its depth on the `parentOf` chain) and
 `frames_name_capture` (whether a GOP of the file names the proof's capture)
-appear on the carrier vectors (123–147), and are compared where present.
+appear on the carrier vectors (123–147, 169–171), and are compared where present.
 `debug`, where present, is for humans: intermediate bytes to compare before
 touching signatures.
 
@@ -146,7 +146,7 @@ The numbered corpus (`vectors/NN-*`) has its own version, in `vectors/VERSION`
 — separate from `vcap/1.0`, the proof format version. The format version says
 what a proof looks like; the corpus version says which exact vectors an
 implementation checked itself against, so a third party can claim "conformant
-with vcap-spec corpus 6.0.0" and mean something a consumer can check.
+with vcap-spec corpus 6.1.0" and mean something a consumer can check.
 
 `vectors/MANIFEST.json` is that check: for every `vectors/NN-*` directory, its
 `kind`, its `outcome`, and a SHA-256 over its files (name and length included,
@@ -162,7 +162,7 @@ npm run manifest:check   # exits 1 if the committed file is stale — CI runs th
 ```
 
 `vectors/CONFORMANCE.md` says what the sentence "conformant with corpus
-6.0.0" has to contain to be checkable — corpus version, manifest hash, and
+6.1.0" has to contain to be checkable — corpus version, manifest hash, and
 how many vectors actually ran — and why a suite that ran zero vectors must be
 red. `vectors/conformance-report.json` is this repository's own claim in that
 format, regenerated and checked by CI (`npm run conformance:report` /
@@ -209,7 +209,9 @@ that carries the field — so their bytes moved and their verdicts are the ones
 their notes describe: 145 *verified clip* (1–2 of 3, depth 1), 146 *tampered*
 (segment 1 verified, depth 0, the only video case of a tampered proof inside
 an active C2PA manifest), 147 *no proof found* through *Content Credentials
-carry the proof of a source capture*. Nothing else moved.
+carry the proof of a source capture*. Nothing else moved. 6.1.0 is a minor
+again: 169–171 added (a sidecar is no longer overruled by a depth-0 manifest
+proof that does worse over the same bytes, §3.1 step 4), none changed.
 
 `vectors/edge-cases/` (below) is not in the manifest and not part of the
 versioned corpus: it is regenerated on demand by its own tool, not hand-curated
@@ -256,7 +258,7 @@ container, and the update-manifest case that fits neither
 (`spec/c2pa-interop-1.0.md` §3). Vector 122 is §4.1's narrowing in 1.1: a
 JUMBF box that is not a C2PA store is content.
 
-**The C2PA carrier vectors** (123–147) carry real Content Credentials:
+**The C2PA carrier vectors** (123–147, 169–171) carry real Content Credentials:
 manifests written by c2pa-rs 0.91.0 through `@contentauth/c2pa-node` 0.9.8 and
 signed by *vcap-spec test CA* (`_trust/c2pa-test/`), a public test credential
 no trust list carries. They pin `vcap-proof-1.0.md` §3.1–§3.2: where the store

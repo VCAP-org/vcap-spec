@@ -14,6 +14,7 @@ import { type Box, boxes, children, codecOf, find, readContainer, samplesOf } fr
 import { REDACTION_UUID, TYPE, jumbfGroups } from './jumbf.js'
 import { PROOF_LABEL, jpegCarriesStore } from './carrier.js'
 import { signEs256 } from './sign.js'
+import { ZERO_LINK, linkOf, segmentMessage } from './segments.js'
 import { TEST_KEY_PKCS8_BASE64 } from './testkey.js'
 import { C2PA_TEST_ROOT_PKCS8_BASE64, C2PA_TEST_SIGNER_PKCS8_BASE64 } from './testc2pakey.js'
 import { loadTrust } from './trust.js'
@@ -39,7 +40,7 @@ import { validateProof } from './schema.js'
  * store. The committed files are the vectors; this script is how they were
  * made, and it refuses to write one the reference verifier disagrees with.
  *
- *   npm run generate:c2pa                 # rewrite 123–147
+ *   npm run generate:c2pa                 # rewrite 123–147 and 169–171
  *   npm run generate:c2pa -- --mint-ca    # re-mint the test CA first
  *   npm run generate:c2pa -- --only 143,144   # rewrite only these; every vector is still checked
  *
@@ -357,6 +358,21 @@ add({ name: '128-jpeg-c2pa-foreign-proof', ext: 'jpg', kind: 'file', file: (awai
   expected: { outcome: 'tampered', labels: [], not_evaluated: [], core_hash: hashOf(photo), proof_source: src(0, label(128, 1)) },
   notes: 'A photo that is not vector 01\'s — one byte of entropy-coded data changed — with a manifest that carries vector 01\'s proof in its **active** manifest. Depth 0 reads like a sidecar (§3.2): the manifest presents the proof as this file\'s, the canonical bytes are not the ones the key sealed, and on a photo that is **tampered** (§8), the verdict of vector 71. The C2PA side is valid — its signer vouches for these bytes, not for the proof inside.' })
 
+// §3.1 step 4: the manifest is unauthenticated and outside the canonical
+// bytes, so anyone can add one carrying somebody else's proof. A sidecar that
+// does better over the same bytes is not overruled by it.
+{
+  // Another capture's proof: a new capture id and the hash of different
+  // pixels, signed by the test key — genuine, and about another file.
+  const foreign = resign({ ...photo, capture_id: Buffer.alloc(16, 0x69).toString('base64url'), media: { ...(photo.media as Proof), hash: mediaHash(editPixels(baseJpeg)) } })
+  add({ name: '169-jpeg-c2pa-foreign-proof-sidecar', ext: 'jpg', kind: 'file', file: (await c2paSign({ asset: baseJpeg, mime: 'image/jpeg', label: label(169, 1), proof: foreign })).file, sidecar: jcs(photo as Json), proof: photo,
+    expected: { outcome: 'authentic', labels: [...PHOTO_LABELS, 'manifest copy differs'], not_evaluated: [], core_hash: hashOf(photo), proof_source: { kind: 'sidecar' } },
+    notes: 'Vector 01\'s photo with no trailer — the canonical bytes of vector 01 — next to a sidecar holding vector 01\'s proof, and with Content Credentials added by somebody else whose active manifest carries **another capture\'s** proof: a new capture id and the hash of different pixels, validly signed. Anyone can write such a manifest; it sits outside the canonical bytes (§4.1) and nothing authenticates it to a vcap reader.\n\nThe depth-0 proof alone reads *tampered* — its `media.hash` is not these bytes — and before corpus 6.1.0 that was the verdict: the manifest outranked the sidecar and a genuine file next to its genuine proof was accused. §3.1 step 4 now judges both when they differ, and the sidecar\'s verdict stands when its outcome ranks above the manifest proof\'s: **authentic**, vector 01\'s verdict, with *manifest copy differs* and `proof_source` the sidecar. Nothing is gained by it that deleting the manifest would not give. Vector 127 is the other direction: the manifest\'s proof is the good one and the sidecar\'s is ignored; vector 170 is a sidecar that does no better.' })
+  add({ name: '170-jpeg-c2pa-foreign-proof-sidecar-no-better', ext: 'jpg', kind: 'file', file: (await c2paSign({ asset: editPixels(baseJpeg), mime: 'image/jpeg', label: label(170, 1), proof: photo })).file, sidecar: jcs(timestamped as Json), proof: photo,
+    expected: { outcome: 'tampered', labels: [], not_evaluated: [], core_hash: hashOf(photo), proof_source: src(0, label(170, 1)) },
+    notes: 'Vector 128 — a photo that is not vector 01\'s, with vector 01\'s proof in its active manifest — next to a sidecar that holds vector 59\'s proof: the same core with a time-stamp token, so it differs from the manifest\'s copy as JCS and binds the same pixels. Both proofs read *tampered* over these bytes. §3.1 step 4 lets a sidecar decide only when its outcome ranks **above** the manifest proof\'s; this one ties, so the depth-0 proof stands, with `proof_source` naming the manifest: **tampered**, vector 128\'s verdict. A red outcome carries no labels, *sidecar differs* included (§8).' })
+}
+
 // A source photo with its proof carried at depth 1, edited by a C2PA-aware
 // editor that declared the edit.
 {
@@ -549,6 +565,25 @@ const withStore = await c2paSign({ asset: baseJpeg, mime: 'image/jpeg', label: l
     add({ name: '146-mp4-c2pa-clip-gop-replaced', ext: 'mp4', kind: 'container', file: await clipOf(146, edited, ['c2pa.trimmed'], { parent: device, proof: deviceProof }), proof: deviceProof,
       expected: { outcome: 'tampered', labels: [], not_evaluated: [], core_hash: hashOf(deviceProof), segments: { verified: [1] }, proof_source: src(0, label(146, 1)), frames_name_capture: true },
       notes: `Vector 145's clip with one byte of the last GOP's IDR slice data changed (clip byte ${at}), signed by a cutter that opens vector 166 as \`parentOf\` and carries its proof in **its own** manifest, as the clip's: a GOP whose vcap SEI still names the capture and segment 2, and whose bytes are not the ones segment 2 signs. The cutter's manifest is valid — it vouches for the bytes it saw — and declares a trim, not this.\n\nDepth 0 reads like a sidecar (§3.2): §5 applies, a located segment that does not recompute is **tampered**, with segment 1 verified. The corpus's only video case of a tampered proof inside an active C2PA manifest; vector 128 is the JPEG one. Vector 147 is the other side of the rule: at depth ≥ 1 a failure reads *no proof found*, because a proof found up the chain is the source's and is never held against a derivation. ${provenance}` })
+  }
+
+  {
+    // §3.1 step 4 on a clip: another capture's video proof in the clip's own
+    // manifest, the genuine proof beside it. The foreign proof is vector
+    // 166's under a new capture id, its segment chain re-signed for that id,
+    // so every signature in it holds and no GOP of the clip names it.
+    const capture = Buffer.alloc(16, 0x71)
+    let previous: Buffer | null = null
+    const segments = (deviceProof.segments as Array<{ gop: number, hash: string, sig: string }>).map((seg) => {
+      const prev = previous ? linkOf(previous) : ZERO_LINK
+      const message = segmentMessage(capture, seg.gop, Buffer.from(seg.hash, 'base64url'), prev)
+      previous = message
+      return { gop: seg.gop, hash: seg.hash, prev: prev.toString('base64url'), sig: signEs256(message, testKey).toString('base64url') }
+    })
+    const foreign = resign({ ...deviceProof, capture_id: capture.toString('base64url'), segments: segments as unknown as Json })
+    add({ name: '171-mp4-c2pa-foreign-proof-sidecar', ext: 'mp4', kind: 'container', file: (await c2paSign({ asset: cutClip, mime: 'video/mp4', label: label(171, 1), proof: foreign })).file, sidecar: jcs(deviceProof as Json), proof: deviceProof,
+      expected: { outcome: 'verified_clip', labels: [...DEVICE_LABELS, 'manifest copy differs'], not_evaluated: [], core_hash: hashOf(deviceProof), segments: { verified: [1, 2] }, proof_source: { kind: 'sidecar' }, frames_name_capture: true },
+      notes: `Vector 89's clip of vector 166 — GOP 0 removed, no trailer — next to a sidecar holding vector 166's proof, with a manifest somebody else added whose active manifest carries **another capture's** video proof: vector 166's core and segment hashes under a new capture id, the core and every segment message re-signed for it. Every signature in that proof holds, and no GOP of the clip names its capture, so on its own it reads *frames not compared* (§5, *Locating segments*) — amber, not an accusation, but a genuine clip reduced to "nothing ties these signatures to these frames" by a manifest anyone can write.\n\n§3.1 step 4 judges both: the sidecar's proof locates GOPs 1 and 2 and recomputes them, **verified clip**, 1 and 2 of 3 — vector 89's verdict — which ranks above *frames not compared*, so it stands, with *manifest copy differs* and \`proof_source\` the sidecar. ${provenance}` })
   }
 
   add({ name: '147-mp4-c2pa-clip-reencoded', ext: 'mp4', kind: 'container', file: await clipOf(147, baseMp4, ['c2pa.transcoded']), proof: deviceProof,
