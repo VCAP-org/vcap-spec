@@ -213,6 +213,12 @@ export type Extraction =
       source: ProofSource
       /** *sidecar differs*, *manifest copy differs*. */
       labels: string[]
+      /**
+       * §3.1 step 4: a sidecar that differs from a depth-0 proof. Judged too,
+       * and its verdict stands, with *manifest copy differs*, when its
+       * outcome ranks above the manifest proof's.
+       */
+      alternate?: { payload: Buffer, source: ProofSource, labels: string[] }
     }
 
 /**
@@ -223,7 +229,9 @@ export type Extraction =
  * 2. a valid footer whose CRC fails: *corrupted proof*, whatever else exists;
  * 3. `VCAP` with a major ≠ 1: *unsupported format version*;
  * 4. no footer: the active manifest's proof, then the sidecar, then the first
- *    proof up the `parentOf` chain.
+ *    proof up the `parentOf` chain. A sidecar that differs from the manifest's
+ *    proof is handed back as the alternate: the manifest is unauthenticated,
+ *    so its proof never outranks a sidecar that does better over these bytes.
  */
 export const extractProof = (file: Buffer, sidecar?: Buffer, externalStore?: Buffer): Extraction => {
   const trailer = parseTrailer(file)
@@ -241,8 +249,12 @@ export const extractProof = (file: Buffer, sidecar?: Buffer, externalStore?: Buf
   const carrier = carrierOf(file, externalStore)
   const kind = 'c2pa' as const
   if (carrier.active) {
-    const labels = sidecar && !sameProof(sidecar, carrier.active.bytes) ? ['sidecar differs'] : []
-    return { kind: 'proof', payload: carrier.active.bytes, media: file, flags: null, source: { kind, manifest: carrier.active.manifest, depth: 0 }, labels }
+    const differs = sidecar !== undefined && !sameProof(sidecar, carrier.active.bytes)
+    return {
+      kind: 'proof', payload: carrier.active.bytes, media: file, flags: null, source: { kind, manifest: carrier.active.manifest, depth: 0 },
+      labels: differs ? ['sidecar differs'] : [],
+      ...(differs ? { alternate: { payload: sidecar, source: { kind: 'sidecar' as const }, labels: ['manifest copy differs'] } } : {})
+    }
   }
   if (sidecar) return { kind: 'proof', payload: sidecar, media: file, flags: null, source: { kind: 'sidecar' }, labels: [] }
   if (carrier.ancestor) return { kind: 'proof', payload: carrier.ancestor.bytes, media: file, flags: null, source: { kind, manifest: carrier.ancestor.manifest, depth: carrier.ancestor.depth }, labels: [] }

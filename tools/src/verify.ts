@@ -204,6 +204,17 @@ export const verifyFile = (input: FileInput): Verdict => {
   const located: { frames?: boolean } = {}
   const verdict = { ...judge(extracted.payload, extracted.media, extracted.flags, [...extracted.labels], input, located), proof_source: extracted.source }
   if (located.frames !== undefined) verdict.frames_name_capture = located.frames
+  // §3.1 step 4: a manifest is unauthenticated — anyone can add one outside
+  // the canonical bytes — so a depth-0 proof that does worse over these bytes
+  // than a differing sidecar never decides the verdict. Whatever the sidecar
+  // wins here, deleting the manifest would win too; ties keep the manifest's.
+  if (extracted.alternate) {
+    const alt = extracted.alternate
+    const altLocated: { frames?: boolean } = {}
+    const other = { ...judge(alt.payload, extracted.media, null, [...alt.labels], input, altLocated), proof_source: alt.source }
+    if (altLocated.frames !== undefined) other.frames_name_capture = altLocated.frames
+    if (OUTCOME_RANK[other.outcome] > OUTCOME_RANK[verdict.outcome]) return other
+  }
   // §3.2: a proof found up the `parentOf` chain is the proof of a source
   // capture, and the file in hand is a derivation its Content Credentials
   // declare. It can reach what the source's proof proves of it — the same
@@ -218,6 +229,16 @@ export const verifyFile = (input: FileInput): Verdict => {
     }
   }
   return verdict
+}
+
+/**
+ * §3.1 step 4: how much an outcome says about the received bytes, for
+ * choosing between a depth-0 proof and a differing sidecar. Every other
+ * outcome — red, no proof, unsupported — ranks 0.
+ */
+const OUTCOME_RANK: Record<Outcome, number> = {
+  authentic: 3, verified_clip: 2, frames_not_compared: 1,
+  tampered: 0, corrupted_proof: 0, nested_proof: 0, no_proof_found: 0, unsupported_format_version: 0
 }
 
 /** §3.2: what a reader is told when a carried proof is about a source capture. */

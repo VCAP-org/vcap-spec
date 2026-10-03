@@ -24,7 +24,7 @@ spec/      the specification document (normative), the watermark payload
            measured), the C2PA interoperability and sidecar companion
            (informative, with the writer rules it pins) and the public threat model
 reviews/   review notes on the draft (crypto, implementability); the spec absorbs them and cites
-           their measurements, they stay as the record of why
+           their measurements, they stay as the record of why; design-*.md are proposals not yet adopted
 schema/    JSON Schema of the proof + validator
 vectors/   conformance vectors: sealed files, broken signatures, edge cases (see vectors/README.md),
            the versioned corpus manifest and how to claim conformance against it (vectors/CONFORMANCE.md)

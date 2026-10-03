@@ -202,7 +202,26 @@ restore are in `c2pa-interop-1.0.md` §4 and §5.
      sidecar, which is presented as this file's proof, outranks a source's
      (vector 130). A sidecar next to a depth-0 proof is compared with it as
      JCS; not equal is *sidecar differs*, and the sidecar is not used
-     (vector 127). The canonical bytes are the **whole** received file (§4.1
+     (vector 127) — **unless it does better over the same bytes**. A
+     manifest is not authenticated to a reader and, on a JPEG, sits outside
+     the canonical bytes (§4.1): anyone can add one carrying another capture's
+     proof beside a genuine file and its genuine sidecar, and a depth-0 proof
+     that always won would turn that into an accusation (vector 169). So when
+     the two differ, a verifier computes the verdict of each, as this step
+     says for either, and ranks their outcomes: *authentic* above *verified
+     clip* above *frames not compared* above every other outcome, which rank
+     equal. When the sidecar's outcome ranks **strictly above** the depth-0
+     proof's, the sidecar's verdict is the verdict, `proof_source` is
+     `sidecar`, and it carries *manifest copy differs* instead of *sidecar
+     differs* (vectors 169, 171). Otherwise the depth-0 proof's verdict stands
+     with *sidecar differs* (vectors 127, 170). Only outcomes are ranked,
+     never ceilings: a sidecar stripped of a `revoked` `attestation_status`
+     reads amber where the manifest's complete copy reads red, and must not
+     win. Nothing is gained this way that
+     deleting the manifest would not give — the sidecar is the next proof in
+     this order — and the manifest's copy can still lower a ceiling on a tie,
+     never raise one. The same holds for a store the caller hands over.
+     The canonical bytes are the **whole** received file (§4.1
      step 1, `F' = F`), including whatever a stale or displaced trailer left
      behind (vector 70). The verdict is computed exactly as for an embedded
      proof, and a verifier MUST NOT weaken it or add a label because the proof
@@ -224,7 +243,7 @@ A C2PA Manifest Store (C2PA 2.4, 11.1.4.2 *Manifest Store*) can carry the proof
 as the assertion `io.github.vcap-org.vcap.proof` (`c2pa-interop-1.0.md` §2.1):
 a platform or an editor that keeps Content Credentials and drops trailing
 bytes still delivers the proof, and a derivation's store keeps its source's
-manifest, proof included. Normative for readers since 1.1 (vectors 123–147).
+manifest, proof included. Normative for readers since 1.1 (vectors 123–147, 169–171).
 A reader authenticates nothing about the store — no COSE signature, no
 certificate, no hashed URI: the proof authenticates itself (§4.2), and whether
 the manifest is valid is a C2PA validator's question, answered apart and never
@@ -299,7 +318,8 @@ merged into the verdict (`c2pa-interop-1.0.md` §1).
 - **The verdict.** §4–§8 are unchanged, over the canonical bytes of the
   received file.
   - **Depth 0** reads exactly as a sidecar: the manifest presents the proof as
-    this file's. *Authentic* when the bytes are the sealed ones (vector 124);
+    this file's. Beside a sidecar that differs, the better outcome of the
+    two decides (§3.1, step 4). *Authentic* when the bytes are the sealed ones (vector 124);
     *verified clip*, *frames not compared* or *tampered* under §5 for a video
     (vector 146); *tampered* for a photo that is not the one sealed
     (vector 128).
@@ -1781,7 +1801,9 @@ presented as this file's.
 
 **Where the proof came from.** *Sidecar differs* and *manifest copy differs*
 (§3.1) are warnings on an otherwise valid verdict: a second copy of the proof
-that is not the one used. `proof_source` and `frames_name_capture` (§3.2) are
+that is not the one used. A depth-0 proof from Content Credentials never makes
+a verdict red over a differing sidecar that does better over the same bytes
+(§3.1, step 4). `proof_source` and `frames_name_capture` (§3.2) are
 diagnostics and never labels.
 
 **The rule that outranks the table.** A watermark match with no valid signature is
@@ -1877,7 +1899,7 @@ says.
       video — confirmed against C2PA 2.4 (`c2pa-interop-1.0.md` §3, vectors
       68 and 73): `c2pa.hash.data` covers to end of file, `c2pa.hash.bmff.v3`
       needs `/free` excluded; executed with a real claim generator (c2pa-rs
-      0.91) and a test signing credential in vectors 123–147, whose C2PA
+      0.91) and a test signing credential in vectors 123–147 and 169–171, whose C2PA
       results `expected.json` records. The on-device check waits for a
       signing certificate of our own
 - [ ] `REVIEW (BE)` a C2PA update manifest appended to a sealed ISO-BMFF file
@@ -1889,6 +1911,14 @@ says.
       the original store's `box_purpose` from `manifest` into `original` in
       place (C2PA A.5.3), inside `media.hash` (`c2pa-interop-1.0.md` §6)
 - [ ] `REVIEW (mobile)` per-segment signing cost in StrongBox on a long clip
+- [ ] `REVIEW (BE)` a clip's timing is not bound: `stts`, `ctts`, the `mdhd`
+      timescales, the media edit's duration and the audio sample entry are
+      outside every segment hash and outside `media.presentation`, so a
+      re-mux can freeze, re-time or reorder the frames of a clip that still
+      reads *verified clip* (an original is covered by `media.hash`). No
+      verifier-only rule closes it; a proposal that signs per-segment timing
+      without changing the segment message is in
+      `reviews/design-clip-timing.md`
 - [~] `REVIEW (mobile)` NAL byte definition and audio DTS rule reproducible on both encoders — the DTS clock is now named (M8) and the timeline with it (edit lists, §5); H.264 and HEVC on Android are reproduced byte for byte by a second implementation written from this text (`tools/src/container.ts`, the containers of vectors 36 and 37, verified under a presentation-bound core in 166 and 158), which is what "reproducible" was asking; on iOS the NAL bytes are reproduced for HEVC in MOV (vector 48's container, 167) and H.264 in MP4 (vector 85's, 168), and the audio DTS rule is not yet exercised: neither clip has an audio track
 - [x] `REVIEW (mobile)` hashing two interleaved tracks during encoding — resolved: 8 KB and 0.5 ms per segment on a TEE device (M8)
 - [ ] `REVIEW (mobile)` metadata stripping before sealing for pseudonymous captures
@@ -1924,7 +1954,9 @@ says.
       and Content Credentials as a carrier of the proof (123–147), and
       **168** by corpus 5.0.0 with device integrity (148–150), the fused
       position source (151), the verdict hardening and presentation binding
-      (152–164) and `media.presentation` required (165–168),
+      (152–164) and `media.presentation` required (165–168), and **171**
+      in corpus 6.1.0 with a sidecar no longer overruled by a worse
+      depth-0 manifest proof (169–171),
       checked by the reference verifier in `tools/`. The §7 vectors
       trust the anchors in `vectors/_trust/`, whose attestation root is a test
       root: they prove the level logic, not that an implementation can walk a

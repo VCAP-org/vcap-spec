@@ -12,6 +12,46 @@ else.
 
 ## Unreleased
 
+### A forged manifest no longer accuses a file with a genuine sidecar — corpus 6.0.0 → **6.1.0**
+
+**Breaking** for verifiers (a reading rule changed), not for the corpus: no
+committed vector moved bytes or verdict, so the bump is minor (`vectors/README.md`,
+*Bump policy*). Corpus 6.1.0 (171 vectors).
+
+§3.1 step 4. Before: with no footer, the active manifest's proof always
+outranked the sidecar. A Content Credentials manifest is not authenticated to
+a vcap reader and, on a JPEG, sits outside the canonical bytes, so anyone
+could add one carrying another capture's proof beside a trailer-stripped
+genuine file and its genuine sidecar, and the verdict was **tampered**, red —
+a false accusation from bytes nobody vouched for. Now, when a sidecar differs
+from the depth-0 proof, a verifier computes both verdicts and ranks their
+outcomes (*authentic* > *verified clip* > *frames not compared* > everything
+else). The sidecar decides only when it ranks **strictly above**; its verdict
+then carries *manifest copy differs* and `proof_source` `sidecar`. On a tie
+the depth-0 proof stands with *sidecar differs*, as before. Outcomes, never
+ceilings, are ranked: a sidecar stripped of a `revoked` attachment must not
+beat the manifest's complete copy. Nothing is gained that deleting the
+manifest would not give. The same applies to a store the caller hands over.
+
+- **New**: 169 (JPEG: foreign proof in the manifest, genuine sidecar →
+  *authentic*, *manifest copy differs*), 170 (JPEG: vector 128's file, a
+  sidecar that also reads *tampered* → the depth-0 proof stands, *tampered*),
+  171 (vector 89's clip: a foreign video proof in the manifest reads *frames
+  not compared*, the sidecar *verified clip* 1–2 of 3 → the sidecar's, with
+  *manifest copy differs*). Minted by `make-c2pa-vectors.ts --only
+  169,170,171`; notes record c2patool 0.27.16. Vector 127 (the manifest's
+  proof is the better one) is unchanged.
+
+**What a verifier that predates 6.1.0 does**: reads 169 *tampered* and 171
+*frames not compared*, from the manifest's proof; 170 passes.
+
+**Open, not changed**: a valid-CRC trailer appended to a trailer-stripped
+genuine file is the same shape — it outranks the sidecar (step 1) — and is
+left for review. **A clip's timing is not bound** (`stts`, `ctts`, `mdhd`
+timescales, the media edit's duration, the audio sample entry): recorded in
+§11 and `threat-model.md` §5.1; no verifier-only rule closes it, and
+`reviews/design-clip-timing.md` proposes what the sealers would sign.
+
 ### C2PA video vectors rebuilt over a presentation-bound core — corpus 5.0.0 → **6.0.0**
 
 **Breaking** for the corpus, not the format: no spec text changes. A major

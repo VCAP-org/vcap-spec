@@ -1,6 +1,6 @@
 {
-  "corpus_version": "6.0.0",
-  "vector_count": 168,
+  "corpus_version": "6.1.0",
+  "vector_count": 171,
   "vectors": [
     {
       "name": "01-jpeg-sealed",
@@ -1175,6 +1175,27 @@
       "outcome": "authentic",
       "sha256": "dfc8861276889a5900e66d552772ecaec96bf641dc798bee82d186c934fac411",
       "files": 4
+    },
+    {
+      "name": "169-jpeg-c2pa-foreign-proof-sidecar",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "350fd2af16681f2c0dd20a444f8e6528809ae0ebb23cd17164a595e6f4b4a8e4",
+      "files": 5
+    },
+    {
+      "name": "170-jpeg-c2pa-foreign-proof-sidecar-no-better",
+      "kind": "file",
+      "outcome": "tampered",
+      "sha256": "60bf22e86d4da6e09d5a0b7fb5cc291ceda2af6611b0fb2af2d9df7b5a5003b4",
+      "files": 5
+    },
+    {
+      "name": "171-mp4-c2pa-foreign-proof-sidecar",
+      "kind": "container",
+      "outcome": "verified_clip",
+      "sha256": "b83b96d7c648f4a668166a10fa210e46517d3fd87f0057e9841c16adc81d2daf",
+      "files": 5
     }
   ],
   "fixtures": {
