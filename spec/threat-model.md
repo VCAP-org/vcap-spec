@@ -31,7 +31,11 @@ For a capture that verifies **green**, and only then:
    an on-chain block.
 
 For a capture that verifies **amber**, one or more of these is not proven, and
-the verifier says which.
+the verifier says which. Amber is not a floor under red: evidence that would
+make a verdict red can be deleted from a file without breaking a signature —
+a revoked `attestation_status` stripped reads *chain revocation not checked* —
+so a verifier that can fetch the evidence itself does (`vcap-proof-1.0.md` §8,
+*What amber does not say*).
 
 ## 2. What the system does not claim
 
@@ -90,8 +94,16 @@ Boundaries, each enforced by code and tested:
   the log serves is verifiable without trusting the server: signed tree
   heads, inclusion and consistency proofs, signed status.
 - **Verifier ↔ everything**: a verifier needs no server of ours to reach a
-  verdict. The proof carries its evidence (`registry` inline); revocation is
-  the one online check and degrades to *revocation not checked*.
+  verdict — that is the floor, and it is not negotiable. The signature, the
+  chain, the media hash, the segment chain and every attachment the proof
+  carries (`registry` inline, the token, the anchor's path) are checked from
+  the file alone. Above the floor, some answers only a service can give: the
+  log's signed key status (ours), a chain's current status list (Google's),
+  an anchor's on-chain record (a public chain, through a node or a gateway).
+  Green needs the first, so a fully offline verifier never reaches green, and
+  it says so (*revocation not checked*). Each such answer is named as its
+  source, signed by it where it can be, and its absence degrades the verdict
+  instead of breaking it.
 
 ## 4. Attackers
 
@@ -140,6 +152,8 @@ Boundaries, each enforced by code and tested:
 | Stolen key, backdated clock | a thief holding a device key revoked for loss or rotation — not retroactive — sets `time.device_clock` before the revocation | with no trusted instant the log is asked about the verifier's clock, never the device's; revoked then → *key revoked*, red (§6.2, vector 155) | none on the key's standing. A capture an honest TSA stamped before the revocation keeps it, as it should |
 | Unlocked bootloader / rooted device with virtual camera | genuine hardware signs an injected frame | verified boot state and locked device required in the attestation; integrity statement (Play Integrity / App Attest) signed by the registry as an attachment; both prominent on the verdict | **high and accepted**: see §2. The verdict names it. Green requires a registry-signed `hardware` verdict from Play Integrity (`vcap-proof-1.0.md` §6.2, §7); anything else — absent, `basic`, `failed`, App Attest — is amber with *integrity not proven*, so stripping a `failed` verdict cannot raise the colour. What remains is a device that passes Google's strongest check while compromised, which a leaked attestation key has made possible before. The verdict counts only for the platform it attests (Play Integrity beside an iOS proof proves nothing, vector 153) and only under the key of the log the proof names (vector 154) |
 | Cloned Secure Enclave key (theoretical) | two devices with one key | App Attest counter must increase on every assertion; the receipt (future) | low |
+| Integrity verdict from another device | the holder of a key on a compromised device has a clean device running the attested app request Play Integrity with the capture's `core_hash` as nonce, and gets a `hardware` verdict for it | the registry relays a verdict only when Google's signed answer echoes `core_hash` and names the attested app as requester; the device holding the key must separately prove a locked, verified boot in its attestation `rootOfTrust` (`vcap-proof-1.0.md` §6.2, §7 rule 4) | **accepted and named**: Play Integrity attests a device and an app, never a key, so the verdict is bound to the capture and not to the key holder. Binding the nonce to a device-key signature adds nothing — a signature over the core is public in the proof, and one over a fresh challenge is what the key holder can hand to the clean device. The device genuineness of the key holder rests on the attestation chain |
+| Stripped revocation evidence | deletes a `revoked` `attestation_status` (or any attachment) from a file | none in the file: attachments are outside the core. Every condition for green is present evidence, so deletion never raises a verdict; an online verifier reads the chain's status list itself while the chain is current, and asks the log for the key's status (`vcap-proof-1.0.md` §6.2, §8) | **accepted and named**: red becomes amber with *chain revocation not checked* for a verifier that cannot fetch the list, and for every verifier once the chain has expired and its status is published nowhere |
 
 ### 5.3 Against the registry and the log
 
@@ -159,7 +173,7 @@ Boundaries, each enforced by code and tested:
 |---|---|---|
 | Google or Apple attestation root compromised or an attestation key leaked (older provisioning) | pinned roots; Google's revocation list checked, fail closed server-side; RKP preferred | accepted at the platform level; verifiers degrade, never fail silently |
 | QTSP compromised | two providers, failover; token chain validated offline; with an anchor, the token must predate the block and its signer be valid at the block time (§6.2) | a false time from a compromised QTSP is a false time; the token names the issuer |
-| TSA signing key leaked | a token is validated at its own `genTime`, which the key holder chooses; with a verified anchor the token must predate the block and the signer certificate must be valid at the block time, so a key leaked after its certificate expired cannot stamp a proof first anchored afterwards | **accepted and named**: a leaked TSA key can backdate a token to any instant inside its certificate's life, and a token that has no anchor has no bound at all. A verifier cannot tell that token from an honest one; the TSA's revocation is the only remedy |
+| TSA signing key leaked | a token is validated at its own `genTime`, which the key holder chooses; with a verified anchor the token must predate the block and the signer certificate must be valid at the block time, so a key leaked after its certificate expired cannot stamp a proof first anchored afterwards | **accepted and named**: a leaked TSA key can backdate a token to any instant inside its certificate's life, and a token that has no anchor has no bound at all. A verifier cannot tell that token from an honest one. This version requires **no** revocation check of the TSA signer (`vcap-proof-1.0.md` §6.2 validates a token offline); the remedy a verifier has is removing the TSA's root from the roots it pins, which un-trusts every token under it. An online check of the TSA's revocation is open (§6) |
 | Attestation key leaked (keybox) | a revoked chain certificate is red unless a trusted instant predates the revocation date the source gives, and never for a compromise; `fetched_at` is not a date and a device clock never places a capture before a revocation (§6.2) | low: what remains is a capture stamped by an honest TSA before the date a non-compromise revocation took effect |
 | Chain reorganization or censorship | anchoring is optional evidence; *not anchored* is a label | accepted |
 
@@ -167,7 +181,8 @@ Boundaries, each enforced by code and tested:
 
 | Threat | Mitigation | Residual |
 |---|---|---|
-| Linking captures to a device | `device.key_id` is a pseudonym for device+app; no device identifiers in attestation (no ID attestation) | **accepted and named** in the spec: pseudonymous ≠ unlinkable; per-capture keys are future work |
+| Linking captures to a device | `device.key_id` is a pseudonym for device+app; no serial, IMEI or MEID in the attestation (no ID attestation) | **accepted and named** in the spec: pseudonymous ≠ unlinkable; per-capture keys are future work |
+| Linking captures across key rotations | the `attestation` chain is not anonymous: a Remote Key Provisioning intermediate is issued to one device and certifies every key it makes while it lives, and `attestationApplicationId` names the app. Two proofs sharing an intermediate come from one device whatever their `device.key_id` | a pseudonymous writer may leave `attestation` out: the chain stays with the registry, committed in the log leaf as `attestation_digest` (`vcap-proof-1.0.md` §6.2) | **accepted and open**: a proof that carries its chain links its device across rotations; one that omits it proves `none` on Android, because only the chain proves an Android level. No offline proof of a level without disclosing the chain exists in this version |
 | Personal data in the public log | leaves carry key identifiers, level, digests, log time — nothing else; the registry mapping stays in the control plane | none by construction, enforced by the plane boundary |
 | Personal data leaking through the plane boundary | allowlist per endpoint, both sides; second net over values; tests assert names and VAT never cross | low |
 | EXIF in the signed file | signed as content; pseudonymous mode must strip **before** sealing | implementation duty of the SDKs |
@@ -176,8 +191,10 @@ Boundaries, each enforced by code and tested:
 
 ### 5.6 Availability and failure behaviour
 
-- The verification path contains none of our servers: an outage cannot turn a
-  green into anything. Revocation checks degrade to *revocation not checked*.
+- The verification floor contains none of our servers: an outage cannot make
+  a file unreadable or turn any verdict red. It can lower green to amber —
+  green needs the log's signed key status, and without it the verdict says
+  *revocation not checked* (§3).
 - Server-side, every check fails closed: no revocation list, no challenge store,
   no attestation → refused.
 - A denial of service against enrolment stops new keys, not existing proofs.
@@ -266,7 +283,11 @@ like, and it is the true one.
 - **An iOS device-integrity source**: until one exists, iOS captures are
   amber at best (`vcap-proof-1.0.md` §6.2).
 - **External audit**: commissioned during phase 1, findings folded here.
-- **Per-capture keys** for unlinkability: cost and policy, later.
+- **Per-capture keys** for unlinkability: cost and policy, later. They would
+  not unlink a proof that carries its attestation chain (§5.5).
+- **TSA revocation**: no verifier checks a TSA signer's revocation (§5.4);
+  an online check, and what it may conclude about a token issued before the
+  revocation, are to be specified.
 - **Position, corroborated** (§5.7): the residual on SIM/device decoupling
   stays *medium* until the registry's combination rule (number verification
   over the capturing session, SIM swap, local signals) exists and is
@@ -280,6 +301,13 @@ like, and it is the true one.
 - 2026-10-03 — §5.1: a forged manifest added beside a genuine file and its
   sidecar no longer accuses the file (`vcap-proof-1.0.md` §3.1 step 4); a
   re-timed clip is an open residual, with a proposal.
+- 2026-10-03 — Audit fixes, text only. §1: amber may hide red. §3: the
+  verifier boundary states the offline floor and names the services above
+  it. §5.2: an integrity verdict is bound to the capture and not to the key
+  holder (accepted); stripped revocation evidence (accepted). §5.4: no
+  verifier checks TSA revocation, so it was never "the only remedy"; open.
+  §5.5: the attestation chain links captures across key rotations (accepted,
+  open).
 
 - 2026-10-02 — §5.1: the presentation-edit residual no longer describes a
   proof without `media.presentation` as one that binds no clip; the field is

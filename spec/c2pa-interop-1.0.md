@@ -61,10 +61,10 @@ and that the key was on a public log before the capture.
 | Trusted time | RFC 3161 token over `core_hash`, inside the proof, checked offline against a pinned TSA root (§6.2) | RFC 3161 token over the claim signature, inside the COSE structure (10.3.2.5 *Time-stamps*; 15.8 *Validate the Time-Stamp*) |
 | Key on a public log | `registry`: RFC 6962 inclusion proof against a signed tree head, carried inline, checked offline (§6.2) | none. Trust is a list of signers (14.4) plus revocation by OCSP (14.5.2, 15.9) |
 | Existence before an instant nobody controls | `anchor`: Merkle path to a root recorded on a public chain (§6.2) | none |
-| Device state | `integrity`: Play Integrity / App Attest verdict, relayed and signed by the registry; shown, and `failed` caps the ceiling at amber (§6.2, §7) | none |
+| Device state | `integrity`: Play Integrity / App Attest verdict, relayed and signed by the registry; shown, and anything but a valid `playIntegrity` `hardware` verdict on an Android proof — absent, `basic`, `failed`, any `appAttest` — caps the ceiling at amber with *integrity not proven* (§6.2, §7) | none |
 | Watermark | `watermark`: layout named in the signed core, payload bound to `capture_id` (§6.1, `watermark-layouts-1.0.md`) | `c2pa.soft-binding` naming an algorithm from a public list (18.10, 9.3 *Soft Bindings*) |
 | What the verifier says when something is missing | one exact label per absent or unreadable piece of evidence (§8) | status codes (15.2.2 *Standard Status Codes*) and three manifest states, *Well-Formed*, *Valid*, *Trusted* (14.3) |
-| Verification without a server | always (invariant) | offline for the signature and binding; the trust list and OCSP are fetched or shipped |
+| Verification without a server | always, up to amber: the signature, the bindings and every carried attachment are checked offline; green also needs the log's signed key status, fetched from the log (§6.2, §7) | offline for the signature and binding; the trust list and OCSP are fetched or shipped |
 
 Two consequences a UI must respect. A C2PA *Trusted* manifest says a signer on
 a trust list made a statement; it does not say the statement is true, and it

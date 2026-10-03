@@ -52,6 +52,50 @@ timescales, the media edit's duration, the audio sample entry): recorded in
 §11 and `threat-model.md` §5.1; no verifier-only rule closes it, and
 `reviews/design-clip-timing.md` proposes what the sealers would sign.
 
+### Audit of 3 October 2026: text fixes
+
+Text only, no corpus change, no verdict moves: every sentence below either
+states what the vectors already pin or records a limit.
+
+- **§6.2 `anchor`**: the block time MUST come from the chain's own record for
+  `anchor_id` (contract storage or the batch's event), never from the proof's
+  `tx`/`block`, which are unsigned locators; the contract address comes from
+  the verifier's trust list. §6.2 `timestamp` rule 6 no longer says a block
+  time is "chosen by nobody": the sequencer or validators set it within the
+  chain's bounds, and on EBSI it is read through a gateway.
+- **§7 table**: the green `strongbox` row asked for "RKP fresh", which no
+  rule defined and no verifier checked; removed, with a sentence saying rule 1
+  is the only freshness rule.
+- **§6 structure listing**: `attestation_status` was missing.
+- **§6.1 field table**: `policy.pseudonymous` was "verified against
+  consistency", which nothing defined; it is a declaration nothing verifies,
+  with *flags disagree* as the only check.
+- **§6.2 `timestamp`, `threat-model.md` §5.4**: no TSA revocation check is
+  required, so the threat model no longer calls it "the only remedy";
+  online TSA revocation is open.
+- **§8 *What amber does not say*, §6.2 `attestation_status`**: stripping an
+  attachment can turn red into amber (a removed `revoked` snapshot reads
+  *chain revocation not checked*); an online verifier SHOULD read the chain's
+  status list itself while the chain is current, as it asks the log.
+- **§6.2 `integrity`, `threat-model.md` §5.2**: accepted limit — a Play
+  Integrity verdict is bound to the capture (`nonce = core_hash`, attested
+  requester), not to the device holding the key; the key holder's hardware
+  rests on the chain's `rootOfTrust`.
+- **§6.2, `threat-model.md` §5.5**: the attestation chain links captures of
+  one device across key rotations (shared RKP intermediate,
+  `attestationApplicationId`); omitting it proves `none` on Android. Accepted,
+  open.
+- **§6.2 `attestation_status` `sig`**: recorded as a known inconsistency — the
+  only registry-signed message without a `"vcap/1.0/…"` separator. Fixed at
+  the next breaking change to the attachments.
+- **`c2pa-interop-1.0.md` §1 table**: device state no longer says "`failed`
+  caps amber" (anything but a valid `playIntegrity` `hardware` caps), and
+  verification without a server is "up to amber".
+- **README invariant, `threat-model.md` §3, §5.6**: "the verification path
+  never contains our servers" is restated as a floor — every verdict reached
+  offline — with the services above it named as sources; an outage can lower
+  green to amber, never break a verdict.
+
 ### C2PA video vectors rebuilt over a presentation-bound core — corpus 5.0.0 → **6.0.0**
 
 **Breaking** for the corpus, not the format: no spec text changes. A major

@@ -814,6 +814,7 @@ the capture onwards, each verifiable on its own and each bound to `core_hash`.
   // ---- attachments: each self-authenticating, bound to core_hash (§6.2) ----
   "segments":    [ { "gop": 0, "hash", "prev", "sig" } ],   // "range" is deprecated: writers MUST NOT emit it (§5)
   "attestation": [ "base64url DER leaf", "...", "base64url DER root" ],   // omitted on web
+  "attestation_status": { "source", "fetched_at", "entries": [ { "serial", "status", "reason", "revoked_at" } ], "sig" },
   "registry":    { "log_id", "leaf_index", "leaf": { ... }, "inclusion_path": [ ... ],
                    "tree_head": { "tree_size", "timestamp", "root_hash", "signature" } },
   "timestamp":   { "tsr", "tsa_issuer" },
@@ -942,7 +943,7 @@ Field table — type, required, verified against:
 | `watermark` | no | detector output, if the detector ran |
 | `time.device_clock` | no | nothing — declared |
 | `location` | no | `location_corroboration` and the level rules (§7.1) |
-| `policy.pseudonymous` | no | consistency: no device identifiers present |
+| `policy.pseudonymous` | no | nothing — the writer's declaration that it stripped identifying metadata before sealing (§4.1), which no verifier can check from the file; a trailer whose footer bit 2 says otherwise MAY be reported as *flags disagree* (§3) |
 
 **Retention reference (informative).** `policy.retention_ref` is reserved and
 has no operational meaning in v1.0. Its schema slot is retained for compatibility;
@@ -997,7 +998,14 @@ containing a schema-valid value remain readable under the same rules.
     revocation date **as the source itself gives it**, and is absent when the
     source gives none.
   - `sig`: the registry signing key's ES256 signature, P1363, over
-    `core_hash ‖ JCS(entries) ‖ uint64 BE fetched_at`.
+    `core_hash ‖ JCS(entries) ‖ uint64 BE fetched_at`. **Known
+    inconsistency**: this is the one message the registry key signs without
+    a domain separator — tree heads, key statuses, `integrity` and
+    `location_corroboration` all begin with a `"vcap/1.0/…"` string. It is not
+    exploitable as it stands, because every other message begins with ASCII
+    bytes where this one begins with a SHA-256 output nobody chooses, but it
+    is the exception the rule should not have. The next breaking change to
+    the attachments adds a separator here (`CHANGELOG.md`).
 
   **Which key.** The signing key is the one that signs that log's tree heads,
   so a verifier needs no key it does not already hold for `registry`. The
@@ -1062,6 +1070,22 @@ containing a schema-valid value remain readable under the same rules.
   a time-stamping authority placed in 2026, for the same reason a rotated
   device key does not rewrite the past; a batch key leaked and listed in 2028
   does not keep attesting what its thief signed with a clock set to 2026.
+
+  **Stripping turns red into amber.** The attachment is outside the core, and
+  anyone holding the file can delete it: a proof whose snapshot says
+  `revoked` reads red, and the same proof without the snapshot reads amber
+  with *chain revocation not checked*. The signature stops a `revoked` entry
+  becoming `valid`; nothing in a file can stop evidence leaving it. So an
+  amber verdict carrying *chain revocation not checked* is not a statement
+  that the chain was not revoked (§8, *What amber does not say*). A verifier
+  with network, reading a proof while the chain is still current — every
+  certificate within its validity at the verifier's clock — **SHOULD** read
+  the source's status list itself and apply this section's rules to what it
+  read, as it asks the log for the key's status (below): what it reads
+  directly cannot have been stripped. A verifier that does so says which
+  source it read and when; one that cannot, or that reads a chain already
+  expired — whose status is published nowhere any more — has only what the
+  file carries.
 
 - **`registry`** — everything a verifier needs to check, **offline**, that the
   signing key was in the transparency log when the tree head was signed. Not a
@@ -1159,7 +1183,16 @@ containing a schema-valid value remain readable under the same rules.
   Merkle implementation. A verifier MUST recompute the root from `core_hash`,
   `index`, `tree_size` and `merkle_path`, then read `(root, tree_size)` for
   `anchor_id` from the contract (or a light client) and compare both; the
-  block's timestamp is the proven upper bound. On `ebsi` and `ebsi-pilot`
+  block's timestamp is the proven upper bound. **The block time MUST come from
+  the chain's own record for `anchor_id`** — the timestamp the contract stored
+  with the batch, or the block that emitted the batch's event as the chain
+  reports it — and **never** from the proof's `tx` or `block`. Those two are
+  unsigned locators, outside the core and outside every signature: anyone can
+  rewrite them, so they tell a verifier where to look and nothing it may
+  conclude. A verifier that dated a capture by the proof's `block` would let
+  whoever holds the file pick the instant. The contract address is the one
+  the verifier's trust list publishes for `chain`, never one the proof names
+  (it names none). On `ebsi` and `ebsi-pilot`
   that read goes through EBSI's Ledger API gateway,
   `POST /ledger/v4/blockchains/besu`: a JSON-RPC proxy that forwards the
   read methods a verifier needs — `eth_call`, `eth_getTransactionReceipt`,
@@ -1175,7 +1208,7 @@ containing a schema-valid value remain readable under the same rules.
   When the chain is read and agrees, the block's timestamp becomes the instant
   the proof is validated at (§7), outranking `time.device_clock` — and it is an
   **upper bound**: the capture existed before that block, which nobody can
-  move, and nothing says how long before. An anchor whose root the chain
+  move once the chain has settled it, and nothing says how long before. An anchor whose root the chain
   contradicts gives no instant at all: dating a capture by a transaction that
   does not contain it would be worse than having no anchor.
 - **`integrity`** — `source` is `playIntegrity`, `appAttest` or `none`
@@ -1207,6 +1240,24 @@ containing a schema-valid value remain readable under the same rules.
   whether the device is jailbroken, so a registry MUST NOT relay an
   `appAttest` verdict as `hardware`: a valid assertion from an App Store or
   TestFlight build is `basic`, a failed one `failed`.
+
+  **What the verdict is bound to** (accepted limit). The app requests a
+  `playIntegrity` verdict with `core_hash` as the request's nonce, and the
+  registry relays it only when Google's signed answer echoes that nonce and
+  names the attested app as the requesting package: the verdict is about
+  **this capture**, asked for by the
+  app whose key signed it. It is **not** bound to the device that holds the
+  key. Play Integrity attests a device and an app, and no key: nothing in its
+  answer says which keystore the requester used. Binding the nonce to a fresh
+  device-key signature would add nothing, because a signature over the core
+  is already public in the proof, and a signature over a fresh challenge is
+  something the holder of a compromised key can produce and hand to a clean
+  device that asks for the verdict. That the key sits in genuine, locked,
+  verified-boot hardware is what the attestation chain's `rootOfTrust` proves
+  (§7, rule 4), not this attachment; what this attachment adds is that a
+  device running the attested app was intact when the capture was registered.
+  The two are evidence about the same capture from two directions, and green
+  asks for both. The residual risk is in `threat-model.md` §5.2.
 
   **Which platform.** A source attests the platform it runs on and no other:
   `playIntegrity` speaks for `device.platform` `android` only. A `hardware`
@@ -1343,12 +1394,26 @@ containing a schema-valid value remain readable under the same rules.
      block time (vectors 103, 104). Validating at `genTime` is circular in one
      respect: `genTime` is chosen by whoever holds the TSA key, so a key that
      leaks after its certificate expired can stamp a fresh core with a time
-     inside the certificate's life. A block time is chosen by nobody. A core
+     inside the certificate's life. A block time is not chosen by the holder
+     of any key in the proof: the sequencer (Base) or the validators (EBSI's
+     Besu network) set it, within the bounds the chain's consensus enforces
+     against its parent block, and on `ebsi` the verifier reads it through
+     EBSI's gateway, so it trusts that operator not to lie about the record.
+     That is a weaker statement than "chosen by nobody" and a different one
+     from a TSA's: no party a forger controls sets it, and the contract it is
+     read from is the one the verifier's trust list names for the chain. A core
      first anchored after the certificate expired cannot carry a token that
      honest stamping produced, and a token that postdates the block which
      already anchors its core contradicts the order the evidence was made in.
      Without an anchor nothing bounds a leaked TSA key's backdating; the
      residual risk is in `threat-model.md` §5.4.
+
+  These six are the whole check: **no revocation check of the TSA signer is
+  required**, and a verifier that skips one is conformant. A token is
+  validated offline from what the proof carries, which holds no revocation
+  data, and what an online check could conclude about a token issued before
+  a revocation is not yet specified (`threat-model.md` §5.4, §6). A verifier
+  that stops trusting a TSA removes its root from the roots it pins.
 
   Any failure → both labels of §8, and the instant falls to the next source
   (§7). No pinned TSA root at all is *trusted time not evaluated*: evidence
@@ -1365,6 +1430,24 @@ in the registry, behind access control. `device.key_id` is a **pseudonym** for
 the device+app installation, and every capture from it is linkable through it,
 whatever `policy.pseudonymous` says: that flag hides the operator, not the
 device. Per-capture keys would break the link and are out of scope for v1.0.
+
+The `attestation` chain links further than the key does (accepted, open).
+It carries no serial, IMEI or MEID, but it is not anonymous: a Remote Key
+Provisioning intermediate is issued to one device and certifies every key
+that device creates while it lives, and the leaf's `attestationApplicationId`
+names the app's package and signing certificates. Two proofs whose chains
+share an intermediate come from the same device even after the device key
+rotates, and a chain names the app that sealed the capture. A
+`policy.pseudonymous` proof that carries its chain is therefore linkable
+across key rotations and names its app. One that leaves `attestation` out is
+linkable through `device.key_id` only, and the chain stays with the registry,
+whose log leaf commits to it as `attestation_digest` without revealing it —
+at the price, on Android, of a proven level of `none`: only the chain proves
+an Android level (§7), and a digest in a leaf proves nothing a verifier can
+recompute. iOS carries no chain and is unaffected. This version defines no
+way to prove an Android level offline without disclosing the chain; a writer
+of pseudonymous captures chooses between the two, and per-device
+unlinkability is open, with per-capture keys (`threat-model.md` §5.5).
 
 ---
 
@@ -1436,7 +1519,7 @@ for *key not in transparency log*.
 
 | proven level | attestation / binding | key in log before capture | verdict ceiling | label shown |
 |---|---|---|---|---|
-| `strongbox` | valid to Google hardware root, RKP fresh, revocation checked, app admitted, device integrity proven | yes | **green** | sealed in secure hardware |
+| `strongbox` | valid to Google hardware root, revocation checked, app admitted, device integrity proven | yes | **green** | sealed in secure hardware |
 | `tee` | valid to Google root, revocation checked, app admitted, device integrity proven | yes | **green** | sealed in the TEE |
 | `secureEnclave` | the registry records an App Attest binding (see below) | yes | **amber** in this version: no source proves an iOS device intact | integrity not proven — *our records* |
 | any of the above | valid, and no valid `integrity` attachment from `playIntegrity` with verdict `hardware` on an `android` proof, signed by the log the proof names (§6.2) | any | **amber** | integrity not proven |
@@ -1474,6 +1557,12 @@ for *key not in transparency log*.
   `tee` claimed beside a chain that holds and proves `none` is *inconsistent
   claim* (vector 157). The measure is the level before revocation: a revoked
   chain retracts a level, it does not contradict the claim.
+- **No freshness rule beyond rule 1.** A Remote Key Provisioning
+  intermediate lives days, and rule 1 already validates it at the proven
+  instant; nothing else about how recent a chain is enters the verdict. How
+  fresh a chain was when the key enrolled is the registry's check at
+  enrolment (`threat-model.md` §5.2, *Relayed attestation*), which a verifier
+  cannot repeat from the file, and the table above asks nothing of it.
 - **A self-chosen attestation challenge is allowed.** A device that never
   enrolled produces a genuine chain over a challenge it picked itself; the
   chain still proves the hardware level, and the missing registry entry lands
@@ -1605,6 +1694,21 @@ a different statement from *tampered* (vector 44). **Labels accompany every
 verdict whose outcome is not red**, a red ceiling included; a red *outcome*
 carries its reason and nothing else, because "no trusted time" on a tampered
 file is noise. A clip's outcome is amber whatever its ceiling would be.
+
+**What amber does not say.** Attachments are outside the core, and anyone
+holding a file can delete one without breaking a signature. The format is
+built so that deleting evidence never *raises* a verdict — every condition for
+green is a piece of evidence that must be present (§7) — but it can lower one,
+and some of what it lowers is red: a proof whose `attestation_status` says
+`revoked` is red, and the same proof stripped of that attachment is amber with
+*chain revocation not checked*. **An amber verdict may hide a red one.** Its
+labels say which evidence is missing, and missing evidence is not evidence
+that the answer would have been good. The remedy is to fetch what can be
+fetched instead of reading it from the file: the log's signed key status
+(§6.2, *Revocation, online*), and, while the attestation chain is still
+current, the chain's status list (§6.2, `attestation_status`) — an online
+verifier SHOULD do both. What can no longer be fetched — the status of a chain
+that has expired — is only ever as good as the copy in the file.
 
 **Required.** `v`, `capture_id`, `media`, `media.mime`, `media.hash`,
 `media.w`, `media.h`, `device.secure_hw`, `device.key_id`, `sig`, for a

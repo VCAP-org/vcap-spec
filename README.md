@@ -51,8 +51,14 @@ tools/     reference tooling (Node 22, TypeScript): JCS, trailer, canonical byte
 
 These hold for every line of code in every repository:
 
-- **The verification path never contains one of our servers.** If a component
-  becomes necessary to produce a verdict, that is a design error.
+- **No server of ours is needed to produce a verdict.** The floor is the file
+  alone: signature, attestation chain, media hash, segment chain and every
+  attachment the proof carries are checked offline, and a verdict is always
+  reached. Above the floor, answers only a service can give — the log's signed
+  key status, a chain's current revocation list, an anchor's on-chain record —
+  raise what a verdict can say (green needs the log's status) and are named as
+  their source in it; their absence lowers a verdict, never breaks it. A
+  component that becomes necessary to produce *a* verdict is a design error.
 - **Server registration is always optional**: capturing and verifying work with
   no account and no network.
 - **A watermark alone is never a green verdict**: without a valid signature it is
