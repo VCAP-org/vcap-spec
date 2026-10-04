@@ -6,7 +6,7 @@
     "w": 16,
     "h": 16,
     "duration_ms": 67,
-    "hash": "HHUER1IV1GHU5WxpCa7X44kxg__RCS9yyxAE4r1c6iw",
+    "hash": "U5rN1owBcJORt7heTTOVULf3J_wXpuxAwgUqVbNps80",
     "segment_count": 3,
     "presentation": {
       "config": "17I-W-TgchCDabrlcW5KJK1-3O6xgFYfkWBNenLVn1Y",
@@ -25,6 +25,10 @@
         1048576,
         1048576
       ]
+    },
+    "timing": {
+      "video_timescale": 15360,
+      "root": "8SAPN2RGHS4YHJ-twVgYB8u60ybfYxgfKbtoPbZKYD8"
     }
   },
   "device": {
@@ -57,24 +61,27 @@
       "gop": 0,
       "hash": "kr6s8q6y81Fz3F_6xL4M-VVslfHElaTY-iVP8ZNSMk8",
       "prev": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-      "sig": "gT1cQ8_T7x-wqXTUlrwaeBaaDI2hwLEbUq8LiLmjjN0ageN0YFn4n3h5MM9StoXLhr29GYUCH0-9OHO335VNaQ"
+      "sig": "gT1cQ8_T7x-wqXTUlrwaeBaaDI2hwLEbUq8LiLmjjN0ageN0YFn4n3h5MM9StoXLhr29GYUCH0-9OHO335VNaQ",
+      "timing": "nbJ9cqptnj645RNcf22FZr17a2kZ_MgaNOwUKHvm_pw"
     },
     {
       "gop": 1,
       "hash": "3q0FJMsh2sAgYapRbubMFw_LjQsWg5LzPptUVqwz9kI",
       "prev": "lPuR8oUo-FkoxlMOR3MUQgRLVVZ9mzRm1VXfF2nxMUk",
-      "sig": "o1NDn-dd6ta2gtxe1A3UZY2mD1flCdixblH6Zqe7O2gSfvITDZ8gRgdvXaOJGl_mUdVyEOLic81NGo2V1q8BmQ"
+      "sig": "o1NDn-dd6ta2gtxe1A3UZY2mD1flCdixblH6Zqe7O2gSfvITDZ8gRgdvXaOJGl_mUdVyEOLic81NGo2V1q8BmQ",
+      "timing": "hg2oEf9nXS7AlZF--88P2gB4VqWdMkbmvQv_7QAdXSU"
     },
     {
       "gop": 2,
       "hash": "9eBHdAvSkalXlM0lAO-pJeKwaNtM-qxGKaL_cjReqHA",
       "prev": "3DCOQWFjD3ktTMnczAe0MpvrYjS1fMakVD1Z21mq_f8",
-      "sig": "ECzio8byd1rCeEVVq8hn_AlLn_sZHO-4zJr4CSRI9rZm34XdQjHWyp0e3BEURASIXY2iXmqgoDwzNDiAhaSJGw"
+      "sig": "ECzio8byd1rCeEVVq8hn_AlLn_sZHO-4zJr4CSRI9rZm34XdQjHWyp0e3BEURASIXY2iXmqgoDwzNDiAhaSJGw",
+      "timing": "4N7Gn0gEs6bj0p9A9Qiui7S_s9vd275Wx8NKQxUdW_g"
     }
   ],
   "sig": {
     "alg": "ES256",
-    "value": "yc-h3vKdEom-Cnw2qkqlCa3u1VYJAeSM25Rja-uP2r89TAS3-khK_OXa_-1aPc-6BxsNBt2_J1gI-eLbFDQr1w",
+    "value": "N4GhDjNAXOmT08dqSjjtSsCvh7sO_kA4XSZ4fTdHMeQEGfcVe_Uojpikwicb5u8351txK4vuvYl5qyoOglOg9g",
     "pub": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEp2C_SxUua1GBx-6u3KBIJKPwOb6yEYmTqfdbgzJbVJCy1_wvmKAjjmvD-d5EdVWpGx0Jxcduppsd0SspNPHKyA"
   }
 }

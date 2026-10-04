@@ -35,14 +35,15 @@ every certificate path was validated at, and what proved it) appear on the
 vectors that carry attestation evidence. `location` (§7.1: `claimed`, the
 level the core asks for, and `level`, the one the evidence reaches — `none`,
 `declared`, `corroborated`, `authenticated`) appears on the position vectors
-(74–84, 151) and on 47, 86, 87, 89, 166 and 168, which declare no position
-and pin `none`.
+(74–84, 151) and on 47, 86, 87, 89, 166, 168, 175 and 178–186, which declare
+no position and pin `none`.
 `proof_source` (where the proof was read: `trailer`, `sidecar`, or `c2pa` with
 the carrying manifest's label and its depth on the `parentOf` chain) and
 `frames_name_capture` (whether a GOP of the file names the proof's capture)
 appear on the carrier vectors (123–147, 169–171) and on 172–174, and are compared where present.
 `debug`, where present, is for humans: intermediate bytes to compare before
-touching signatures.
+touching signatures (the 96-byte segment messages of 25, the timing records of
+175).
 
 Two fields are **not** a verdict and a reader never compares them. `writer`
 is for writer suites: `{"expect": "refuse", "error": "VCAP_C2PA_MANIFEST_PRESENT"}`
@@ -56,7 +57,8 @@ the error it refuses the file with. It is there so that nobody writes a C2PA
 promise the library does not keep — c2pa-rs reports
 `assertion.bmffHash.additionalExclusionsPresent` for `/free` and `/skip`, and
 `signingCredential.ocsp.skipped` on every file — and each vector's `NOTES.md`
-adds what c2patool 0.28.0 says.
+adds what c2patool says, with its version (0.28.0 for most, 0.27.16 for the
+ISO-BMFF vectors re-minted in corpora 6.0.0 and 7.0.0).
 
 `key_status`, where present, is also an **input**: §6.2's online revocation
 answer, as the corpus declares a verifier is assumed to have fetched it. It has
@@ -118,9 +120,11 @@ them from the committed 36 and 37 through `tools/src/remux.ts`, which rewrites
 sample tables only, and that is what keeps them auditable rather than
 asserted. Since the 5.0.0 corpus it also re-signs their core and segment chain
 with the test key, over the device's capture id and content hashes: the
-device proofs predate `media.presentation`, a required core field, and read
-*no proof found*, so an edit under them would test nothing else. 166–168 are
-the device containers of 36, 48 and 85 under such a core, unedited.
+device proofs predate `media.presentation` and `media.timing`, required core
+fields, and read *no proof found*, so an edit under them would test nothing
+else. Both fields, and each segment entry's `timing`, are read back from the
+device's container. 166–168 are the device containers of 36, 48 and 85 under
+such a core, unedited; 175–187 are the timing cases of 166 and of 89's cut.
 
 They are not all the same weight of evidence, and each `NOTES.md` says which it
 is. 36, 37, 47 and 85 carry a **real device signature**: an implementation that
@@ -146,7 +150,7 @@ The numbered corpus (`vectors/NN-*`) has its own version, in `vectors/VERSION`
 — separate from `vcap/1.0`, the proof format version. The format version says
 what a proof looks like; the corpus version says which exact vectors an
 implementation checked itself against, so a third party can claim "conformant
-with vcap-spec corpus 6.2.0" and mean something a consumer can check.
+with vcap-spec corpus 7.0.0" and mean something a consumer can check.
 
 `vectors/MANIFEST.json` is that check: for every `vectors/NN-*` directory, its
 `kind`, its `outcome`, and a SHA-256 over its files (name and length included,
@@ -162,7 +166,7 @@ npm run manifest:check   # exits 1 if the committed file is stale — CI runs th
 ```
 
 `vectors/CONFORMANCE.md` says what the sentence "conformant with corpus
-6.2.0" has to contain to be checkable — corpus version, manifest hash, and
+7.0.0" has to contain to be checkable — corpus version, manifest hash, and
 how many vectors actually ran — and why a suite that ran zero vectors must be
 red. `vectors/conformance-report.json` is this repository's own claim in that
 format, regenerated and checked by CI (`npm run conformance:report` /
@@ -213,7 +217,15 @@ carry the proof of a source capture*. Nothing else moved. 6.1.0 is a minor
 again: 169–171 added (a sidecar is no longer overruled by a depth-0 manifest
 proof that does worse over the same bytes, §3.1 step 4), none changed. 6.2.0
 is a minor too: 172–174 added (the same rule for a trailer, §3.1 *A sidecar
-that does better*), none changed.
+that does better*), none changed. **7.0.0 is major**: `media.timing` became a
+required core field and `timing` a required member of every `segments[]`
+entry (§5 *Timing*), and the audio `esds` joined `media.presentation.config`.
+Every video vector a script can rebuild moved bytes under a core re-signed
+with both — 33, 38, 39, 86–94, 156, 158–163, 165–168 and 173 by `npm run
+generate`, 143–147 and 171 minted again by `make-c2pa-vectors.ts` (new
+salts) — and **none changed its verdict**; 34 did not move (no `segments`).
+The device captures 36, 37, 48 and 85 keep their bytes and their *no proof
+found*. 175–187 were added.
 
 `vectors/edge-cases/` (below) is not in the manifest and not part of the
 versioned corpus: it is regenerated on demand by its own tool, not hand-curated
@@ -320,7 +332,9 @@ carries the verdict in force.
   Secure Enclave signatures of 85 and the StrongBox ones of 36 and 37 are
   still the corpus's only real device signatures over video, now on the path
   to *no proof found*; 47, a photo, still verifies under its Secure Enclave
-  signature.
+  signature. From the 7.0.0 corpus their cores also lack `media.timing`, and
+  their entries `timing`: the verdict is unchanged, and the same four
+  re-signed vectors exercise the containers under a core that binds timing.
 
 - **85 · `85-mp4-container-ios-sealed`** — its note explains the five one-frame
   segments as VideoToolbox answering a forced keyframe with two IDRs. That is
@@ -343,13 +357,17 @@ carries the verdict in force.
   depth 0), 147 **no proof found** (*Content Credentials carry the proof of a
   source capture*). Their notes record c2patool 0.27.16, which reports no
   informational codes on these files; the other C2PA vectors record 0.28.0.
+  The 7.0.0 corpus mints them again, with 143, 144 and 171, over vector
+  166's core as re-signed to carry `media.timing`: new salts, same verdicts,
+  and the notes of 143 and 144 now record c2patool 0.27.16 too.
 
 - **158 · `158-mp4-presentation-original`** — its note says the sample entry
   has no `clap`, `pasp` or `colr` box. It has a `colr` (`nclx`), the one
   vector 37's `MediaMuxer` wrote, and the signed `config` covers it, as §5
   *Presentation* requires: the verdict and `expected.json` are right, the
   parenthesis is not. Vectors 159–163 are built from the same file and carry
-  the same `colr`.
+  the same `colr`. The 7.0.0 corpus regenerated 158 and corrected the
+  parenthesis in place.
 
 ## Not here yet, and why
 
@@ -373,7 +391,9 @@ corroboration of a `location` with no coordinates).
   *verified clip* over the whole received file. Vector 89 is the same cut made
   by this repository's own sample-table rewrite with the proof in the
   trailer; the case with another tool's output, whose `moov` and interleaving
-  are its own, still wants that tool's file.
+  are its own, still wants that tool's file — and, since 7.0.0, whether that
+  tool keeps every frame's timing exactly (§5 *Timing*; vector 182 is the
+  exact re-mux, 181 the one that is not).
 - **A C2PA manifest signed by a credential on the C2PA trust list**: the
   carrier vectors are *Trusted* only against the test root, and a trust-listed
   signer needs a legal entity (`spec/c2pa-interop-1.0.md`, *We do not sign*).

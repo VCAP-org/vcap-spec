@@ -1,6 +1,6 @@
 {
-  "corpus_version": "6.2.0",
-  "vector_count": 174,
+  "corpus_version": "7.0.0",
+  "vector_count": 187,
   "vectors": [
     {
       "name": "01-jpeg-sealed",
@@ -229,7 +229,7 @@
       "name": "33-mp4-video-sealed",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "c8f3f8a5efd29032b6d2b28405d783ce815f640358a23f845411e0e0eb1d9b27",
+      "sha256": "55e3087ae143d48bc8fe9fd114db8ddd26bb489af48eaf65ff8fa1b0e37f41d6",
       "files": 4
     },
     {
@@ -264,14 +264,14 @@
       "name": "38-mp4-container-clip",
       "kind": "container",
       "outcome": "tampered",
-      "sha256": "ca0066b7a9f52c083f00089ba7eb0e1846472997685debd12fc14bcfa4ca3f97",
+      "sha256": "4b411f99b1ea93d86be89e91954664d223975d68cf822bcb68292de1885f840c",
       "files": 4
     },
     {
       "name": "39-mp4-container-frame-replaced",
       "kind": "container",
       "outcome": "tampered",
-      "sha256": "84eab049567f3854cb54fa1c7b9507bdea60b813ed5c27c23c4cf60b3d5f8bb5",
+      "sha256": "9110b2232cd15a836f19f713fa5be2b96c04d47b373cafad6fbd37c9ac3ea7be",
       "files": 4
     },
     {
@@ -600,63 +600,63 @@
       "name": "86-mp4-container-stolen-proof-sidecar",
       "kind": "container",
       "outcome": "frames_not_compared",
-      "sha256": "38fbb0063626814f9d2c1514a22854d46497503c58b6ed754f6a177017a092cb",
+      "sha256": "22eeec7a0d13a286f1c1dc02dbfc245375e1ea30e3e80ba5a0e3cd48dcef54ce",
       "files": 5
     },
     {
       "name": "87-mp4-container-proof-over-unmarked-video",
       "kind": "container",
       "outcome": "frames_not_compared",
-      "sha256": "8d61bd106ac4ebda97fa90680880161c83fa436659a678e5bfa88fb2327da6c2",
+      "sha256": "e461a449408f2bbbb626f973a7c27a537a8fdef3eaa81c72ab5818b2a7c0ba3c",
       "files": 5
     },
     {
       "name": "88-mp4-container-sei-index-altered",
       "kind": "container",
       "outcome": "tampered",
-      "sha256": "54337c47078c245cc6beeb0cb37025fe9819ffb1dd4d6543e147536710d5098c",
+      "sha256": "b1a90421ba53d4d10398419f6fd1995feedf008586f251d465a12ed671ecf7e0",
       "files": 4
     },
     {
       "name": "89-mp4-container-cut-clip",
       "kind": "container",
       "outcome": "verified_clip",
-      "sha256": "0ab9a0658b180634e95e208a1f770aa125abefeadd38e7cc3b28ee3b65fe9fd4",
+      "sha256": "dce2c9b5f21412d74f40e98ba66ea6f3a11129c3f071b13e5a04cfdaddee1b2c",
       "files": 4
     },
     {
       "name": "90-mp4-container-gops-reordered",
       "kind": "container",
       "outcome": "tampered",
-      "sha256": "94042a18b0ca83d819b1ed8f80962cf99f4ca77f388074289246b1c85d1efdbe",
+      "sha256": "77d62fd5b96a07aebad8e96e5ac11f9495db5d8e0de4a09009de54df6231ef49",
       "files": 4
     },
     {
       "name": "91-mp4-container-gop-duplicated",
       "kind": "container",
       "outcome": "tampered",
-      "sha256": "17fa3a3884a8d7d5a3b70ce75fc992fead3237aa4e606166f14efd0e1dd2e45b",
+      "sha256": "b858ebfafa99a657561be97367bd27f7b6ebe5ff7302de5ae1f0436fa8a418d7",
       "files": 4
     },
     {
       "name": "92-mp4-container-nal-length-overrun",
       "kind": "container",
       "outcome": "tampered",
-      "sha256": "7d0ab066d0d3dff2f17eb6e71594a91a525d6806d2f2a43db26cc04374f7d978",
+      "sha256": "5f59c8b6e2022b1f1f7dd74f6ccf6f6beb9d315dbd0a81eb1d30d62f2798d0d6",
       "files": 4
     },
     {
       "name": "93-mp4-container-sei-extra-message",
       "kind": "container",
       "outcome": "tampered",
-      "sha256": "4220cc83e86ecbeec14889614ea7d7cb2c93d043641a43928c4b487533b3e2ee",
+      "sha256": "3190641618a41be652903e83d64963f6a1d9e83f33095ccb41d5c2244b05def4",
       "files": 4
     },
     {
       "name": "94-mp4-container-sync-table-not-idr",
       "kind": "container",
       "outcome": "verified_clip",
-      "sha256": "3d544c73582dbae474c382e72334ffd30a14783d5c3680f78393cbe94ea0d367",
+      "sha256": "2581bb0664161fa2203becc95be5cc2f3fe8bef9743ed3ea3216bdf4f7ca4f7e",
       "files": 4
     },
     {
@@ -998,35 +998,35 @@
       "name": "143-mp4-c2pa-free-excluded",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "4f06489ba8ee54298c9405920ddb4cdf5d771aa7cb9428180651b5c37bc7e247",
+      "sha256": "98787c8a9e9e7f7d0c67b795f338a65a564644195755477c614c49cd6864e760",
       "files": 4
     },
     {
       "name": "144-mp4-c2pa-free-hashed",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "664bfec78c4c4e3b66b5e0b17ed3c87603c50a44248e58c50af0f2f537b66425",
+      "sha256": "f0c6298a3c8c55f7af519ac247d6babbcc0b3b80ad982976247ab1f9ceddc459",
       "files": 4
     },
     {
       "name": "145-mp4-c2pa-clip-parent-of",
       "kind": "container",
       "outcome": "verified_clip",
-      "sha256": "13c443b68eb5a034a4e6ab23867b36bb2224643b7e637efb3344778ee0b89f37",
+      "sha256": "ad8a38f83b6b6e079e40ff2038d57fe5eba9992041b1dcb181a43c2c663a101a",
       "files": 4
     },
     {
       "name": "146-mp4-c2pa-clip-gop-replaced",
       "kind": "container",
       "outcome": "tampered",
-      "sha256": "af440e10d4739698fef110c918c132898acac13799eaf8107a9897cd91f247fa",
+      "sha256": "e4cf0dd20ecf9d9ad630bebd2bfa203d3f8e64162ba291543919f03d79e99d7c",
       "files": 4
     },
     {
       "name": "147-mp4-c2pa-clip-reencoded",
       "kind": "container",
       "outcome": "no_proof_found",
-      "sha256": "53c49233901c155e81264d8def9325148c996bd9c11ce5d028787a2e695d9093",
+      "sha256": "4fccc4701ac58dc488168948217e552402f7d1ae965a15eb5a3f45d813bcb186",
       "files": 4
     },
     {
@@ -1089,7 +1089,7 @@
       "name": "156-mp4-container-edit-list-reorders",
       "kind": "container",
       "outcome": "frames_not_compared",
-      "sha256": "16f9787d91d1a4d9514051f05ddb39e7a786d1c6ade3bcc006df8941f9ee4c1d",
+      "sha256": "5615ae641c4e886ee07b549aa38c036d0eae0627e7e211fe47d9718abb5ed45e",
       "files": 4
     },
     {
@@ -1103,42 +1103,42 @@
       "name": "158-mp4-presentation-original",
       "kind": "container",
       "outcome": "authentic",
-      "sha256": "96f6dc665dc233eaa5e2faa5284bf829d1d36a00db685c4dba8e25a00d2087fd",
+      "sha256": "7c478dda01defe1ab2a09aa8bdef526be8d285c560b9f18fa34db338ad82500b",
       "files": 4
     },
     {
       "name": "159-mp4-presentation-clip",
       "kind": "container",
       "outcome": "verified_clip",
-      "sha256": "4713cd32f70632711af67e274b8d7132b224a31215644fb2e1b8963a6668c997",
+      "sha256": "ff3c5ba238e76752457e59d67bcb04a5689be18bb95cfbc1c4af8ff8e29a8581",
       "files": 4
     },
     {
       "name": "160-mp4-presentation-clip-rotated",
       "kind": "container",
       "outcome": "frames_not_compared",
-      "sha256": "9db883c98c5e8959c8486d69250d1d6201dca8f05cb86aeed01fe1a1c64868db",
+      "sha256": "15b33165b0711869a37e0bc00ba9d910c94be60bfaf2c1c4d34d1c365f90950e",
       "files": 4
     },
     {
       "name": "161-mp4-presentation-clip-sps-edited",
       "kind": "container",
       "outcome": "frames_not_compared",
-      "sha256": "6178f6d837bb1d7f6d911924f6d1b1fe5958043943a8666f6cc13c23cd7f1cf7",
+      "sha256": "4658ebce29c58f3d62b2632ce1ae1baaee51196d6f173fb01382459f5564b29f",
       "files": 4
     },
     {
       "name": "162-mp4-presentation-clip-extra-track",
       "kind": "container",
       "outcome": "frames_not_compared",
-      "sha256": "e403c2d6edc13486b913aacecaf26887bd052a1d6570f1c9c291a33461dc4a23",
+      "sha256": "2acfccf35e53c474903870d512d3cdf1e8636b16cd08e5a2a2cfa396608e762c",
       "files": 4
     },
     {
       "name": "163-mp4-presentation-original-misdescribed",
       "kind": "container",
       "outcome": "authentic",
-      "sha256": "71a3f063ad2437c0eec178bdfc76ab63d379856d4e49560063674669e58dafa1",
+      "sha256": "da3167777ac595b272c92b02b922c44c1cd64e774e7b0b9cf3c25165c9d4c1ee",
       "files": 4
     },
     {
@@ -1152,28 +1152,28 @@
       "name": "165-mp4-video-without-presentation",
       "kind": "file",
       "outcome": "no_proof_found",
-      "sha256": "3a42008da7c2de1d749e16d426102e12f975869ad30a8f797e655973e66f9fe1",
+      "sha256": "cb3a4f1494fef884ab42f181abdcca3a423552adb2f241ddacaea54f4a8afe26",
       "files": 4
     },
     {
       "name": "166-mp4-container-h264-presentation",
       "kind": "container",
       "outcome": "authentic",
-      "sha256": "710f2dbc76a936404d6f06bef626515d32875dfda458a3ec3a0dd3f5a93e6107",
+      "sha256": "f6df0f16e593351827bb7f13561d3cc86b74581cc5676bc685adeeb792698e66",
       "files": 4
     },
     {
       "name": "167-mov-container-ios-presentation",
       "kind": "container",
       "outcome": "authentic",
-      "sha256": "6f9443929b44e3c2a0871284e6bf89f2afa6152d711ecb450d7c992c42a32456",
+      "sha256": "f0f1731f50dae253934c4df9438f28c97e1379c63a5204b454f892ef5b86c79b",
       "files": 4
     },
     {
       "name": "168-mp4-container-ios-presentation",
       "kind": "container",
       "outcome": "authentic",
-      "sha256": "dfc8861276889a5900e66d552772ecaec96bf641dc798bee82d186c934fac411",
+      "sha256": "19f7b512eef210a240891d621ee35818c57f9760f519ef7163b99784bbd0fce4",
       "files": 4
     },
     {
@@ -1194,7 +1194,7 @@
       "name": "171-mp4-c2pa-foreign-proof-sidecar",
       "kind": "container",
       "outcome": "verified_clip",
-      "sha256": "b83b96d7c648f4a668166a10fa210e46517d3fd87f0057e9841c16adc81d2daf",
+      "sha256": "d27d775fcbf51df0298d1e8c012fd696fe7277e6c7414d41f0250367abc2384b",
       "files": 5
     },
     {
@@ -1208,7 +1208,7 @@
       "name": "173-mp4-container-foreign-trailer-sidecar",
       "kind": "container",
       "outcome": "verified_clip",
-      "sha256": "b1ded8090640c4cbbb4d03531eb49fb4144f63f4982a0d882a074e3d7c0ed916",
+      "sha256": "0825b9ad927412a8a93e34c01fe88e66575659195569364de9a085f153076f3e",
       "files": 5
     },
     {
@@ -1217,6 +1217,97 @@
       "outcome": "tampered",
       "sha256": "a4b4815d2d12d68bc02689d32171a1d087ed4881104a0de0fe28524e19d7f7a1",
       "files": 5
+    },
+    {
+      "name": "175-mp4-timing-original",
+      "kind": "container",
+      "outcome": "authentic",
+      "sha256": "e914166265ee3b12f4570c416a0ac1b11e306a99a77c4d5c88b4e85523007e2a",
+      "files": 4
+    },
+    {
+      "name": "176-mp4-timing-missing",
+      "kind": "container",
+      "outcome": "no_proof_found",
+      "sha256": "78acd07731c0ec8993120e9879517b9dc4f629545c07d46f3bfaf154bb14ad52",
+      "files": 4
+    },
+    {
+      "name": "177-mp4-timing-entry-not-in-root",
+      "kind": "container",
+      "outcome": "tampered",
+      "sha256": "6deb37e9f64bbdd5f7b7991fe7897690e0871e326057c73106941f209048a895",
+      "files": 4
+    },
+    {
+      "name": "178-mp4-timing-clip-end-cut",
+      "kind": "container",
+      "outcome": "verified_clip",
+      "sha256": "bcb3920b150aa775d21ee8ae35d296835f8813618889e5a0ea718d52c083e011",
+      "files": 4
+    },
+    {
+      "name": "179-mp4-timing-clip-frame-frozen",
+      "kind": "container",
+      "outcome": "frames_not_compared",
+      "sha256": "77f3f4934b5e23ad38fc5f1012bda1dc737a42925c20bc04e7412f66789483e9",
+      "files": 4
+    },
+    {
+      "name": "180-mp4-timing-clip-frames-reordered",
+      "kind": "container",
+      "outcome": "frames_not_compared",
+      "sha256": "fbd1edffc9fac375c474cbe5ace17d7aae637ea71ca625bf496dd1af0ca0ab03",
+      "files": 4
+    },
+    {
+      "name": "181-mp4-timing-clip-timescale-doubled",
+      "kind": "container",
+      "outcome": "frames_not_compared",
+      "sha256": "58fcf9b9734f61b8cffb6d7cce61049ac8c00008cd10e6494d49444a0d25fc2c",
+      "files": 4
+    },
+    {
+      "name": "182-mp4-timing-clip-exact-remux",
+      "kind": "container",
+      "outcome": "verified_clip",
+      "sha256": "03c42b5841adbdf0136a0cd32771a257b80e64571582b8e7f6d9c2d6bca0df54",
+      "files": 4
+    },
+    {
+      "name": "183-mp4-timing-clip-audio-rate-changed",
+      "kind": "container",
+      "outcome": "frames_not_compared",
+      "sha256": "36dd31ee580f291f86107529da6f23221cb5caaa3511fc9aed5cc25b5e8c5538",
+      "files": 4
+    },
+    {
+      "name": "184-mp4-timing-clip-edit-trims-segment",
+      "kind": "container",
+      "outcome": "frames_not_compared",
+      "sha256": "1581f3e4d94feeb3751410b9b22e94406a0503d26515041aa09a29cad12b3f13",
+      "files": 4
+    },
+    {
+      "name": "185-mp4-timing-original-misdescribed",
+      "kind": "container",
+      "outcome": "authentic",
+      "sha256": "884c765d648b99e07b182e9875a9c6ffe6b5c81bb137c191952650e410bff82e",
+      "files": 4
+    },
+    {
+      "name": "186-mp4-timing-clip-entry-dropped",
+      "kind": "container",
+      "outcome": "frames_not_compared",
+      "sha256": "916a25d22041b3e00a43af683485a1b26135e5f220af515a465337209c2df5d2",
+      "files": 4
+    },
+    {
+      "name": "187-mp4-timing-entry-hash-missing",
+      "kind": "container",
+      "outcome": "no_proof_found",
+      "sha256": "5a3338472007f3165cd632f7fe41677c528f1142189ec48ec2593a83be8361e1",
+      "files": 4
     }
   ],
   "fixtures": {

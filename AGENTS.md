@@ -38,7 +38,9 @@ the first build, SDK or sealed file that reaches somebody else. `CHANGELOG.md` i
 - `reviews/` — historical review notes (cryptographic, implementability).
   Findings are graded BLOCKING / SHOULD / NOTE; the spec absorbed them and is
   authoritative. Do not update a review to match the spec. A `design-*.md`
-  note there is a proposal the spec has not adopted (§11 points at it).
+  note there is a proposal; its status line says whether the spec adopted it
+  (`design-clip-timing.md` is, since corpus 7.0.0) and §11 points at the ones
+  still open.
 - `schema/` — JSON Schema plus a validator runnable from CI, including the
   shape of a published conformance report.
 - `vectors/` — one directory per case, each with the input, the proof and the
@@ -47,7 +49,10 @@ the first build, SDK or sealed file that reaches somebody else. `CHANGELOG.md` i
   written from the spec to prove the vectors consistent; it is not the
   implementation others copy. When it disagrees with an expected verdict, the
   review decides which one is wrong — the generator refuses to write a vector
-  the verifier fails. The C2PA carrier reader (`jumbf.ts`, `cbor.ts`,
+  the verifier fails. One file is meant to be ported: `timing.ts`, the §5
+  *Timing* record, its hash and root, the timescale conversion and the
+  media-edit rule, which the sealers and verifiers implement from it and from
+  vector 175's `debug` records. The C2PA carrier reader (`jumbf.ts`, `cbor.ts`,
   `carrier.ts`) reads structure only and has no dependency; the vectors with
   real Content Credentials (123–147, 169–171) are minted on demand by
   `make-c2pa-vectors.ts` through `@contentauth/c2pa-node`, a devDependency
@@ -81,7 +86,7 @@ Node 22 (`.nvmrc`), from `tools/`. CI (`.github/workflows/ci.yml`) runs, in orde
 ```
 npm ci
 npm run typecheck
-npm test                     # vitest: vectors, vault, watermark layouts, conformance docs vs corpus
+npm test                     # vitest: vectors, vault, watermark layouts, timing record, conformance docs vs corpus
 npm run validate             # every vector's proof.json / expected.json against the schema
 npm run manifest:check       # vectors/MANIFEST.json matches vectors/
 npm run conformance:check    # conformance report: corpus version, manifest hash, vector count

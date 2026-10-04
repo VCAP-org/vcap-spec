@@ -24,6 +24,9 @@ export interface SegmentEntry {
   prev: string
   // sig(n), base64url P1363
   sig: string
+  // SHA-256(timing(n)), base64url (§5 *Timing*). Outside the 96-byte message:
+  // bound by media.timing.root in the core. Absent in message-level vectors.
+  timing?: string
 }
 
 export type ChainStatus = 'complete' | 'clip' | 'tampered'

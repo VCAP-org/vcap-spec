@@ -68,7 +68,7 @@
           "properties": {
             "config": {
               "$ref": "#/$defs/bytes32",
-              "description": "SHA-256 of the presentation message: the decoder configuration's parameter sets, then clap, pasp and colr"
+              "description": "SHA-256 of the presentation message: the decoder configuration's parameter sets, then clap, pasp and colr, then the audio sample entry's esds"
             },
             "matrix": {
               "type": "array",
@@ -89,6 +89,33 @@
                 "$ref": "#/$defs/uint32"
               },
               "description": "the video tkhd width and height, 16.16 fixed point as stored"
+            }
+          }
+        },
+        "timing": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "video_timescale",
+            "root"
+          ],
+          "description": "§5 Timing, required wherever segments are (so of every video proof): the root of the segments' timing hashes, so a clip cannot be re-timed, reordered or rescaled",
+          "properties": {
+            "video_timescale": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4294967295,
+              "description": "the video track's mdhd timescale as the sealer wrote it"
+            },
+            "audio_timescale": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4294967295,
+              "description": "the audio track's mdhd timescale as the sealer wrote it; absent, never null or 0, when the sealed file has no audio track"
+            },
+            "root": {
+              "$ref": "#/$defs/bytes32",
+              "description": "SHA-256 over segments[0..segment_count-1].timing, 32 bytes each, in index order"
             }
           }
         }
@@ -268,7 +295,8 @@
           "gop",
           "hash",
           "prev",
-          "sig"
+          "sig",
+          "timing"
         ],
         "properties": {
           "gop": {
@@ -293,6 +321,10 @@
           },
           "sig": {
             "$ref": "#/$defs/p1363"
+          },
+          "timing": {
+            "$ref": "#/$defs/bytes32",
+            "description": "SHA-256 of timing(n), the segment's timing record (§5 Timing); bound by media.timing.root"
           }
         }
       }
@@ -655,7 +687,8 @@
             "type": "object",
             "required": [
               "segment_count",
-              "presentation"
+              "presentation",
+              "timing"
             ]
           }
         }
@@ -692,7 +725,8 @@
             "type": "object",
             "required": [
               "segment_count",
-              "presentation"
+              "presentation",
+              "timing"
             ]
           }
         }

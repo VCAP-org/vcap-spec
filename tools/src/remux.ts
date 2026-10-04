@@ -37,6 +37,16 @@ export interface TrackPlan {
   replace?: Map<number, Buffer>
   /** `stss`: keep the sync flags of the original samples, or mark every sample. */
   sync?: 'keep' | 'all'
+  /**
+   * §5 *Timing* edits. `timescale` rewrites the track's `mdhd` timescale (and
+   * its duration, in the new ticks); `retime` gives a sample's new `stts`
+   * duration from its original one and original index; `cts` writes a
+   * version-1 `ctts` with one composition offset per sample of the new order.
+   * The source files carry no `ctts`, and without `cts` none is written.
+   */
+  timescale?: number
+  retime?: (duration: number, index: number) => number
+  cts?: number[]
 }
 
 export interface Plan {
@@ -82,7 +92,7 @@ const syncOf = (file: Buffer, stbl: Box, count: number): Set<number> => {
 const tablesFor = (file: Buffer, stbl: Box, plan: TrackPlan, offsets: number[]): Buffer => {
   const kids = children(file, stbl)
   const samples = samplesOf(file, stbl)
-  const durations = durationsOf(file, stbl)
+  const durations = durationsOf(file, stbl).map((d, i) => plan.retime ? plan.retime(d, i) : d)
   const sync = syncOf(file, stbl, samples.length)
   const sizes = plan.samples.map((i) => plan.replace?.get(i)?.length ?? (samples[i] as { size: number }).size)
 
@@ -94,6 +104,10 @@ const tablesFor = (file: Buffer, stbl: Box, plan: TrackPlan, offsets: number[]):
     else runs.push([1, delta])
   }
   const stts = fullBox('stts', u32(runs.length), ...runs.flatMap(([count, delta]) => [u32(count), u32(delta)]))
+  if (plan.cts && plan.cts.length !== plan.samples.length) throw new Error('remux: one composition offset per sample')
+  const ctts = plan.cts
+    ? [box('ctts', Buffer.from([1, 0, 0, 0]), u32(plan.cts.length), ...plan.cts.flatMap((offset) => { const b = Buffer.alloc(4); b.writeInt32BE(offset); return [u32(1), b] }))]
+    : []
   const stsz = fullBox('stsz', u32(0), u32(sizes.length), ...sizes.map(u32))
   const stsc = fullBox('stsc', u32(1), u32(1), u32(1), u32(1))
   const co64 = fullBox('co64', u32(offsets.length), ...offsets.map((o) => {
@@ -104,7 +118,7 @@ const tablesFor = (file: Buffer, stbl: Box, plan: TrackPlan, offsets: number[]):
   const synced = plan.samples.map((i, n) => (plan.sync === 'all' || sync.has(i)) ? n + 1 : 0).filter((n) => n > 0)
   const stss = find(kids, 'stss') || plan.sync === 'all' ? [fullBox('stss', u32(synced.length), ...synced.map(u32))] : []
   const stsd = find(kids, 'stsd') as Box
-  return box('stbl', file.subarray(stsd.start, stsd.end), stts, ...stss, stsz, stsc, co64)
+  return box('stbl', file.subarray(stsd.start, stsd.end), stts, ...ctts, ...stss, stsz, stsc, co64)
 }
 
 const elstFor = (delay: bigint, duration: bigint): Buffer =>
@@ -165,6 +179,15 @@ export const remux = (file: Buffer, plan: Plan): Buffer => {
           const trackKind = codecOf(file, find(children(file, stbl), 'stsd') as Box).kind
           const own = trackKind === 'video' ? plan.video : trackKind === 'audio' ? plan.audio : undefined
           parts.push(rebuiltTrak(child, own, trackKind === 'other' ? null : trackKind))
+        } else if (child.type === 'mdhd' && trackPlan?.timescale !== undefined) {
+          // A new media timescale, and the track's duration in it.
+          if (file[child.payload] !== 0) throw new Error('remux: only version 0 mdhd')
+          const stbl = find(children(file, find(children(file, container), 'minf') as Box), 'stbl') as Box
+          const durations = durationsOf(file, stbl).map((d, i) => trackPlan.retime ? trackPlan.retime(d, i) : d)
+          const copy = Buffer.from(file.subarray(child.start, child.end))
+          copy.writeUInt32BE(trackPlan.timescale, 8 + 12)
+          copy.writeUInt32BE(trackPlan.samples.reduce((n, i) => n + (durations[i] as number), 0), 8 + 16)
+          parts.push(copy)
         } else if (child.type === 'stbl' && trackPlan && kind) {
           parts.push(tablesFor(file, child, trackPlan, layout(child, trackPlan, moovSize)))
         } else if (child.type === 'minf') {
@@ -178,7 +201,7 @@ export const remux = (file: Buffer, plan: Plan): Buffer => {
     const rebuiltTrak = (trak: Box, trackPlan: TrackPlan | undefined, kind: 'video' | 'audio' | null): Buffer => {
       const parts: Buffer[] = []
       const mdhd = find(children(file, find(children(file, trak), 'mdia') as Box), 'mdhd') as Box
-      const mediaScale = BigInt(file.readUInt32BE(mdhd.payload + 12))
+      const mediaScale = BigInt(trackPlan?.timescale ?? file.readUInt32BE(mdhd.payload + 12))
       for (const child of children(file, trak)) {
         if (child.type === 'edts') {
           // Replaced when the plan says where the track starts; otherwise
@@ -191,11 +214,12 @@ export const remux = (file: Buffer, plan: Plan): Buffer => {
         if (child.type === 'mdia') {
           if (trackPlan && kind) {
             const stbl = find(children(file, find(children(file, child), 'minf') as Box), 'stbl') as Box
-            const durations = durationsOf(file, stbl)
+            const durations = durationsOf(file, stbl).map((d, i) => trackPlan.retime ? trackPlan.retime(d, i) : d)
             const media = trackPlan.samples.reduce((n, i) => n + BigInt(durations[i] as number), 0n)
-            // The delay has to be exact; the duration of the edit that follows
-            // it is informative (§5 reads where a track starts, not how long
-            // the edit claims it lasts), so it is rounded down.
+            // The delay has to be exact. The duration of the media edit that
+            // follows it is rounded down into the movie timescale, as a muxer
+            // has to: §5 *Timing* allows an edit to end less than one movie
+            // tick before the media does.
             if (trackPlan.edits) parts.push(elstOf(trackPlan.edits))
             else if ((trackPlan.delay ?? 0n) > 0n) parts.push(elstFor(trackPlan.delay as bigint, media * BigInt(newScale) / mediaScale))
           }

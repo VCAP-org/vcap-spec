@@ -7,6 +7,7 @@ import { mediaHash } from './canonical.js'
 import { Flag, buildTrailer, parseTrailer } from './trailer.js'
 import { type Box, boxes, children, codecOf, containerSegments, find, readContainer, samplesOf } from './container.js'
 import { remux } from './remux.js'
+import { type TimingValues, timingRecord, timingRoot } from './timing.js'
 import { type SegmentEntry, SEPARATOR, ZERO_LINK, linkOf, segmentMessage } from './segments.js'
 // Deterministic ES256 (RFC 6979): regenerating an unchanged vector must not
 // change its bytes. See sign.ts.
@@ -106,7 +107,7 @@ const bmffBox = (type: string, payload: Buffer): Buffer => {
 
 // ---- vectors --------------------------------------------------------------
 
-interface FileVector { kind: 'file', container?: boolean, name: string, ext: string, file: Buffer, sidecar?: Buffer, proof?: Proof, expected: Partial<Verdict> & { outcome: Verdict['outcome'] }, schemaValid?: boolean, notes: string, verifierClock?: number, keyStatus?: Json, chainRead?: Json }
+interface FileVector { kind: 'file', container?: boolean, name: string, ext: string, file: Buffer, sidecar?: Buffer, proof?: Proof, expected: Partial<Verdict> & { outcome: Verdict['outcome'] }, schemaValid?: boolean, notes: string, verifierClock?: number, keyStatus?: Json, chainRead?: Json, debug?: Json }
 interface SegVector { kind: 'segments', name: string, input: { capture_id: string, pub: string, segment_count: number, segments: SegmentEntry[] }, expected: Partial<Verdict> & { outcome: Verdict['outcome'] }, notes: string, debug?: Json }
 interface JcsVector { kind: 'jcs', name: string, input: Json, expected: { core_bytes_hex: string, core_hash: string }, notes: string }
 type Vector = FileVector | SegVector | JcsVector
@@ -382,17 +383,49 @@ const presentationOf = (media: Buffer): Json => {
   if (reading.kind !== 'gops' || reading.presentation === null) throw new Error('no readable presentation')
   return { config: reading.presentation.config.toString('base64url'), matrix: reading.presentation.matrix, display: reading.presentation.display }
 }
-const videoCore = (media: Buffer, extra: Proof = {}): Proof => photoCore(media, 'video/mp4', {
-  media: { mime: 'video/mp4', w: 16, h: 16, duration_ms: 67, hash: mediaHash(media), segment_count: 3, presentation: presentationOf(media) },
+/**
+ * §5 *Timing*: `media.timing` and each segment's timing hash, as a writer
+ * reads them back from the file it muxed — the `mdhd` timescales and one
+ * `timing(n)` per GOP its vcap SEI names, hashed, then the root over all of
+ * them in index order.
+ */
+const timingOf = (media: Buffer, count: number): { timing: Json, hashes: Buffer[], records: Buffer[] } => {
+  const reading = readContainer(media)
+  if (reading.kind !== 'gops') throw new Error('no readable timing')
+  const records = new Map<number, Buffer>()
+  for (const gop of reading.gops) if (gop.index !== null) records.set(gop.index, timingRecord(gop.timing))
+  const ordered = Array.from({ length: count }, (_, n) => {
+    const record = records.get(n)
+    if (!record) throw new Error(`timing: no GOP names segment ${n}`)
+    return record
+  })
+  const hashes = ordered.map((r) => createHash('sha256').update(r).digest())
+  return {
+    timing: { video_timescale: Number(reading.timescales.video), ...(reading.timescales.audio !== null ? { audio_timescale: Number(reading.timescales.audio) } : {}), root: timingRoot(hashes).toString('base64url') },
+    hashes,
+    records: ordered
+  }
+}
+/** A signed chain with each entry's timing hash beside it: what a writer emits. */
+const withTiming = (entries: SegmentEntry[], hashes: Buffer[]): SegmentEntry[] =>
+  entries.map((e) => ({ ...e, timing: (hashes[e.gop] as Buffer).toString('base64url') }))
+// The chain of vector 25 is synthetic — content hashes of no real GOP — and so
+// are the timing hashes beside it: the file vectors that carry it (33, 165)
+// check the signature layer only, where the root is recomputed from entries.
+const syntheticTiming = [0, 1, 2].map((i) => createHash('sha256').update(`segment timing ${i}`).digest())
+const timedChain = withTiming(chain, syntheticTiming)
+const videoCore = (media: Buffer, extra: Proof = {}, timing?: Json): Proof => photoCore(media, 'video/mp4', {
+  media: { mime: 'video/mp4', w: 16, h: 16, duration_ms: 67, hash: mediaHash(media), segment_count: 3, presentation: presentationOf(media), ...(timing ? { timing } : {}) },
   watermark: { algo: 'videoseal', layout: 'video-rep-v1', payload_bits: 128, ecc: 'bch-255-131', strength: 8 },
   ...extra
 })
+const SYNTHETIC_TIMING: Json = { video_timescale: 15360, root: timingRoot(syntheticTiming).toString('base64url') }
 
 {
-  const proof = sign(videoCore(baseMp4, { segments: chain as unknown as Json }))
+  const proof = sign(videoCore(baseMp4, { segments: timedChain as unknown as Json }, SYNTHETIC_TIMING))
   file({ name: '33-mp4-video-sealed', ext: 'mp4', file: seal(baseMp4, proof), proof,
     expected: { outcome: 'authentic', labels: [...PHOTO_LABELS, 'segment content not recomputed'], not_evaluated: [], core_hash: hashOf(proof), segments: { verified: [] } },
-    notes: 'An ISO-BMFF video with media.mime video/mp4, segment_count 3 and the complete chain of vector 25 in the trailer (flag SEGMENTS set). Canonical bytes are the file minus the trailer (§4.1) and `media.hash` matches, so the file is the one the device sealed: **authentic**. The chain is checked at message level only — this is a `file` vector, the container is not demuxed — and the verdict says so with *segment content not recomputed* (§7).\n\n`segments.verified` is **empty**, and that is the rule of §5 (*Locating segments*): a segment counts as verified only once a GOP of this file has been located and its `content_hash` recomputed. Here the signatures hold and nothing was compared; the file is authentic because `media.hash` covers every byte, not because any segment was checked. Vectors 38, 39, 86-94 and 166-168 are the same question asked of the container.' })
+    notes: 'An ISO-BMFF video with media.mime video/mp4, segment_count 3 and the complete chain of vector 25 in the trailer (flag SEGMENTS set). Like its content hashes, the chain\'s timing hashes are synthetic — no GOP of this file is behind them — and `media.timing.root` is over them: a `file` vector checks the root against the entries and nothing against the container (§5 *Timing*). Canonical bytes are the file minus the trailer (§4.1) and `media.hash` matches, so the file is the one the device sealed: **authentic**. The chain is checked at message level only — this is a `file` vector, the container is not demuxed — and the verdict says so with *segment content not recomputed* (§7).\n\n`segments.verified` is **empty**, and that is the rule of §5 (*Locating segments*): a segment counts as verified only once a GOP of this file has been located and its `content_hash` recomputed. Here the signatures hold and nothing was compared; the file is authentic because `media.hash` covers every byte, not because any segment was checked. Vectors 38, 39, 86-94 and 166-168 are the same question asked of the container.' })
 }
 
 {
@@ -406,13 +439,13 @@ const videoCore = (media: Buffer, extra: Proof = {}): Proof => photoCore(media, 
 {
   // Signed without the field, not stripped after signing: a writer that never
   // wrote it, which is what every video proof sealed before corpus 5.0.0 is.
-  const core = videoCore(baseMp4, { segments: chain as unknown as Json })
+  const core = videoCore(baseMp4, { segments: timedChain as unknown as Json }, SYNTHETIC_TIMING)
   const { presentation: _presentation, ...media } = core.media as Record<string, Json>
   const proof = sign({ ...core, media })
   file({ name: '165-mp4-video-without-presentation', ext: 'mp4', file: seal(baseMp4, proof), proof,
     expected: { outcome: 'no_proof_found', labels: [], not_evaluated: [] },
     schemaValid: false,
-    notes: 'Vector 33 with a core signed without `media.presentation`: segments, `segment_count` and a valid signature over a core that never carried the field. §6.1 and §8 require it of every proof that carries `segments`, and so of every video proof — missing required field, **no proof found**, the answer vector 34 gets for a video proof without `segments`, and the shape check gives it before the signature is read.\n\nUntil corpus 5.0.0 the field was required of writers and optional to readers: an original without it read *authentic* and every clip of it *frames not compared*, *presentation not bound*. That left a video proof two verdicts depending on which file it was attached to, and a core with nothing to hold a clip\'s parameter sets, matrix or tracks against. The device captures 36, 37, 48 and 85 predate the field and now read the same.' })
+    notes: 'Vector 33 with a core signed without `media.presentation` (it carries `media.timing`, so that is the one field missing): segments, `segment_count` and a valid signature over a core that never carried the field. §6.1 and §8 require it of every proof that carries `segments`, and so of every video proof — missing required field, **no proof found**, the answer vector 34 gets for a video proof without `segments`, and the shape check gives it before the signature is read.\n\nUntil corpus 5.0.0 the field was required of writers and optional to readers: an original without it read *authentic* and every clip of it *frames not compared*, *presentation not bound*. That left a video proof two verdicts depending on which file it was attached to, and a core with nothing to hold a clip\'s parameter sets, matrix or tracks against. The device captures 36, 37, 48 and 85 predate the field and now read the same.' })
 }
 
 
@@ -440,19 +473,23 @@ const videoCore = (media: Buffer, extra: Proof = {}): Proof => photoCore(media, 
     if (parsed.kind !== 'ok') throw new Error(`${name}: no readable trailer`)
     return { file, media: file.subarray(0, parsed.mediaEnd), trailer: file.subarray(parsed.mediaEnd), payload: parsed.payload, proof: JSON.parse(parsed.payload.toString('utf8')) as Proof }
   }
-  /** A device capture's core, re-signed with the test key and carrying `presentation`. */
-  const resignedProof = (device: Sealed, presentation: Json): Proof => {
+  /**
+   * A device capture's core, re-signed with the test key and carrying
+   * `presentation` and `timing`, both read back from the device's container,
+   * with each segment entry's timing hash beside its re-signed message.
+   */
+  const resignedProof = (device: Sealed, presentation: Json, read = timingOf(device.media, (device.proof.media as Proof).segment_count as number)): Proof => {
     const claimed = device.proof.device as Proof
     const core: Proof = {
       v: 'vcap/1.0',
       capture_id: device.proof.capture_id as string,
-      media: { ...(device.proof.media as Proof), presentation },
+      media: { ...(device.proof.media as Proof), presentation, timing: read.timing },
       device: { platform: claimed.platform as string, secure_hw: claimed.secure_hw as string, key_id: KEY_ID },
       ...('watermark' in device.proof ? { watermark: device.proof.watermark as Json } : {}),
       time: device.proof.time as Json
     }
     const hashes = (device.proof.segments as unknown as SegmentEntry[]).map((e) => Buffer.from(e.hash, 'base64url'))
-    return sign({ ...core, segments: signChain(Buffer.from(core.capture_id as string, 'base64url'), hashes, privateKey) as unknown as Json })
+    return sign({ ...core, segments: withTiming(signChain(Buffer.from(core.capture_id as string, 'base64url'), hashes, privateKey), read.hashes) as unknown as Json })
   }
   const resigned = (device: Sealed): Sealed => {
     const proof = resignedProof(device, presentationOf(device.media))
@@ -465,7 +502,7 @@ const videoCore = (media: Buffer, extra: Proof = {}): Proof => photoCore(media, 
   const h264 = resigned(h264Device)
   const hevc = resigned(hevcDevice)
   const DEVICE_LABELS = ['integrity unevaluated', 'key not in transparency log', 'no trusted time', 'no watermark', 'not anchored', 'origin not hardware-attested']
-  const provenance = 'Derived by `tools/src/generate.ts` from the device capture in vector 36 or 37 (a Samsung SM-S908B, Android 16, StrongBox, sealed by the reference Android SDK). The container, its NAL units and its vcap SEIs are the device\'s; the core and the segment chain are re-signed with the test key in `tools/src/testkey.ts`, over the same capture id and the same content hashes, so that the core carries `media.presentation`, which the device proof predates (corpus 5.0.0).'
+  const provenance = 'Derived by `tools/src/generate.ts` from the device capture in vector 36 or 37 (a Samsung SM-S908B, Android 16, StrongBox, sealed by the reference Android SDK). The container, its NAL units and its vcap SEIs are the device\'s; the core and the segment chain are re-signed with the test key in `tools/src/testkey.ts`, over the same capture id and the same content hashes, so that the core carries `media.presentation` and `media.timing` (both read back from the device\'s container), which the device proof predates (corpora 5.0.0 and 7.0.0).'
   const device = (v: Omit<FileVector, 'kind' | 'container' | 'ext' | 'notes'> & { notes: string }): void =>
     file({ ...v, container: true, ext: 'mp4', notes: `${v.notes}\n\n${provenance}` })
 
@@ -500,7 +537,7 @@ const videoCore = (media: Buffer, extra: Proof = {}): Proof => photoCore(media, 
     const ios = (source: string, input: string, name: string, ext: string, expected: FileVector['expected'], notes: string): void => {
       const sealed = resigned(deviceFile(source, input))
       file({ name, container: true, ext, file: sealed.file, proof: sealed.proof, expected: { ...expected, core_hash: hashOf(sealed.proof) },
-        notes: `${notes}\n\nThe container is the iPhone capture of vector ${source.slice(0, 2)} (an iPhone 11 Pro, iOS 18.6.2, \`AVAssetWriter\`); the core and the segment chain are re-signed with the test key in \`tools/src/testkey.ts\`, over the same capture id and the same content hashes, so that the core carries \`media.presentation\`, which the proof of vector ${source.slice(0, 2)} predates (corpus 5.0.0).` })
+        notes: `${notes}\n\nThe container is the iPhone capture of vector ${source.slice(0, 2)} (an iPhone 11 Pro, iOS 18.6.2, \`AVAssetWriter\`); the core and the segment chain are re-signed with the test key in \`tools/src/testkey.ts\`, over the same capture id and the same content hashes, so that the core carries \`media.presentation\` and \`media.timing\`, which the proof of vector ${source.slice(0, 2)} predates (corpora 5.0.0 and 7.0.0).` })
     }
     const IOS_LEVEL = { claimed: 'secureEnclave', proven: 'none', ceiling: 'amber' } as const
     ios('48-mov-container-ios', 'input.mov', '167-mov-container-ios-presentation', 'mov',
@@ -585,7 +622,7 @@ const videoCore = (media: Buffer, extra: Proof = {}): Proof => photoCore(media, 
     })
     device({ name: '89-mp4-container-cut-clip', file: Buffer.concat([cut, h264.trailer]), proof: h264.proof,
       expected: { outcome: 'verified_clip', labels: DEVICE_LABELS, not_evaluated: [], core_hash: hashOf(h264.proof), segments: { verified: [1, 2] }, location: { claimed: 'none', level: 'none' } },
-      notes: 'Vector 36 **cut**: its first GOP removed from the video track, the audio frames before the cut removed with it, and the full proof — all three segments — still in the trailer. This is what a clip is: the file lacks segment 0, the proof does not.\n\nEvery surviving sample keeps its instant on the movie timeline (the movie timescale becomes 90 kHz and each track gets an empty edit for the time that was cut), so §5\'s audio rule assigns the same frames to segments 1 and 2 as in the original, and both recompute. `remux.ts` copies the decoder configuration, the track header and the track layout as they were, so the clip presents its frames as the core\'s `media.presentation` says (§5 *Presentation*). **Verified clip**, 1 and 2 of 3. Segment 0 is signed and absent, which is the clip case and never *tampered*; `media.hash` does not match, which is what says this is not the original.\n\nVector 38 removed segment 0 from the **proof** and left it in the file; under the binding rule that is a GOP no signature covers, and it reads *tampered*.' })
+      notes: 'Vector 36 **cut**: its first GOP removed from the video track, the audio frames before the cut removed with it, and the full proof — all three segments — still in the trailer. This is what a clip is: the file lacks segment 0, the proof does not.\n\nEvery surviving sample keeps its instant on the movie timeline (the movie timescale becomes 90 kHz and each track gets an empty edit for the time that was cut), so §5\'s audio rule assigns the same frames to segments 1 and 2 as in the original, and both recompute. `remux.ts` copies the decoder configuration, the track header and the track layout as they were, so the clip presents its frames as the core\'s `media.presentation` says (§5 *Presentation*); and it keeps every `stts` duration and both timescales, so each segment\'s timing record reads back as `media.timing` binds it (§5 *Timing*). **Verified clip**, 1 and 2 of 3. Segment 0 is signed and absent, which is the clip case and never *tampered*; `media.hash` does not match, which is what says this is not the original.\n\nVector 38 removed segment 0 from the **proof** and left it in the file; under the binding rule that is a GOP no signature covers, and it reads *tampered*.' })
 
     // §3.1 on a clip: another capture's video proof appended as a trailer to
     // the trailer-stripped clip, the genuine proof beside it. The foreign
@@ -594,10 +631,203 @@ const videoCore = (media: Buffer, extra: Proof = {}): Proof => photoCore(media, 
     // holds, and no GOP of the clip names its capture.
     const capture = Buffer.alloc(16, 0x73)
     const hashes = (h264.proof.segments as unknown as SegmentEntry[]).map((e) => Buffer.from(e.hash, 'base64url'))
-    const foreign = sign({ ...h264.proof, capture_id: capture.toString('base64url'), segments: signChain(capture, hashes, privateKey) as unknown as Json })
+    const timings = (h264.proof.segments as unknown as SegmentEntry[]).map((e) => Buffer.from(e.timing as string, 'base64url'))
+    const foreign = sign({ ...h264.proof, capture_id: capture.toString('base64url'), segments: withTiming(signChain(capture, hashes, privateKey), timings) as unknown as Json })
     device({ name: '173-mp4-container-foreign-trailer-sidecar', file: seal(cut, foreign), sidecar: h264.payload, proof: h264.proof,
       expected: { outcome: 'verified_clip', labels: [...DEVICE_LABELS, 'trailer copy differs'], not_evaluated: [], core_hash: hashOf(h264.proof), segments: { verified: [1, 2] }, location: { claimed: 'none', level: 'none' }, proof_source: { kind: 'sidecar' }, frames_name_capture: true },
       notes: 'Vector 89\'s clip of vector 166 — GOP 0 removed — with its trailer stripped and **another capture\'s** video proof appended as a valid trailer in its place: vector 166\'s core and segment hashes under a new capture id, the core and every segment message re-signed for it. Next to it, a sidecar holding vector 166\'s proof. Every signature in the trailer\'s proof holds, and no GOP of the clip names its capture, so on its own it reads *frames not compared* (§5, *Locating segments*) — a genuine clip reduced to "nothing ties these signatures to these frames" by a trailer anyone can append.\n\n§3.1 judges both over the same bytes, the file without the trailer: the sidecar\'s proof locates GOPs 1 and 2 and recomputes them, **verified clip**, 1 and 2 of 3 — vector 89\'s verdict — which ranks above *frames not compared*, so it stands, with *trailer copy differs* and `proof_source` the sidecar. Vector 171 is the same case with the foreign proof in a C2PA manifest.' })
+
+    // ---- §5 *Timing*: when the signed frames are shown ---------------------
+    //
+    // Vector 166's original and vector 89's cut of it, under the re-signed
+    // core that carries `media.timing`. Each clip below is `remux.ts` output
+    // that keeps every sample, every vcap SEI and §5's audio assignment —
+    // every GOP still hashes to its signed `content_hash` — and changes one
+    // timing table, which is exactly what no signed byte covered before.
+    const LOCATION = { claimed: 'none', level: 'none' } as const
+    const clipPlan = { samples: gops.slice(1).flatMap(range), sync: 'keep' as const }
+    const keptAudioIndexes = keptAudio.map(({ i }) => i)
+    const timingNote = 'The container is vector 36\'s Android capture (Samsung SM-S908B, H.264 with an AAC track) under vector 166\'s re-signed core, which carries `media.timing` (corpus 7.0.0).'
+    const timed = (v: Omit<FileVector, 'kind' | 'container' | 'ext' | 'notes'> & { notes: string }): void =>
+      file({ ...v, container: true, ext: 'mp4', notes: `${v.notes}\n\n${timingNote} Generated by \`tools/src/generate.ts\` with the test key in \`tools/src/testkey.ts\`.` })
+    const RETIMED = { outcome: 'frames_not_compared' as const, labels: [...DEVICE_LABELS, 'timing differs'].sort(), not_evaluated: [], core_hash: hashOf(h264.proof), segments: { verified: [] }, location: LOCATION }
+
+    {
+      const read = timingOf(h264.media, 3)
+      timed({ name: '175-mp4-timing-original', file: h264.file, proof: h264.proof,
+        expected: { outcome: 'authentic', labels: DEVICE_LABELS, not_evaluated: [], core_hash: hashOf(h264.proof), segments: { verified: [0, 1, 2] }, location: LOCATION },
+        debug: {
+          video_timescale: Number((read.timing as { video_timescale: number }).video_timescale),
+          audio_timescale: Number((read.timing as { audio_timescale: number }).audio_timescale),
+          timing_records_hex: read.records.map((r) => r.toString('hex')),
+          timing_hashes_hex: read.hashes.map((h) => h.toString('hex')),
+          root_hex: timingRoot(read.hashes).toString('hex')
+        },
+        notes: 'Vector 166\'s file and proof, with the timing records spelled out. The core carries `media.timing` (§6.1): the `mdhd` timescales the muxer wrote (video 90 000, audio 48 000) and the root over the three segments\' timing hashes; each `segments[]` entry carries `SHA-256(timing(n))` (§5 *Timing*). `debug.timing_records_hex` gives each `timing(n)` byte for byte — `uint32 v`, then `(int64 dts_i − dts_0 ‖ int64 cts_i) × v`, `uint64 end_n − dts_0`, `uint32 a`, `(int64 adts_j − adts_0 ‖ uint32 adur_j) × a` — so an implementation can compare its record before it compares a hash.\n\nWhat a real file puts in it: video durations that wander around 3000 ticks (one of 4885 where the encoder dropped a frame), no `ctts`, so every `cts_i` is 0; `end_n` of segment 2 is its last sample\'s DTS plus that sample\'s own duration; and the audio frames §5 assigns by DTS on the presentation timeline — the 473 ms empty edit on the video track included — each 1024 ticks. The video `mdhd` duration is not where `end_n` comes from: `MediaMuxer` wrote 260 759 ticks, the media plus the 473 ms delay, while the samples end at 218 178 — the value the media edit\'s `segment_duration` (24 242 at the 10 kHz movie timescale) agrees with. **Authentic**, every segment recomputed.' })
+    }
+
+    {
+      // Signed without the field: a writer that predates it. Its entries
+      // carry no timing hash either.
+      const { timing: _timing, ...media } = h264.proof.media as Record<string, Json>
+      const bare = (h264.proof.segments as unknown as SegmentEntry[]).map(({ timing: _t, ...entry }) => entry)
+      const proof = sign({ ...h264.proof, media, segments: bare as unknown as Json })
+      timed({ name: '176-mp4-timing-missing', file: seal(h264.media, proof), proof,
+        expected: { outcome: 'no_proof_found', labels: [], not_evaluated: [] },
+        schemaValid: false,
+        notes: 'Vector 175 with a core signed without `media.timing` and segment entries without `timing`: a writer that predates corpus 7.0.0. §6.1 and §8 require the field of every proof that carries `segments`, as they require `media.presentation`: the core is signed once and attached to every clip cut from it, so a field a clip depends on cannot be optional to the original. Missing required field — **no proof found**, before the signature is read (vector 165 is the same answer for `media.presentation`).' })
+    }
+
+    {
+      // Entry 1's timing hash replaced by the hash of a record with one
+      // video duration lengthened: a re-timed segment 1, declared.
+      const entries = (h264.proof.segments as unknown as SegmentEntry[]).map((e) => e.gop === 1 ? { ...e, timing: createHash('sha256').update('a timing nobody signed').digest('base64url') } : e)
+      const proof = { ...h264.proof, segments: entries as unknown as Json }
+      timed({ name: '177-mp4-timing-entry-not-in-root', file: seal(h264.media, proof), proof,
+        expected: { outcome: 'tampered', labels: [], not_evaluated: [], core_hash: hashOf(proof), segments: { verified: [0, 1, 2] } },
+        notes: 'Vector 175 with segment 1\'s `timing` hash in the proof replaced after signing. The entry\'s `timing` is outside the 96-byte segment message and outside every signature: what binds it is `media.timing.root` in the signed core. With every entry present a verifier recomputes the root from the entries — no demuxer needed — and here it does not match: a binding the proof makes that does not hold, **tampered** (§5 *Timing*). `segments.verified` still lists the three GOPs whose content recomputes, as on vector 90: the contents are intact, the proof is not.' })
+    }
+
+    {
+      // Cut at the end instead: GOP 2 removed, and the audio frames §5 would
+      // have given it. The delay and the timescales stay as the device wrote
+      // them, and the video's media edit is rounded down into the 10 kHz movie
+      // timescale, as a muxer has to.
+      const idr2 = (video[(gops[2] as { first: number }).first] as { dts: bigint }).dts
+      const endAudio = audio.map((s, i) => ({ s, i })).filter(({ s }) => s.dts * 90000n < (4731n * 9n + idr2) * 48000n).map(({ i }) => i)
+      const ended = remux(h264.media, {
+        video: { samples: gops.slice(0, 2).flatMap(range), delay: 4731n, sync: 'keep' },
+        audio: { samples: endAudio }
+      })
+      timed({ name: '178-mp4-timing-clip-end-cut', file: Buffer.concat([ended, h264.trailer]), proof: h264.proof,
+        expected: { outcome: 'verified_clip', labels: DEVICE_LABELS, not_evaluated: [], core_hash: hashOf(h264.proof), segments: { verified: [0, 1] }, location: LOCATION },
+        notes: 'Vector 175 **cut at the end**: GOP 2 removed from the video track, and with it the audio frames §5 assigns to segment 2; the 473 ms empty edit, the timescales and the full proof stay. Segment 1 is the last segment of this file and was not the last of the original: its `end_n` is its last sample\'s DTS plus that sample\'s duration, which in the original was the DTS of IDR 2 — the same number, because a sample table has no other way to place IDR 2 — and its audio runs "to the end of the track", which is now the frames before IDR 2. The record reads back identical. A reader that took `end_n` from the track\'s end — the `mdhd` duration, which on this device counts the 473 ms delay and which `remux.ts` leaves at the original\'s — gets segment 1 wrong here.\n\nThe video\'s media edit is the kept media rounded down into the 10 kHz movie timescale, so it ends less than one movie tick before segment 1 does — the slack §5 *Timing* allows, because a muxer has to round. **Verified clip**, 0 and 1 of 3. The cut at the start is vector 89, 1 and 2 of 3, with its timing kept.' })
+    }
+
+    {
+      // Segment 2's sixth frame held for two more seconds. The last segment
+      // takes its audio "to the end of the track", so no frame moves between
+      // segments and every content_hash still matches.
+      const frozen = (gops[2] as { first: number }).first + 5
+      const freeze = remux(h264.media, {
+        movieTimescale: 90000,
+        video: { ...clipPlan, delay: videoDelay, retime: (d, i) => i === frozen ? d + 180000 : d },
+        audio: { samples: keptAudioIndexes, delay: audioDelay }
+      })
+      timed({ name: '179-mp4-timing-clip-frame-frozen', file: Buffer.concat([freeze, h264.trailer]), proof: h264.proof,
+        expected: RETIMED,
+        notes: 'Vector 89\'s clip with one `stts` duration lengthened by two seconds: the sixth frame of segment 2 freezes on screen, then the recording resumes. Every sample, every vcap SEI and every audio frame is where it was, segment 2 is the last of the file so its audio still runs to the end of the track, and both GOPs recompute to their signed `content_hash` — before corpus 7.0.0 this file read *verified clip*, 1 and 2 of 3, with two seconds of a moment that never lasted two seconds.\n\nSegment 2\'s timing record read back has one `dts_i − dts_0` after the frozen frame larger by 180 000 ticks, and `end_n` with them: its hash is not the entry\'s. The signed frames under a timing nobody signed — **frames not compared**, *timing differs*, no segment credited (§5 *Timing*). Not *tampered*: re-muxing a clip is not an accusation.' })
+    }
+
+    {
+      // Two frames of segment 2 shown in each other's place: frame p at the
+      // instant of p+1 and p+1 at the instant of p, by composition offsets.
+      const order = clipPlan.samples
+      const p = (gops[1] as { count: number }).count + 3
+      const step = Number((video[order[p] as number] as { duration: bigint }).duration)
+      const reordered = remux(h264.media, {
+        movieTimescale: 90000,
+        video: { ...clipPlan, delay: videoDelay, cts: order.map((_, n) => n === p ? step : n === p + 1 ? -step : 0) },
+        audio: { samples: keptAudioIndexes, delay: audioDelay }
+      })
+      timed({ name: '180-mp4-timing-clip-frames-reordered', file: Buffer.concat([reordered, h264.trailer]), proof: h264.proof,
+        expected: RETIMED,
+        notes: `Vector 89's clip with a \`ctts\` box added (version 1) that swaps the presentation of two frames inside segment 2: the clip's sample ${p} is shown ${step} ticks late and sample ${p + 1} ${step} ticks early, so a player shows them in each other's place. Decode order, every sample, every SEI and every audio frame are untouched; both GOPs recompute. Picture order count would catch this in a stream with B-frames, and neither sealer writes any: on their files there was nothing to check it against.\n\nSegment 2's record reads back with two \`cts_i\` that are not 0, where the signed record has 0 for every sample (the original has no \`ctts\`): **frames not compared**, *timing differs*, nothing credited (§5 *Timing*).` })
+    }
+
+    {
+      // Both media timescales doubled, every duration kept: twice as fast,
+      // in sync. The movie timescale is doubled with them, so every empty
+      // edit is half as long and every instant exactly half what it was —
+      // §5 assigns the same audio frames to each segment.
+      const doubled = remux(h264.media, {
+        movieTimescale: 180000,
+        video: { ...clipPlan, delay: videoDelay, timescale: 180000 },
+        audio: { samples: keptAudioIndexes, delay: audioDelay, timescale: 96000 }
+      })
+      timed({ name: '181-mp4-timing-clip-timescale-doubled', file: Buffer.concat([doubled, h264.trailer]), proof: h264.proof,
+        expected: RETIMED,
+        notes: 'Vector 89\'s clip with both tracks\' `mdhd` timescales doubled (video 180 000, audio 96 000) and every `stts` duration kept, and the movie timescale doubled with them: the whole clip plays twice as fast, picture and sound in sync. Every instant on the presentation timeline is exactly half what it was, so §5 assigns the same audio frames to each segment and both GOPs recompute — the uniform rescale the audio rule could never see.\n\nRead back, the values are the signed ones, in a timescale that says they last half as long. Converted to the signed timescales, `t × 90 000 / 180 000` is not an integer for an odd duration (3001, 2999), and where it is it is half the signed value: either way the hash differs — **frames not compared**, *timing differs* (§5 *Timing*). Vector 182 is the re-mux that changes the timescale and keeps the instants.' })
+    }
+
+    {
+      // Every duration and both timescales multiplied by 2: the same
+      // instants in finer ticks, what a re-muxer that rescales does.
+      const finer = remux(h264.media, {
+        movieTimescale: 90000,
+        video: { ...clipPlan, delay: videoDelay, timescale: 180000, retime: (d) => d * 2 },
+        audio: { samples: keptAudioIndexes, delay: audioDelay, timescale: 96000, retime: (d) => d * 2 }
+      })
+      timed({ name: '182-mp4-timing-clip-exact-remux', file: Buffer.concat([finer, h264.trailer]), proof: h264.proof,
+        expected: { outcome: 'verified_clip', labels: DEVICE_LABELS, not_evaluated: [], core_hash: hashOf(h264.proof), segments: { verified: [1, 2] }, location: LOCATION },
+        notes: 'Vector 89\'s clip re-muxed into finer ticks: both `mdhd` timescales doubled (video 180 000, audio 96 000) **and** every `stts` duration doubled with them, the empty edits unchanged. Every frame is shown at the instant it was, for as long as it was. A verifier converts each value read back into the signed timescale — `t_signed = t_received × ts_signed / ts_received`, here `2t × 90 000 / 180 000 = t`, an integer every time — and the records hash to the signed ones. **Verified clip**, 1 and 2 of 3: a re-mux that keeps or multiplies a timescale verifies exactly (§5 *Timing*), and only one that cannot represent the original instants reads *timing differs*.' })
+    }
+
+    {
+      // The AudioSpecificConfig's sampling frequency index, 3 (48 kHz) → 4
+      // (44.1 kHz), in the clip's esds: same length, nothing else moves.
+      const retuned = Buffer.from(cut)
+      const esds = retuned.indexOf(Buffer.from('esds', 'latin1'))
+      const asc = retuned.indexOf(Buffer.from('05021188', 'hex'), esds)
+      if (esds < 0 || asc < 0 || asc > esds + 64) throw new Error('183: no 48 kHz AAC AudioSpecificConfig in the clip')
+      retuned.writeUInt16BE(0x1208, asc + 2)
+      timed({ name: '183-mp4-timing-clip-audio-rate-changed', file: Buffer.concat([retuned, h264.trailer]), proof: h264.proof,
+        expected: { outcome: 'frames_not_compared', labels: [...DEVICE_LABELS, 'presentation differs'].sort(), not_evaluated: [], core_hash: hashOf(h264.proof), segments: { verified: [] }, location: LOCATION },
+        notes: `Vector 89's clip with the AudioSpecificConfig inside the audio sample entry's \`esds\` changed from 48 kHz to 44.1 kHz (sampling frequency index 3 → 4, file byte ${asc + 2}): the same coded frames now decode 8 % slower and lower in pitch, while every \`stts\` duration, every timescale and every byte a segment hashes are untouched — the timing record reads back identical. What a decoder is told about the audio is presentation: since corpus 7.0.0 the audio sample entry's \`esds\` is part of \`X\` in \`media.presentation.config\` (§5 *Presentation*), so the configuration hash read back differs — **frames not compared**, *presentation differs*, nothing credited.` })
+    }
+
+    {
+      // The video's media edit ends 0.2 s before the media does: inside
+      // segment 2 (twelve frames, 0.4 s), which a player now shows in part.
+      const media = clipPlan.samples.reduce((n, i) => n + (video[i] as { duration: bigint }).duration, 0n)
+      const trimmed = remux(h264.media, {
+        movieTimescale: 90000,
+        video: { ...clipPlan, edits: [{ duration: videoDelay, mediaTime: -1n }, { duration: media - 18000n, mediaTime: 0n }] },
+        audio: { samples: keptAudioIndexes, delay: audioDelay }
+      })
+      timed({ name: '184-mp4-timing-clip-edit-trims-segment', file: Buffer.concat([trimmed, h264.trailer]), proof: h264.proof,
+        expected: RETIMED,
+        notes: 'Vector 89\'s clip with the video track\'s single media edit shortened by 0.2 s: `segment_duration` ends inside segment 2, so a player stops showing it six frames early. The edit list keeps the shape §5 models — leading empty edit, one media edit at rate 1 — so every GOP is located and recomputes, and every timing record reads back as signed: the sample tables are vector 89\'s. What changed is how much of segment 2 is shown.\n\n§5 *Timing*: on a clip, a single media edit that starts after a located segment\'s first presented instant, or ends one movie tick or more before its last frame does, trims inside it — a subset of the signed frames under a timing nobody signed. **Frames not compared**, *timing differs*. An original is not read this way: `media.hash` covers its edit list with every other byte.' })
+    }
+
+    {
+      // A writer that signed the encoder's microsecond timestamps instead of
+      // the muxer's ticks: video_timescale and audio_timescale 1 000 000, every
+      // value rounded to the nearest microsecond. Consistent with itself —
+      // the root is over the entries — and not a description of the file.
+      const reading = readContainer(h264.media) as Extract<ReturnType<typeof readContainer>, { kind: 'gops' }>
+      const us = (ts: bigint) => (v: bigint): bigint => (v * 1000000n + ts / 2n) / ts
+      const records = [0, 1, 2].map((n) => {
+        const t = (reading.gops.find((g) => g.index === n) as { timing: TimingValues }).timing
+        const v = us(reading.timescales.video)
+        const a = us(reading.timescales.audio as bigint)
+        return timingRecord({ videoDts: t.videoDts.map(v), videoCts: t.videoCts.map(v), videoEnd: v(t.videoEnd), audioDts: t.audioDts.map(a), audioDur: t.audioDur.map(a) })
+      })
+      const hashes = records.map((r) => createHash('sha256').update(r).digest())
+      const misdescribed = resignedProof(h264Device, presentationOf(h264.media), { timing: { video_timescale: 1000000, audio_timescale: 1000000, root: timingRoot(hashes).toString('base64url') }, hashes, records })
+      timed({ name: '185-mp4-timing-original-misdescribed', file: seal(h264.media, misdescribed), proof: misdescribed,
+        expected: { outcome: 'authentic', labels: [...DEVICE_LABELS, 'timing differs'].sort(), not_evaluated: [], core_hash: hashOf(misdescribed), segments: { verified: [0, 1, 2] }, location: LOCATION },
+        notes: 'Vector 175\'s file under a core whose `media.timing` was computed from the encoder\'s presentation timestamps in microseconds — `video_timescale` and `audio_timescale` 1 000 000, every value rounded to the microsecond — instead of from the ticks the muxer wrote: the mistake §5\'s writer requirements forbid, made by a writer that hashed before muxing. The proof is consistent with itself (the root recomputes from the entries) and does not describe the file: converted into microseconds, `3000 × 1 000 000 / 90 000` is not an integer, so no segment\'s record reads back as signed.\n\nThe bytes are exactly the sealed ones — `media.hash` matches — so the outcome stays **authentic**, and the false claim is the writer\'s: *timing differs*, amber at best, the way vector 163 is *presentation differs* (§5 *Timing*, §7). A writer conformance suite catches it on its first file.' })
+    }
+
+    {
+      // The full proof minus entry 0, beside a clip that lacks GOP 0: the
+      // proof a cutter that "cleans up" the entries of absent segments makes.
+      const proof = { ...h264.proof, segments: (h264.proof.segments as unknown as SegmentEntry[]).slice(1) as unknown as Json }
+      timed({ name: '186-mp4-timing-clip-entry-dropped', file: seal(cut, proof), proof,
+        expected: RETIMED,
+        notes: 'Vector 89\'s clip — GOP 0 cut — with entry 0 dropped from the proof as well: the proof a cutter makes when it keeps only the entries of the segments it kept. Every remaining signature holds, GOPs 1 and 2 are located and recompute, and their timing reads back as their entries say. But the entries\' `timing` hashes are outside every signature: only `media.timing.root` binds them, and the root is over all `segment_count` of them. With entry 0 gone it cannot be recomputed, so nothing shows entries 1 and 2 are the ones the sealer wrote — anyone could have rewritten them to match a re-timed clip.\n\n§5 *Timing*: a clip\'s proof carries every entry, and a located segment whose timing hash is not authenticated by the root is not shown at signed instants — **frames not compared**, *timing differs*. Before corpus 7.0.0 this file read *verified clip*, 1 and 2 of 3, as vector 89 does. Vector 38 drops the same entry over the original file and reads *tampered* for an earlier reason: GOP 0 is in the file and nothing signs it.' })
+    }
+
+    {
+      // Entry 1's timing removed after signing.
+      const entries = (h264.proof.segments as unknown as SegmentEntry[]).map((e) => { if (e.gop !== 1) return e; const { timing: _t, ...rest } = e; return rest })
+      const proof = { ...h264.proof, segments: entries as unknown as Json }
+      timed({ name: '187-mp4-timing-entry-hash-missing', file: seal(h264.media, proof), proof,
+        expected: { outcome: 'no_proof_found', labels: [], not_evaluated: [] },
+        schemaValid: false,
+        notes: 'Vector 175 with the `timing` member removed from segment 1\'s entry after signing. §6.1 makes it a required member of every `segments[]` entry, as `hash`, `prev` and `sig` are: a proof whose entry lacks it is not well formed — **no proof found**, before any signature is read, the answer a missing `media.w` gets after signing (vector 46).' })
+    }
   }
 
   {
@@ -648,20 +878,20 @@ const videoCore = (media: Buffer, extra: Proof = {}): Proof => photoCore(media, 
     const presented = (presentation: Json): Proof => resignedProof(hevcDevice, presentation)
     const proof = hevc.proof
     const LABELS = ['integrity unevaluated', 'key not in transparency log', 'no trusted time', 'no watermark', 'not anchored', 'origin not hardware-attested']
-    const testKey = 'The container is the device capture of vector 37 (a Samsung SM-S908B, HEVC, no audio); the core and the segment chain are re-signed with the test key in `tools/src/testkey.ts`, over the same capture id and the same content hashes, so that the core can carry `media.presentation`.'
+    const testKey = 'The container is the device capture of vector 37 (a Samsung SM-S908B, HEVC, no audio); the core and the segment chain are re-signed with the test key in `tools/src/testkey.ts`, over the same capture id and the same content hashes, so that the core can carry `media.presentation` and `media.timing` (no audio track, so no `audio_timescale`).'
     const presentationVector = (name: string, bytes: Buffer, expected: FileVector['expected'], notes: string, signed: Proof = proof): void =>
       file({ name, container: true, ext: 'mp4', file: bytes, proof: signed, expected, notes: `${notes}\n\n${testKey}` })
 
     presentationVector('158-mp4-presentation-original', seal(hevc.media, proof),
       { outcome: 'authentic', labels: LABELS, not_evaluated: [], core_hash: hashOf(proof), segments: { verified: [0, 1, 2] } },
-      'Vector 37\'s file with a core that carries `media.presentation` (§6.1): the SHA-256 of the presentation message over the `hvcC` parameter sets — VPS, SPS, PPS, in NAL type order — and the sample entry\'s `clap`, `pasp` and `colr` boxes (this file has none), the video `tkhd` matrix (identity) and its display size, 640×360 in 16.16. **Authentic**: an original is covered whole by `media.hash`, and the presentation read back from it is the signed one.')
+      'Vector 37\'s file with a core that carries `media.presentation` (§6.1): the SHA-256 of the presentation message over the `hvcC` parameter sets — VPS, SPS, PPS, in NAL type order — and the sample entry\'s `clap`, `pasp` and `colr` boxes (this file has a `colr`, `nclx`, the one `MediaMuxer` wrote), the video `tkhd` matrix (identity) and its display size, 640×360 in 16.16. **Authentic**: an original is covered whole by `media.hash`, and the presentation and the timing read back from it are the signed ones.')
 
     // GOP 0 cut; no audio track, so no delay is needed to keep instants.
     const gops = gopsOf(hevc.media)
     const clip = remux(hevc.media, { video: { samples: gops.slice(1).flatMap(range), sync: 'keep' } })
     presentationVector('159-mp4-presentation-clip', Buffer.concat([clip, buildTrailer(jcs(proof as Json), { flags: flagsFor(proof) })]),
       { outcome: 'verified_clip', labels: LABELS, not_evaluated: [], core_hash: hashOf(proof), segments: { verified: [1, 2] } },
-      'Vector 158 cut: GOP 0 dropped from the sample tables by `remux.ts`, which copies the track header and the sample description as they were. Both remaining GOPs are located and recompute, and the clip presents them exactly as the core says — the same parameter sets, the same matrix, the same display size, one video track. **Verified clip**, 1 and 2 of 3: the case §5 *Presentation* must leave alone.')
+      'Vector 158 cut: GOP 0 dropped from the sample tables by `remux.ts`, which copies the track header and the sample description as they were. Both remaining GOPs are located and recompute, and the clip presents them exactly as the core says — the same parameter sets, the same matrix, the same display size, one video track, the same timing records (a silent file: `media.timing` has no `audio_timescale`, and every record has `a = 0`). **Verified clip**, 1 and 2 of 3: the case §5 *Presentation* must leave alone.')
 
     // The clip's moov, rewritten in place: lengths never change.
     const moovOf = (b: Buffer): Box => find(boxes(b, 0, b.length), 'moov') as Box
@@ -2348,7 +2578,8 @@ for (const vector of vectors) {
       ...(vector.keyStatus ? { key_status: vector.keyStatus } : {}),
       ...(vector.chainRead ? { chain_read: vector.chainRead } : {}),
       ...vector.expected,
-      ...(vector.proof ? { schema_valid: schemaValid } : {})
+      ...(vector.proof ? { schema_valid: schemaValid } : {}),
+      ...(vector.debug ? { debug: vector.debug } : {})
     }, null, 2) + '\n')
     actual = pick(verifyFile({ file: vector.file, sidecar: vector.sidecar, recomputeSegments: vector.container === true, trust, clock: vector.verifierClock ? new Date(vector.verifierClock) : undefined, keyStatus: vector.keyStatus as KeyStatusStatement | undefined, chainRead: vector.chainRead as ChainRead | undefined }), vector.expected)
     // The schema must agree with the review too: a proof the review calls

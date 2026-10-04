@@ -675,8 +675,9 @@ sig(n)          = ECDSA-P256-SHA256( message(n) ), P1363, low s (§4.2)
   and H.265 the SPS holds the cropping window and the VUI colour description,
   and every slice is decoded under the SPS and PPS it names), the track
   header's matrix (rotation, mirroring, translation) and display size, the
-  sample entry's `clap`, `pasp` and `colr` boxes, and which tracks a player may
-  enable. Parameter sets that travel in band, inside a sample, are NAL units
+  sample entry's `clap`, `pasp` and `colr` boxes, the audio sample entry's
+  `esds` (the sample rate and channel layout a decoder uses), and which tracks
+  a player may enable. Parameter sets that travel in band, inside a sample, are NAL units
   of that sample and already inside `content_hash`. For an original,
   `media.hash` covers all of it; for a clip, nothing did, so a re-mux that
   kept every sample could crop, rotate or re-describe the signed frames and
@@ -696,9 +697,18 @@ sig(n)          = ECDSA-P256-SHA256( message(n) ), P1363, low s (§4.2)
     ordered by `nal_unit_type` ascending (`nal[0] & 0x1f` in H.264,
     `(nal[0] >> 1) & 0x3f` in H.265), and NAL units of one type keep the order
     the record lists them in. `X` is the concatenation of every child box of
-    the sample entry whose type is `clap`, `pasp` or `colr`, each whole —
-    size, type and payload as stored — in file order; empty when there is
-    none.
+    the video sample entry whose type is `clap`, `pasp` or `colr`, each whole
+    — size, type and payload as stored — in file order, followed, when the
+    file has a `soun` track, by every `esds` box of that track's sample entry,
+    whole, in file order; empty when there is none of either. The child boxes
+    of an `mp4a` entry start 28 bytes into its payload (`SampleEntry`, then
+    the `AudioSampleEntry` fields); in a QuickTime sound description of
+    version 1 or 2 (the `uint16` 8 bytes into the payload) 16 or 36 bytes
+    later, and an `esds` inside a `wave` child of the entry counts as the
+    entry's. An audio sample entry of another type adds nothing. The
+    AudioSpecificConfig in the `esds` says the sample rate: change it and the
+    same coded frames play pitched and re-timed while every segment hash and
+    every timing record still match (vector 183).
   - **`matrix`** is the nine 32-bit values of the video track's `tkhd` matrix,
     each read as a signed big-endian integer, in stored order (`a, b, u, c,
     d, v, x, y, w`); **`display`** is the `tkhd` width and height, each read
@@ -710,8 +720,9 @@ sig(n)          = ECDSA-P256-SHA256( message(n) ), P1363, low s (§4.2)
     show any track that is enabled.
 
   A file that is not the original reaches *verified clip* only when the
-  layout holds and `config`, `matrix` and `display` read back equal the
-  signed ones (vectors 89, 94, 159). Otherwise the signed frames are in the
+  layout holds, `config`, `matrix` and `display` read back equal the
+  signed ones (vectors 89, 94, 159), and its timing reads back as signed
+  (*Timing*, below). Otherwise the signed frames are in the
   file under a presentation nobody signed: **frames not compared**, no
   segment credited, with *tracks not bound* when the layout does not hold
   (vector 162) and *presentation differs* when a value does not match
@@ -749,6 +760,137 @@ sig(n)          = ECDSA-P256-SHA256( message(n) ), P1363, low s (§4.2)
   extra track enabled, makes every clip of the file *tracks not bound*, and
   its original is still *authentic*. A writer MUST check its output against a
   verifier on a file it produced (vector 158 is one).
+- **Timing.** A segment hash covers the bytes of the frames and
+  `media.presentation` how a player is told to show them; neither says
+  **when**. For an original `media.hash` covers the timing tables with every
+  other byte; for a clip nothing did, so a re-mux that kept every sample
+  could freeze a frame (`stts`), reorder the frames of a GOP (`ctts`), scale a
+  whole track or both (`mdhd`), or trim inside a located segment (the media
+  edit), and still read *verified clip*. The audio rule above binds timing
+  only by accident, where a change moves an IDR relative to the audio. The
+  sealer signs it instead, without touching the segment message: each
+  `segments[]` entry carries the hash of its segment's **timing record**, and
+  the core carries `media.timing`, whose `root` binds those hashes (§6.1).
+
+  ```
+  timing(n)  = uint32 BE v
+               || ( int64 BE (dts_i − dts_0) || int64 BE cts_i ) × v
+               || uint64 BE (end_n − dts_0)
+               || uint32 BE a
+               || ( int64 BE (adts_j − adts_0) || uint32 BE adur_j ) × a
+
+    i = 0 … v−1   the video samples of segment n, in decode order: the IDR
+                  first, then every sample up to the next IDR, whatever NAL
+                  units each holds
+    dts_i         the sample's DTS: the sum of the `stts` durations of every
+                  sample before it in the track
+    dts_0         the DTS of segment n's IDR
+    cts_i         the sample's composition offset from `ctts` — version 0
+                  unsigned, version 1 signed, as ISO/IEC 14496-12 says —
+                  and 0 when the track has no `ctts`
+    end_n         the DTS of segment n's last video sample plus that
+                  sample's own `stts` duration
+    j = 0 … a−1   the audio frames §5 assigns to segment n (those of
+                  audio_frames(n)), in decode order; a = 0 when it has none
+    adts_j        the frame's DTS in the audio track; adts_0 the first's
+    adur_j        the frame's `stts` duration
+
+  segments[n].timing = base64url( SHA-256( timing(n) ) )
+  media.timing.root  = base64url( SHA-256( T(0) || T(1) || … || T(segment_count − 1) ) )
+                       T(n) = the 32 bytes segments[n].timing decodes to
+  ```
+
+  - **Every value is an integer in the media timescale of its own track**,
+    the `mdhd` timescale the file states: video values in the video track's,
+    audio values in the audio track's. `media.timing.video_timescale` and
+    `audio_timescale` are those two timescales; `audio_timescale` is
+    **absent** — never `null`, never 0 — when the file has no `soun` track,
+    and then every record has `a = 0` (vectors 158, 159). The record is
+    measured from the segment's own first sample, so where a segment sits —
+    after a cut, behind an empty edit, in a movie timescale a re-muxer chose
+    — does not enter it: the edit list enters only through the audio
+    assignment and the clip rule below. Every field is fixed-length and each
+    count precedes its list; a value that does not fit its field is a record
+    that cannot be built.
+  - **`end_n` is read from the segment alone.** In a sample table it equals
+    the DTS of IDR n+1 when one follows, and for the last segment it is the
+    only definition: it is what binds how long the last frame is shown. A
+    reader MUST NOT take it from the track's `mdhd` duration or from an edit:
+    `MediaMuxer`'s `mdhd` duration counts the leading delay (vector 175), and
+    the segment a clip ends on need not be the one its original ended on
+    (vector 178).
+  - **What the audio half binds.** Which frames a segment has, their spacing
+    and their durations. The offset between the tracks is bound only to the
+    slack of the assignment rule: shifting the audio by less than the gap
+    between each segment boundary and the nearest audio frame moves no frame
+    and changes no record — less than one audio frame (21 ms for AAC at
+    48 kHz), accepted.
+  - **The root, without a demuxer.** When the proof carries an entry for every
+    index from 0 to `segment_count − 1`, a verifier recomputes `root` from
+    the entries' `timing`; a root that does not match is a binding the proof
+    makes that does not hold: **tampered** (vector 177), whatever the file.
+    When an entry is missing the root cannot be recomputed, and no entry's
+    `timing` is authenticated — they are outside every signature. **A clip's
+    proof carries every entry**: a writer, a cutter or any tool that carries
+    a proof along with a clip MUST NOT drop the entries of the segments it
+    cut (vector 186).
+  - **Reading it back** (a file that is not the original). For each located
+    segment the verifier builds `timing(n)` from the received file, in the
+    received file's timescales, and expresses every value in the signed one:
+    `t_signed = t_received × ts_signed / ts_received`, video values with
+    `video_timescale`, audio values with `audio_timescale`. Each result MUST
+    be an integer; an audio value with no audio timescale on either side, a
+    result that is not an integer or one that does not fit its field is a
+    timing that differs. The verifier hashes the converted record and
+    compares it with the entry's `timing`. A re-mux that keeps a timescale or
+    multiplies it, durations with it, verifies exactly (vector 182); one that
+    moves to a timescale unable to represent the signed instants has moved
+    them — by at most a tick — and reads *timing differs* (vector 181). A
+    hash admits no tolerance, and a tolerance would be the thing to argue
+    about.
+  - **The single media edit** (a file that is not the original). On the
+    video track and on the audio track, when the edit list has a media edit
+    — `media_time` m in media ticks, `segment_duration` d in movie ticks, the
+    track's media timescale T and the movie timescale M — it **trims inside**
+    a located segment when `m > s`, or when `(d + 1) × T ≤ (e − m) × M`
+    (the edit ends one movie tick or more before the segment does), where
+    `[s, e)` is the segment's span on that track in media ticks: for video
+    from the least `dts_i + cts_i` to the greatest `dts_i + cts_i + dur_i`
+    (`dur_i` is the next sample's DTS minus `dts_i`, `end_n − dts_i` for the
+    last), for audio from `adts_0` to the last frame's DTS plus its
+    duration. The movie tick of slack is the rounding a muxer cannot avoid
+    when M is coarser than T (vector 178). A track with no media edit shows
+    all its media and trims nothing. An edit list of any other shape is
+    already a container §5 does not compare (*The DTS is the container's*).
+  - **Verdict.** A located segment whose timing does not read back as
+    signed, whose entry's `timing` the root does not authenticate, or which
+    the media edit trims, is in the file under a timing nobody signed:
+    **frames not compared**, no segment credited, with *timing differs*
+    (vectors 179, 180, 181, 184, 186) — beside *presentation differs* or
+    *tracks not bound* when those hold too. Not *tampered*: re-timing a clip
+    is not an accusation, and it is not a verified clip either. Changing the
+    audio sample rate is *Presentation*'s case, not this one (vector 183).
+  - **On the original** the verifier builds the record of every segment
+    from the file — each index from 0 to `segment_count − 1` named by
+    exactly one GOP — converts them as above, and compares the root they give
+    with the signed one. The bytes are the sealed ones, so a root that does
+    not match is the writer's false claim: *timing differs*, amber at best,
+    never red (vector 185), as for *presentation differs*. The media edit
+    rule does not apply to an original: `media.hash` covers its edit list.
+  - **Writer requirements for `media.timing`.** A video writer MUST include
+    it, and `timing` in every `segments[]` entry: a proof without either is
+    *no proof found* (§8, vectors 176, 187). It MUST compute both from the
+    file it produced, after the muxer finalised it and before the trailer is
+    appended — the sample tables, `mdhd` timescales and edit list a verifier
+    will read — and never from the encoder's presentation timestamps, the
+    timescale it asked for or the platform's documentation: a muxer chooses
+    timescales and edits and rounds every timestamp into them (vector 185
+    signs microseconds and describes no file). The segment message does not
+    change, so the record is read back after the recording stops and no
+    segment is re-signed: only the core, which a writer signs after that
+    read-back anyway, and the entries' `timing` change. A writer MUST check
+    its output against a verifier on a file it produced (vector 175 lists
+    the records byte for byte).
 - **Verifier behaviour** on video:
   - `sig` verifies over the core → the claims are authentic (who, which key,
     declared when and where). If `sig` fails → **tampered**, red, stop.
@@ -758,12 +900,13 @@ sig(n)          = ECDSA-P256-SHA256( message(n) ), P1363, low s (§4.2)
     segment signature verifies, the chain holds wherever two consecutive
     segments are both present, at least one GOP is located and verified
     under *Locating segments*, and — when `media.hash` does not match — the
-    file presents those GOPs as the core says (*Presentation*) → **verified
-    clip**, amber, reporting which segment indexes verified out of
-    `segment_count`;
+    file presents those GOPs as the core says (*Presentation*) and at the
+    instants it binds (*Timing*) → **verified clip**, amber, reporting which
+    segment indexes verified out of `segment_count`;
   - a segment signature fails, or a present segment's `prev` differs from
     `SHA-256(message(n−1))` while segment n−1 is present (the chain breaks where
-    the file claims contiguity) → **tampered**, red;
+    the file claims contiguity), or every entry is present and their `timing`
+    hashes do not recompute `media.timing.root` (*Timing*) → **tampered**, red;
   - **a located segment whose `content_hash`, recomputed from the container,
     differs from the signed one → tampered**, red, reporting which segments do
     verify; so is every other failure *Locating segments* lists. A contradicted
@@ -816,7 +959,8 @@ the capture onwards, each verifiable on its own and each bound to `core_hash`.
   "v": "vcap/1.0",
   "capture_id": "base64url, 16 bytes",
   "media":    { "mime", "w", "h", "duration_ms", "hash", "segment_count",
-                "presentation": { "config", "matrix": [ 9 ], "display": [ 2 ] } },
+                "presentation": { "config", "matrix": [ 9 ], "display": [ 2 ] },
+                "timing": { "video_timescale", "audio_timescale", "root" } },
   "device":   { "platform": "android" | "ios" | "web",
                 "secure_hw": "strongbox" | "tee" | "secureEnclave" | "none",
                 "key_id" },
@@ -830,7 +974,7 @@ the capture onwards, each verifiable on its own and each bound to `core_hash`.
   "sig":      { "alg": "ES256", "value": "base64url r||s", "pub": "base64url SPKI" },
 
   // ---- attachments: each self-authenticating, bound to core_hash (§6.2) ----
-  "segments":    [ { "gop": 0, "hash", "prev", "sig" } ],   // "range" is deprecated: writers MUST NOT emit it (§5)
+  "segments":    [ { "gop": 0, "hash", "prev", "sig", "timing" } ],   // "range" is deprecated: writers MUST NOT emit it (§5)
   "attestation": [ "base64url DER leaf", "...", "base64url DER root" ],   // omitted on web
   "attestation_status": { "source", "fetched_at", "entries": [ { "serial", "status", "reason", "revoked_at" } ], "sig" },
   "registry":    { "log_id", "leaf_index", "leaf": { ... }, "inclusion_path": [ ... ],
@@ -909,6 +1053,17 @@ Rules that keep five implementations byte-identical:
   carry none: `media.hash` covers every byte of a photo, and a
   photo has no derivation that keeps its signature (a still image that
   carries `segments` anyway carries the field with them, §8).
+- `media.timing` (video) — when the signed frames are shown, so that a clip
+  cannot freeze, reorder, rescale or trim them (§5 *Timing*):
+  `video_timescale`, the video track's `mdhd` timescale as the writer's file
+  states it, an integer from 1 to 2^32 − 1; `audio_timescale`, the same for
+  the audio track, **absent** when the file has no audio track — never `null`
+  or 0; `root`, base64url of 32 bytes, the SHA-256 over the segments' timing
+  hashes in index order. Each `segments[]` entry carries `timing`, base64url
+  of the 32-byte SHA-256 of its `timing(n)`; it is outside the segment
+  message and bound by `root`. **Required**, both, wherever `segments` is,
+  for `media.presentation`'s reason: absent or malformed, the proof is not
+  well formed and reads *no proof found* (§8, vectors 176, 187).
 - `device.key_id = base64url( SHA-256( DER SPKI of sig.pub ) )`. Derived, never
   free; the identifier the registry and the transparency log use.
 - `device.secure_hw` is the **claimed** level. The verifier computes the
@@ -956,6 +1111,7 @@ Field table — type, required, verified against:
 | `media.hash` | yes | recomputed canonical bytes (§4.1) |
 | `media.segment_count` | yes (video) | segments present (§5) |
 | `media.presentation` | yes (video, and wherever `segments` is) | the received container's configuration, `tkhd` and tracks (§5 *Presentation*) |
+| `media.timing` | yes (video, and wherever `segments` is) | the entries' `timing` (the root), and each located segment's timing record read back from the received container (§5 *Timing*) |
 | `device.secure_hw` | yes | proven level from `attestation` (§7) |
 | `device.key_id` | yes | `sig.pub`, attestation leaf, registry entry |
 | `watermark` | no | detector output, if the detector ran |
@@ -979,7 +1135,7 @@ containing a schema-valid value remain readable under the same rules.
 | Key | Added by | Self-authenticated by | Bound to the core by |
 |---|---|---|---|
 | `sig` | core, at capture | — it *is* the authentication | covers `JCS(core)` |
-| `segments` | core, at capture | each `sig(n)` under `sig.pub` | `capture_id` in every message |
+| `segments` | core, at capture | each `sig(n)` under `sig.pub`; each entry's `timing` by `media.timing.root` | `capture_id` in every message; `media.timing.root` |
 | `attestation` | core, at key creation | chain to a pinned Google root / App Attest | leaf SPKI MUST equal `sig.pub` |
 | `attestation_status` | sync, while the chain is current | registry key signature over the entries it saw | signature covers `core_hash` |
 | `registry` | sync | inclusion proof against a Signed Tree Head, carried inline | leaf carries `device.key_id` and `sig.pub` |
@@ -1558,6 +1714,7 @@ for *key not in transparency log*.
 | `none` | session key, no attestation, or a chain that does not prove a level | n/a | **amber, never green** | origin not hardware-attested |
 | any of the above | a video proof whose `content_hash` values were not recomputed from the container (§5) | any | unchanged | segment content not recomputed |
 | any | an original whose signed `media.presentation` does not describe it (§5 *Presentation*) | — | **amber at best, flagged** | presentation differs |
+| any | an original whose signed `media.timing` does not describe it (§5 *Timing*) | — | **amber at best, flagged** | timing differs |
 | any | claimed level above the level the `attestation` attachment proves | — | **amber at best, flagged** | inconsistent claim |
 | any | a valid `integrity` attachment whose verdict is `failed` (§6.2) | — | **amber at best, prominently flagged** | integrity failed (and, beside a proven level, integrity not proven) |
 | any | `sig` invalid, or attestation leaf ≠ `sig.pub` | — | **red** | tampered |
@@ -1731,15 +1888,18 @@ that has expired — is only ever as good as the copy in the file.
 **Required.** `v`, `capture_id`, `media`, `media.mime`, `media.hash`,
 `media.w`, `media.h`, `device.secure_hw`, `device.key_id`, `sig`, for a
 video proof `segments`, and for a proof carrying `segments`
-`media.segment_count` and `media.presentation`. The pixel dimensions are
+`media.segment_count`, `media.presentation`, `media.timing` and `timing` in
+every `segments[]` entry. The pixel dimensions are
 required and are **not** evidence — nothing is proven by them — but every
 writer holds them at capture, and a reader that cannot say how large the frame
 is cannot place a watermark payload or a segment in it (vector 46). A proof is
 a **video proof** when `media.mime` starts with `video/`; nothing else decides
 it — not the container, not `duration_ms` — so a video proof without
 `segments` is *no proof found* (vector 34), a video proof without
-`media.presentation` is *no proof found* (vector 165), and a still image
-carrying `segments` is verified as §5 says, `media.presentation` included. Missing or unparseable → *no proof found*. Present but
+`media.presentation` is *no proof found* (vector 165), one without
+`media.timing` or with an entry lacking `timing` is *no proof found*
+(vectors 176, 187), and a still image carrying `segments` is verified as §5
+says, `media.presentation` and `media.timing` included. Missing or unparseable → *no proof found*. Present but
 invalid → *tampered*.
 
 **Optional, each with its exact label when absent.** Absence is never an error,
@@ -1776,6 +1936,7 @@ and the verifier states it rather than staying silent.
 | `attestation_status` absent, unreadable, `unknown` or incomplete | *chain revocation not checked* | the chain's certificates were not all shown valid while the chain was current (§6.2) |
 | a video that is not the original, a track beyond the hashed two enabled, or a second video or audio track or sample description | *tracks not bound* | a player may show what no segment hash covers; *frames not compared* (§5) |
 | a video whose configuration, matrix or display size read back differs from `media.presentation` | *presentation differs* | on a clip *frames not compared*; on an original the writer's false claim, amber (§5, §7) |
+| a video whose segment timing read back differs from `media.timing`, a clip whose entries' `timing` the root cannot authenticate, or a clip whose media edit trims inside a located segment | *timing differs* | on a clip *frames not compared*; on an original the writer's false claim, amber (§5 *Timing*, §7) |
 | an iOS level from a registry leaf | *level from registry records* | the registry's word that the key is in a Secure Enclave; nothing in the file shows it (§7) |
 
 **An attachment that is present and does not hold up carries two labels: the
@@ -2034,14 +2195,18 @@ says.
       the original store's `box_purpose` from `manifest` into `original` in
       place (C2PA A.5.3), inside `media.hash` (`c2pa-interop-1.0.md` §6)
 - [ ] `REVIEW (mobile)` per-segment signing cost in StrongBox on a long clip
-- [ ] `REVIEW (BE)` a clip's timing is not bound: `stts`, `ctts`, the `mdhd`
-      timescales, the media edit's duration and the audio sample entry are
-      outside every segment hash and outside `media.presentation`, so a
-      re-mux can freeze, re-time or reorder the frames of a clip that still
-      reads *verified clip* (an original is covered by `media.hash`). No
-      verifier-only rule closes it; a proposal that signs per-segment timing
-      without changing the segment message is in
-      `reviews/design-clip-timing.md`
+- [x] `REVIEW (BE)` a clip's timing is not bound — resolved in corpus
+      7.0.0 (§5 *Timing*): each segment's timing record (`stts`, `ctts`,
+      the `mdhd` timescales, the last frame's duration and the audio frames'
+      timing) is hashed into its entry and bound by `media.timing.root`, a
+      required core field; the media edit may not trim inside a located
+      segment; the audio sample entry's `esds` joins `media.presentation`.
+      Design in `reviews/design-clip-timing.md`, accepted 4 October 2026;
+      vectors 175–187. Still open: a media edit that runs past the end of
+      the track (what a player shows there is not defined by ISO-BMFF, and
+      nothing binds it), the audio sample entry's own fields beside the
+      `esds`, and an `esds` inside a QuickTime `wave` box, which no vector
+      exercises (no MOV with audio is in the corpus)
 - [~] `REVIEW (mobile)` NAL byte definition and audio DTS rule reproducible on both encoders — the DTS clock is now named (M8) and the timeline with it (edit lists, §5); H.264 and HEVC on Android are reproduced byte for byte by a second implementation written from this text (`tools/src/container.ts`, the containers of vectors 36 and 37, verified under a presentation-bound core in 166 and 158), which is what "reproducible" was asking; on iOS the NAL bytes are reproduced for HEVC in MOV (vector 48's container, 167) and H.264 in MP4 (vector 85's, 168), and the audio DTS rule is not yet exercised: neither clip has an audio track
 - [x] `REVIEW (mobile)` hashing two interleaved tracks during encoding — resolved: 8 KB and 0.5 ms per segment on a TEE device (M8)
 - [ ] `REVIEW (mobile)` metadata stripping before sealing for pseudonymous captures
@@ -2080,7 +2245,8 @@ says.
       (152–164) and `media.presentation` required (165–168), and **171**
       in corpus 6.1.0 with a sidecar no longer overruled by a worse
       depth-0 manifest proof (169–171), and **174** in corpus 6.2.0 with
-      the same rule for a trailer (172–174),
+      the same rule for a trailer (172–174), and **187** in corpus 7.0.0
+      with clip timing bound (175–187),
       checked by the reference verifier in `tools/`. The §7 vectors
       trust the anchors in `vectors/_trust/`, whose attestation root is a test
       root: they prove the level logic, not that an implementation can walk a
@@ -2098,7 +2264,8 @@ says.
       done, both without audio; an iOS clip with audio is still owed. The
       device proofs of 36, 37, 48 and 85 predate `media.presentation` and
       read *no proof found* since corpus 5.0.0; their containers are verified
-      under a re-signed core that carries it in 166, 158, 167 and 168
+      under a re-signed core that carries it, and `media.timing` since
+      corpus 7.0.0, in 166, 158, 167 and 168
 - [x] Whether a verifier that cannot recompute segment hashes must say so in
       its labels: **yes** — *segment content not recomputed* (§5, §7), decided
       10 September 2026. Recomputation stays optional, declaring it does
