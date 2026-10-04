@@ -24,12 +24,12 @@ spec/      the specification document (normative), the watermark payload
            measured), the C2PA interoperability and sidecar companion
            (informative, with the writer rules it pins) and the public threat model
 reviews/   review notes on the draft (crypto, implementability); the spec absorbs them and cites
-           their measurements, they stay as the record of why; design-*.md are proposals not yet adopted
+           their measurements, they stay as the record of why; design-*.md are proposals, each with its status
 schema/    JSON Schema of the proof + validator
 vectors/   conformance vectors: sealed files, broken signatures, edge cases (see vectors/README.md),
            the versioned corpus manifest and how to claim conformance against it (vectors/CONFORMANCE.md)
 tools/     reference tooling (Node 22, TypeScript): JCS, trailer, canonical bytes, core signature,
-           segment chain, the C2PA carrier reader, the vector generators and the reference
+           segment chain, the segment timing record (timing.ts, written to be ported), the C2PA carrier reader, the vector generators and the reference
            verifier CI runs over vectors/,
            plus corpus-drift.sh, which a consumer that pins this repository as a submodule
            runs from its own suite to learn whether its pin has fallen behind main

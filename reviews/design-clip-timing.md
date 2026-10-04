@@ -1,11 +1,21 @@
 # Design note — binding a clip's timing
 
-Status: **proposal**, 3 October 2026. Nothing here is normative; the format
-does not change until this is accepted, specified in `vcap-proof-1.0.md` §5
-and §6.1, and given its vectors. Written because an audit found that a clip
-can be re-timed and still read *verified clip*, and asked whether a
-verifier-only rule could close it. It cannot; this note says why and what the
-sealers would have to sign.
+Status: **accepted** 4 October 2026, **implemented** in corpus 7.0.0:
+`vcap-proof-1.0.md` §5 *Timing* and §6.1 `media.timing` are normative, and
+vectors 175–187 pin them. Proposed 3 October 2026. The text below is the
+proposal as accepted and is not normative; where the spec settles a detail,
+the spec is authoritative. What the spec settled beyond this note: `end_n` is
+always the last sample's DTS plus its duration (equal to the next IDR's DTS
+in a sample table, and never the `mdhd` duration); `audio_timescale` is
+absent — never `null` or 0 — on a file without an audio track; the root is
+recomputed only when every entry is present, and a clip whose proof lacks one
+reads *timing differs* (vector 186); an entry without `timing` is not well
+formed (vector 187); the media edit rule gives one movie tick of slack at the
+end and applies to clips only; vector 4 below became an end cut (178),
+because vector 89 itself now carries the timing-kept case. Written because an
+audit found that a clip can be re-timed and still read *verified clip*, and
+asked whether a verifier-only rule could close it. It cannot; this note says
+why and what the sealers would have to sign.
 
 ## The gap
 

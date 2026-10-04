@@ -12,6 +12,94 @@ else.
 
 ## Unreleased
 
+### A clip's timing is bound — corpus 6.2.0 → **7.0.0**
+
+**Breaking.** §5 *Timing* (new), §5 *Presentation*, §6.1, §7, §8: a video
+proof's core gains a **required** field, `media.timing`
+`{ video_timescale, audio_timescale, root }`, and every `segments[]` entry a
+**required** member, `timing`. Absent or malformed → the proof is not well
+formed: **no proof found**, as for `media.presentation` (vectors 176, 187).
+The design is `reviews/design-clip-timing.md`, accepted 4 October 2026.
+
+Before: a segment's `content_hash` covers NAL units and audio frame bytes and
+`media.presentation` how a player is told to show them; nothing covered
+**when**. For an original `media.hash` covers every timing table; for a clip
+a re-mux that kept every sample could freeze a frame (`stts`), reorder frames
+inside a GOP (`ctts`), rescale both tracks in sync (`mdhd`), trim inside a
+located segment (the media edit) or declare another audio sample rate
+(`esds`), and still read *verified clip*. No verifier-only rule could close
+it: no signed byte carried a duration.
+
+- **The record.** `timing(n) = uint32 v ‖ (int64 dts_i − dts_0 ‖ int64
+  cts_i) × v ‖ uint64 end_n − dts_0 ‖ uint32 a ‖ (int64 adts_j − adts_0 ‖
+  uint32 adur_j) × a`, big-endian: the segment's video samples in decode
+  order, their composition offsets (0 without `ctts`), the last sample's DTS
+  plus its own duration, and the audio frames §5 already assigns to the
+  segment by DTS, every value in its own track's `mdhd` timescale as the file
+  states it. `segments[n].timing = SHA-256(timing(n))`; `media.timing.root =
+  SHA-256(timing hash 0 ‖ … ‖ timing hash segment_count − 1)`;
+  `audio_timescale` is absent on a file without an audio track. The 96-byte
+  segment message does not change, so no segment is re-signed: the sealer
+  reads the record back from the finished file, as it already does for
+  `media.presentation`, and signs the core after.
+- **The verifier.** With every entry present it recomputes the root from the
+  entries: a mismatch is **tampered** (vector 177). On a file that is not the
+  original, each located segment's record is read back and converted into
+  the signed timescales, `t_signed = t_received × ts_signed / ts_received`,
+  which must be an integer for every value; a record that does not hash to
+  its entry, a proof that lacks an entry (so the root cannot authenticate
+  any), or a single media edit that trims inside a located segment (one movie
+  tick of slack at the end) → **frames not compared**, new label **timing
+  differs**, no segment credited — amber, never red. On an original, a root
+  the file's own records do not reproduce is the writer's false claim:
+  *authentic* with *timing differs*, capped amber (vector 185). The audio
+  sample entry's `esds` joins `X` in `media.presentation.config`, so a
+  changed sample rate is *presentation differs* (vector 183).
+- **Reference.** `tools/src/timing.ts` (record, hash, root, timescale
+  conversion, edit rule) and `tools/src/container.ts` (the values per GOP,
+  `ctts`, the media edit, the `esds`); `tools/src/remux.ts` can now rescale a
+  track, retime samples and write a `ctts`.
+
+Corpus 7.0.0 (187 vectors). No backward compatibility: the device captures 36,
+37, 48 and 85 keep their bytes and their *no proof found*.
+
+- **Moved bytes, re-signed, verdicts unchanged**: 33, 38, 39, 86–94, 156,
+  158–163, 165–168 and 173 (`npm run generate`), each core and segment chain
+  re-signed with the test key with `media.timing` and the entries' `timing`
+  read back from the container (33 and 165 carry synthetic timing hashes, as
+  they carry synthetic content hashes); 143–147 and 171 minted again by
+  `make-c2pa-vectors.ts --only 143,144,145,146,147,171` (new salts; notes
+  record c2patool 0.27.16). **No existing verdict moved**: every re-muxed
+  clip in the corpus keeps its timescales and durations. 158's note is
+  corrected in place (its `colr`).
+- **New**: 175 (vector 166 with every `timing(n)` in `debug` → *authentic*),
+  176 (core without `media.timing` → *no proof found*), 177 (an entry's
+  `timing` not in the root → *tampered*), 178 (166 cut at the end → *verified
+  clip* 0–1), 179 (a frame frozen → *frames not compared*, *timing
+  differs*), 180 (two frames reordered by `ctts` → the same), 181 (both
+  timescales doubled, durations kept → the same), 182 (timescales and every
+  duration ×2 → *verified clip* 1–2), 183 (`esds` 48 → 44.1 kHz → *frames not
+  compared*, *presentation differs*), 184 (media edit ends inside segment 2
+  → *timing differs*), 185 (an original signed in microseconds → *authentic*,
+  *timing differs*), 186 (89's clip with entry 0 dropped from the proof →
+  *timing differs*), 187 (an entry without `timing` → *no proof found*).
+
+**What a verifier that predates 7.0.0 does** (measured with the 6.2.0
+reference verifier): it has not learned the new fields are required, so 176
+and 187 read *authentic*, and it does not recompute the root, so 177 does
+too. On every file with an audio track it builds `config` without the `esds`
+the core now covers, so the originals of vector 166's family (166, 175–177,
+185, 187) read *authentic* with *presentation differs*, and every clip of it
+(89, 171, 173, 178–184, 186) *frames not compared*, *presentation differs* —
+89, 173, 178 and 182 included, which are *verified clip*; 145 reads *no
+proof found* (depth 1). The silent files (158–163, 167, 168, 94) read as
+before. It fails the `core_hash` of every moved vector.
+
+`threat-model.md` §5.1 *Clip re-timed* is closed; still open, and recorded in
+§11: a media edit that runs past the end of the track, the audio sample
+entry's own fields beside the `esds`, and an `esds` inside a QuickTime `wave`
+box, which no vector exercises.
+
 ### An appended trailer no longer accuses a file with a genuine sidecar — corpus 6.1.0 → **6.2.0**
 
 **Breaking** for verifiers (a reading rule changed), not for the corpus: no

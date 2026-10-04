@@ -286,9 +286,9 @@ const photo = proofOf('01-jpeg-sealed')
 const sealedJpeg = readVector('01-jpeg-sealed', 'input.jpg')
 const timestamped = proofOf('59-jpeg-timestamped')
 // Vector 166: vector 36's device container under the re-signed core that
-// carries media.presentation (corpus 5.0.0). The device proof of 36 predates
-// that required field, so a clip of it would read no proof found and test
-// nothing else. 89 is the cut of the same container under the same core.
+// carries media.presentation (corpus 5.0.0) and media.timing (7.0.0). The
+// device proof of 36 predates both required fields, so a clip of it would
+// read no proof found and test nothing else. 89 is the cut of the same container under the same core.
 const device = readVector('166-mp4-container-h264-presentation', 'input.mp4')
 const deviceProof = JSON.parse((parseTrailer(device) as { payload: Buffer }).payload.toString('utf8')) as Proof
 const cutClip = unsealed(readVector('89-mp4-container-cut-clip', 'input.mp4'))
@@ -543,11 +543,11 @@ const withStore = await c2paSign({ asset: baseJpeg, mime: 'image/jpeg', label: l
   const g0 = await c2paSign({ asset: device, mime: 'video/mp4', label: label(145, 0), proof: deviceProof })
   const clipOf = async (n: number, asset: Buffer, actions: string[], o: { parent?: Buffer, proof?: Proof } = {}): Promise<Buffer> =>
     (await c2paSign({ asset, mime: 'video/mp4', label: label(n, 1), parent: { asset: o.parent ?? g0.file, mime: 'video/mp4' }, actions, proof: o.proof })).file
-  const provenance = 'The source is vector 166: the container of vector 36\'s Android capture (Samsung SM-S908B), its NAL units and vcap SEIs the device\'s, under a core and segment chain re-signed with the test key so that it carries `media.presentation` (corpus 5.0.0); the clip bytes are vector 89\'s cut of it, under the same core. Rebuilt in corpus 6.0.0: the 5.0.0 files carried vector 36\'s device proof, which predates the field and read *no proof found*.'
+  const provenance = 'The source is vector 166: the container of vector 36\'s Android capture (Samsung SM-S908B), its NAL units and vcap SEIs the device\'s, under a core and segment chain re-signed with the test key so that it carries `media.presentation` (corpus 5.0.0) and `media.timing`, with each segment entry\'s timing hash (corpus 7.0.0); the clip bytes are vector 89\'s cut of it, under the same core. Rebuilt in corpus 6.0.0, when the 5.0.0 files carried vector 36\'s device proof, which predates `media.presentation`, and again in 7.0.0 over the core that binds timing.'
 
   add({ name: '145-mp4-c2pa-clip-parent-of', ext: 'mp4', kind: 'container', file: await clipOf(145, cutClip, ['c2pa.trimmed']), proof: deviceProof,
     expected: { outcome: 'verified_clip', labels: DEVICE_LABELS, not_evaluated: [], core_hash: hashOf(deviceProof), segments: { verified: [1, 2] }, proof_source: src(1, label(145, 0)), frames_name_capture: true },
-    notes: `A clip made by a C2PA-aware cutter: vector 89's cut of vector 166 — GOP 0 removed, no re-encoding, the vcap SEIs intact — with no trailer, signed with a manifest that opens the source as \`parentOf\` and records \`c2pa.trimmed\`. The source's manifest (generation 0, ${label(145, 0)}) carries vector 166's proof and travels in the clip's store as its ingredient.\n\nNo footer, no proof at depth 0, no sidecar: the proof is found at depth 1 (§3.2), the nearest ancestor that carries one. The frames name the capture (\`frames_name_capture\`, a locating hint), GOPs 1 and 2 are located and recompute under §5, the core binds the presentation the clip still has (§5 *Presentation*), and the outcome is **verified clip**, 1 and 2 of 3 — vector 89's verdict, reached without a trailer. ${provenance}` })
+    notes: `A clip made by a C2PA-aware cutter: vector 89's cut of vector 166 — GOP 0 removed, no re-encoding, the vcap SEIs intact — with no trailer, signed with a manifest that opens the source as \`parentOf\` and records \`c2pa.trimmed\`. The source's manifest (generation 0, ${label(145, 0)}) carries vector 166's proof and travels in the clip's store as its ingredient.\n\nNo footer, no proof at depth 0, no sidecar: the proof is found at depth 1 (§3.2), the nearest ancestor that carries one. The frames name the capture (\`frames_name_capture\`, a locating hint), GOPs 1 and 2 are located and recompute under §5, the core binds the presentation and the timing the clip still has (§5 *Presentation*, *Timing*), and the outcome is **verified clip**, 1 and 2 of 3 — vector 89's verdict, reached without a trailer. ${provenance}` })
 
   {
     // One byte of the last GOP's IDR slice data changed, then signed by a
@@ -574,11 +574,13 @@ const withStore = await c2paSign({ asset: baseJpeg, mime: 'image/jpeg', label: l
     // so every signature in it holds and no GOP of the clip names it.
     const capture = Buffer.alloc(16, 0x71)
     let previous: Buffer | null = null
-    const segments = (deviceProof.segments as Array<{ gop: number, hash: string, sig: string }>).map((seg) => {
+    const segments = (deviceProof.segments as Array<{ gop: number, hash: string, sig: string, timing: string }>).map((seg) => {
       const prev = previous ? linkOf(previous) : ZERO_LINK
       const message = segmentMessage(capture, seg.gop, Buffer.from(seg.hash, 'base64url'), prev)
       previous = message
-      return { gop: seg.gop, hash: seg.hash, prev: prev.toString('base64url'), sig: signEs256(message, testKey).toString('base64url') }
+      // The timing hashes stay vector 166's: outside the message, bound by
+      // the same media.timing.root the foreign core carries.
+      return { gop: seg.gop, hash: seg.hash, prev: prev.toString('base64url'), sig: signEs256(message, testKey).toString('base64url'), timing: seg.timing }
     })
     const foreign = resign({ ...deviceProof, capture_id: capture.toString('base64url'), segments: segments as unknown as Json })
     add({ name: '171-mp4-c2pa-foreign-proof-sidecar', ext: 'mp4', kind: 'container', file: (await c2paSign({ asset: cutClip, mime: 'video/mp4', label: label(171, 1), proof: foreign })).file, sidecar: jcs(deviceProof as Json), proof: deviceProof,

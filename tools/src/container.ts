@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { type Extent, type MediaEdit, type Timescales, type TimingValues, audioExtent, videoExtent } from './timing.js'
 
 /**
  * §5 from the container side: given an ISO-BMFF file, recompute
@@ -54,11 +55,25 @@ export interface Segment {
    * day, because they say *where* they disagree.
    */
   hashed: { videoBytes: number, audioBytes: number, audioFrames: number }
+  /**
+   * §5 *Timing*: this GOP's `timing(n)` values, in the received file's own
+   * ticks. A verifier converts them to the signed timescales before hashing;
+   * a writer hashes them as they are.
+   */
+  timing: TimingValues
+  /** Where the GOP sits in media time on each track, for the edit-list rule of §5 *Timing*. */
+  extent: { video: Extent, audio: Extent | null }
 }
 
 export interface Box { type: string, start: number, end: number, payload: number }
 
-export interface Sample { offset: number, size: number, dts: bigint }
+/**
+ * One sample of a track, in decode order. `dts` is the sum of the `stts`
+ * durations before it, `duration` its own `stts` duration, and `cts` its
+ * composition offset from `ctts` (0 without one): the sample is shown at
+ * `dts + cts`. All three are in the track's media ticks.
+ */
+export interface Sample { offset: number, size: number, dts: bigint, duration: bigint, cts: bigint }
 
 /**
  * A time on the movie's presentation timeline, kept as an exact fraction of a
@@ -87,6 +102,9 @@ interface Track {
    */
   delay: { num: bigint, den: bigint }
   mediaStart: bigint
+  /** The single media edit, or null when the track has none (the whole media is shown). */
+  mediaEdit: { mediaTime: bigint, duration: bigint } | null
+  movieTimescale: bigint
   /**
    * Set when the edit list does more than delay the track and say where its
    * media starts: a second edit, a gap after the media, a rate other than 1.
@@ -138,8 +156,8 @@ export const find = (list: Box[], type: string): Box | undefined => list.find((b
  * its signed value, and a verifier that read only the first edit would call
  * that *verified clip* (vector 156).
  */
-const editsOf = (file: Buffer, trak: Box, movieTimescale: bigint): { delay: { num: bigint, den: bigint }, mediaStart: bigint, unsupportedEdit?: string } => {
-  const none = { delay: { num: 0n, den: 1n }, mediaStart: 0n }
+const editsOf = (file: Buffer, trak: Box, movieTimescale: bigint): { delay: { num: bigint, den: bigint }, mediaStart: bigint, mediaEdit: { mediaTime: bigint, duration: bigint } | null, unsupportedEdit?: string } => {
+  const none = { delay: { num: 0n, den: 1n }, mediaStart: 0n, mediaEdit: null }
   const edts = find(children(file, trak), 'edts')
   if (!edts) return none
   const elst = find(children(file, edts), 'elst')
@@ -160,11 +178,14 @@ const editsOf = (file: Buffer, trak: Box, movieTimescale: bigint): { delay: { nu
     // media_rate_integer, then media_rate_fraction: 1.0 is 0x0001 0000.
     const rate = file.readInt16BE(at + entrySize - 4)
     const delay = { num: delayTicks, den: movieTimescale }
-    if (rate !== 1) return { delay, mediaStart: mediaTime, unsupportedEdit: 'edit list changes rate' }
-    if (i + 1 < count) return { delay, mediaStart: mediaTime, unsupportedEdit: 'edit list has more than one edit after the leading delay' }
-    return { delay, mediaStart: mediaTime }
+    // The one media edit: where the media starts, and — what §5 *Timing*
+    // reads on a clip — for how long it is shown.
+    const mediaEdit = { mediaTime, duration }
+    if (rate !== 1) return { delay, mediaStart: mediaTime, mediaEdit, unsupportedEdit: 'edit list changes rate' }
+    if (i + 1 < count) return { delay, mediaStart: mediaTime, mediaEdit, unsupportedEdit: 'edit list has more than one edit after the leading delay' }
+    return { delay, mediaStart: mediaTime, mediaEdit }
   }
-  return { delay: { num: delayTicks, den: movieTimescale }, mediaStart: 0n }
+  return { delay: { num: delayTicks, den: movieTimescale }, mediaStart: 0n, mediaEdit: null }
 }
 
 export const children = (file: Buffer, box: Box): Box[] => boxes(file, box.payload, box.end)
@@ -211,6 +232,7 @@ export const samplesOf = (file: Buffer, stbl: Box): Sample[] => {
   const stco = find(kids, 'stco')
   const co64 = find(kids, 'co64')
   const stts = find(kids, 'stts')
+  const ctts = find(kids, 'ctts')
   if (!stsz || !stsc || !(stco || co64) || !stts) throw new ContainerMalformed('stbl is missing a required table')
 
   const sampleCount = u32(file, stsz.payload + 8)
@@ -247,6 +269,21 @@ export const samplesOf = (file: Buffer, stbl: Box): Sample[] => {
     for (let n = 0; n < count; n++) deltas.push(delta)
   }
 
+  // ctts gives composition offsets, run-length coded too. ISO/IEC 14496-12:
+  // version 0 stores them unsigned, version 1 signed. Read as the version
+  // says, so two readers agree on a value even where a muxer meant otherwise.
+  const offsets: bigint[] = []
+  if (ctts) {
+    const signed = file[ctts.payload] === 1
+    const offsetRuns = u32(file, ctts.payload + 4)
+    for (let i = 0; i < offsetRuns; i++) {
+      const at = ctts.payload + 8 + i * 8
+      const count = u32(file, at)
+      const offset = BigInt(signed ? file.readInt32BE(at + 4) : u32(file, at + 4))
+      for (let n = 0; n < count; n++) offsets.push(offset)
+    }
+  }
+
   const samples: Sample[] = []
   let sample = 0
   let dts = 0n
@@ -256,8 +293,9 @@ export const samplesOf = (file: Buffer, stbl: Box): Sample[] => {
     let offset = chunkOffsets[chunk] ?? 0
     for (let i = 0; i < perChunk && sample < sampleCount; i++) {
       const size = sizes[sample] ?? 0
-      samples.push({ offset, size, dts })
-      dts += BigInt(deltas[sample] ?? deltas[deltas.length - 1] ?? 0)
+      const duration = BigInt(deltas[sample] ?? deltas[deltas.length - 1] ?? 0)
+      samples.push({ offset, size, dts, duration, cts: offsets[sample] ?? 0n })
+      dts += duration
       offset += size
       sample++
     }
@@ -288,7 +326,7 @@ const tracksOf = (file: Buffer): Track[] => {
     if (!stsd) continue
     const codec = codecOf(file, stsd)
     const samples = samplesOf(file, stbl)
-    tracks.push({ ...codec, timescale, ...editsOf(file, trak, movieTimescale), samples })
+    tracks.push({ ...codec, timescale, movieTimescale, ...editsOf(file, trak, movieTimescale), samples })
   }
   return tracks
 }
@@ -416,7 +454,16 @@ const instantOf = (track: Track, dts: bigint): Instant => {
  */
 export type ContainerReading =
   | { kind: 'unreadable', reason: string }
-  | { kind: 'gops', gops: Segment[], presentation: Presentation | null, layout: string | null }
+  | {
+    kind: 'gops'
+    gops: Segment[]
+    presentation: Presentation | null
+    layout: string | null
+    /** The `mdhd` timescales the timing values are in; `audio` null without an audio track. */
+    timescales: Timescales
+    /** Each track's single media edit, null where the track has no edit list or no media edit. */
+    edits: { video: MediaEdit | null, audio: MediaEdit | null }
+  }
 
 /**
  * §5 *Presentation*, read from the received file: `config` is SHA-256 of the
@@ -476,14 +523,37 @@ const u32be = (n: number): Buffer => { const b = Buffer.alloc(4); b.writeUInt32B
 /**
  * §5 *Presentation*: `uint32 n ‖ (uint32 length ‖ NAL unit) × n` over the
  * decoder configuration's parameter sets, ordered by NAL unit type and, within
- * a type, as the record lists them; then the sample entry's `clap`, `pasp`
- * and `colr` boxes, whole, in file order.
+ * a type, as the record lists them; then `X`: the video sample entry's `clap`,
+ * `pasp` and `colr` boxes, whole, in file order, followed by the audio sample
+ * entry's `esds` boxes (`audioEsds`, see `esdsOf`).
  */
-export const presentationMessage = (file: Buffer, entry: Box, config: Box, hevc: boolean): Buffer => {
+export const presentationMessage = (file: Buffer, entry: Box, config: Box, hevc: boolean, audioEsds: Box[] = []): Buffer => {
   const type = (u: Buffer): number => hevc ? ((u[0] as number) >> 1) & 0x3f : (u[0] as number) & 0x1f
   const units = parameterSets(file, config, hevc).map((u, i) => ({ u, i })).sort((a, b) => type(a.u) - type(b.u) || a.i - b.i).map(({ u }) => u)
   const extras = boxes(file, entry.payload + 78, entry.end).filter((b) => b.type === 'clap' || b.type === 'pasp' || b.type === 'colr')
-  return Buffer.concat([u32be(units.length), ...units.flatMap((u) => [u32be(u.length), u]), ...extras.map((b) => file.subarray(b.start, b.end))])
+  return Buffer.concat([u32be(units.length), ...units.flatMap((u) => [u32be(u.length), u]), ...[...extras, ...audioEsds].map((b) => file.subarray(b.start, b.end))])
+}
+
+/**
+ * The `esds` boxes of an audio sample entry, whole, in file order (§5
+ * *Presentation*). The AudioSpecificConfig inside says the sample rate and
+ * channel layout a decoder uses: change it and the same coded frames play
+ * pitched and re-timed, which no `content_hash` and no `timing(n)` notices.
+ *
+ * Where they are: an `mp4a` entry's child boxes start 28 bytes into its
+ * payload (SampleEntry 8, then the AudioSampleEntry fields 20); a QuickTime
+ * sound description of version 1 or 2 has 16 or 36 more bytes before them,
+ * and may hold the `esds` inside a `wave` child instead. Any other audio
+ * codec binds nothing here.
+ */
+const esdsOf = (file: Buffer, entry: Box): Box[] => {
+  if (entry.type !== 'mp4a' || entry.payload + 28 > entry.end) return []
+  const version = file.readUInt16BE(entry.payload + 8)
+  const start = entry.payload + 28 + (version === 1 ? 16 : version === 2 ? 36 : 0)
+  if (start > entry.end) return []
+  const kids = boxes(file, start, entry.end)
+  const wave = find(kids, 'wave')
+  return [...kids, ...(wave ? children(file, wave) : [])].filter((b) => b.type === 'esds')
 }
 
 /**
@@ -496,6 +566,20 @@ const presentationOf = (file: Buffer): { presentation: Presentation | null, layo
   let presentation: Presentation | null = null
   let seenVideo = false
   const handlers: { handler: string, enabled: boolean, entries: number }[] = []
+  // The first `soun` track's sample entry: its `esds` joins `X`. Read before
+  // the video loop, since the audio track may come first in `moov`.
+  const audioEsds: Box[] = []
+  for (const trak of children(file, moov).filter((b) => b.type === 'trak')) {
+    const mdia = find(children(file, trak), 'mdia')
+    const hdlr = mdia ? find(children(file, mdia), 'hdlr') : undefined
+    if (!hdlr || hdlr.payload + 12 > hdlr.end || file.toString('latin1', hdlr.payload + 8, hdlr.payload + 12) !== 'soun') continue
+    const minf = mdia ? find(children(file, mdia), 'minf') : undefined
+    const stbl = minf ? find(children(file, minf), 'stbl') : undefined
+    const stsd = stbl ? find(children(file, stbl), 'stsd') : undefined
+    const entry = stsd && stsd.payload + 8 <= stsd.end ? boxes(file, stsd.payload + 8, stsd.end)[0] : undefined
+    if (entry) audioEsds.push(...esdsOf(file, entry))
+    break
+  }
   for (const trak of children(file, moov).filter((b) => b.type === 'trak')) {
     const tkhd = find(children(file, trak), 'tkhd')
     const mdia = find(children(file, trak), 'mdia')
@@ -521,7 +605,7 @@ const presentationOf = (file: Buffer): { presentation: Presentation | null, layo
       const config = find(boxes(file, entry.payload + 78, entry.end), hevc ? 'hvcC' : 'avcC')
       if (!config || !header) break
       let message: Buffer
-      try { message = presentationMessage(file, entry, config, hevc) } catch { break }
+      try { message = presentationMessage(file, entry, config, hevc, audioEsds) } catch { break }
       presentation = {
         config: createHash('sha256').update(message).digest(),
         matrix: Array.from({ length: 9 }, (_, i) => file.readInt32BE(at + 4 * i)),
@@ -589,9 +673,15 @@ export const readContainer = (file: Buffer): ContainerReading => {
   const starts: number[] = []
   units.forEach((unit, i) => { if (unit.idr || i === 0) starts.push(i) })
 
+  const mediaEdit = (track: Track | undefined): MediaEdit | null => track?.mediaEdit
+    ? { ...track.mediaEdit, movieTimescale: track.movieTimescale, mediaTimescale: track.timescale }
+    : null
+
   return {
     kind: 'gops',
     ...bound,
+    timescales: { video: video.timescale, audio: audio ? audio.timescale : null },
+    edits: { video: mediaEdit(video), audio: mediaEdit(audio) },
     gops: starts.map((from, gop): Segment => {
       const to = starts[gop + 1] ?? units.length
       const hash = createHash('sha256')
@@ -602,9 +692,26 @@ export const readContainer = (file: Buffer): ContainerReading => {
       let videoBytes = 0
       let audioBytes = 0
       let audioFrames = 0
+      // §5 *Timing*: every video sample of the GOP in decode order, measured
+      // from the GOP's first sample (the IDR, dts_0).
+      const dts0 = (units[from] as (typeof units)[number]).sample.dts
+      const last = (units[to - 1] as (typeof units)[number]).sample
+      const timing: TimingValues = {
+        videoDts: [],
+        videoCts: [],
+        // end_n: the last sample's DTS plus its own duration, never the next
+        // GOP's DTS or the track's mdhd duration — the record of a segment is
+        // read from that segment alone, so a clip that cut what follows it
+        // (or a re-muxer that left mdhd stale) reads the same value.
+        videoEnd: last.dts + last.duration - dts0,
+        audioDts: [],
+        audioDur: []
+      }
 
       for (let i = from; i < to; i++) {
         const { sample, nals } = units[i] as (typeof units)[number]
+        timing.videoDts.push(sample.dts - dts0)
+        timing.videoCts.push(sample.cts)
         start = Math.min(start, sample.offset)
         end = Math.max(end, sample.offset + sample.size)
         for (const nal of nals) {
@@ -619,6 +726,7 @@ export const readContainer = (file: Buffer): ContainerReading => {
         }
       }
 
+      let adts0: bigint | null = null
       if (audio) {
         // The half-open interval of §5, on the presentation timeline both
         // tracks share: [ DTS(IDR n), DTS(IDR n+1) ), and to the end of the
@@ -634,6 +742,11 @@ export const readContainer = (file: Buffer): ContainerReading => {
           hash.update(file.subarray(sample.offset, sample.offset + sample.size))
           audioBytes += sample.size
           audioFrames++
+          // The same frames, in the same order, enter timing(n): their DTS
+          // measured from the segment's first audio frame, and their duration.
+          adts0 ??= sample.dts
+          timing.audioDts.push(sample.dts - adts0)
+          timing.audioDur.push(sample.duration)
         }
       }
 
@@ -647,7 +760,9 @@ export const readContainer = (file: Buffer): ContainerReading => {
         contentHash: hash.digest(),
         range: { start, end },
         located: first !== undefined,
-        hashed: { videoBytes, audioBytes, audioFrames }
+        hashed: { videoBytes, audioBytes, audioFrames },
+        timing,
+        extent: { video: videoExtent(timing, dts0), audio: adts0 === null ? null : audioExtent(timing, adts0) }
       }
     })
   }

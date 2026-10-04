@@ -1,0 +1,23 @@
+{
+  "kind": "container",
+  "outcome": "frames_not_compared",
+  "labels": [
+    "integrity unevaluated",
+    "key not in transparency log",
+    "no trusted time",
+    "no watermark",
+    "not anchored",
+    "origin not hardware-attested",
+    "timing differs"
+  ],
+  "not_evaluated": [],
+  "core_hash": "e51545cc157b4125752b406d9caea656d0da9b729532b2592442fb58024b1a24",
+  "segments": {
+    "verified": []
+  },
+  "location": {
+    "claimed": "none",
+    "level": "none"
+  },
+  "schema_valid": true
+}
