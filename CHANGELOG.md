@@ -12,6 +12,79 @@ else.
 
 ## Unreleased
 
+### An unreadable footer no longer accuses a file with a genuine sidecar; `attestation_status` is domain-separated — corpus 7.0.0 → **8.0.0**
+
+**Breaking**, twice: a reading rule changed and vector 72 moved its verdict,
+and a signed message changed and 25 vectors were re-signed. Decided
+5 October 2026. Corpus 8.0.0 (193 vectors).
+
+**§3.1, *A sidecar that does better than an unreadable footer*.** Before: a
+footer whose last 16 bytes carry the `VCAP` magic and that a reader cannot
+use decided the verdict whatever sat beside it — *corrupted proof* when the
+CRC failed (step 2), *unsupported format version* when the major was not 1
+(step 3), and step 4 over the whole file, footer included, when its size
+described no trailer. Anyone could append such a footer to a
+trailer-stripped genuine file and have it read broken beside its genuine
+sidecar: the open item 6.2.0 left. Now, when a sidecar is present, a
+verifier also judges it over `F'`, the file without the **unreadable
+trailer**:
+
+- `T = 8 + payload_len + 16`, `payload_len` read at its v1 position whatever
+  the major, summed without overflow;
+- if `T ≤ len(F)` and the 8 bytes at `len(F) − T` are `box_size == T` and
+  `"free"`, the unreadable trailer is the last `T` bytes; otherwise it is the
+  last 16 bytes only;
+- `F'` is judged whole, as step 4 judges a sidecar, and nothing further is
+  read: one trailer is removed, never two (vector 193).
+
+The outcomes rank as in 6.2.0 (*authentic* > *verified clip* > *frames not
+compared* > the rest). The sidecar's verdict decides only when it ranks
+strictly above the footer's — and carries the new label **trailer
+unreadable** and `proof_source` `sidecar`; without a sidecar, or on a tie,
+the footer's verdict stands. *Authentic* still needs `media.hash` to match
+what remains, so a declared span cannot upgrade forged bytes; the box header
+is required so that nothing a player presents is removed. Existing labels
+are unchanged. A C2PA store beside a broken footer is not a sidecar and
+gains nothing (vector 126). `threat-model.md` §5.1 *Accusing broken footer*
+closes the open item; `c2pa-interop-1.0.md` §5 gains the row.
+
+**§6.2, `attestation_status`.** The registry signs
+`"vcap/1.0/attestation-status" ‖ core_hash ‖ JCS(entries) ‖ uint64 BE
+fetched_at`: 27 ASCII bytes, no terminator and no length prefix, as
+`"vcap/1.0/sth"`, `"vcap/1.0/status"`, `"vcap/1.0/integrity"` and
+`"vcap/1.0/location"` are. The known inconsistency recorded in the
+3 October audit is closed; `threat-model.md` §5.3 gains *Cross-message
+signature*. Reference: `attestationStatusMessage` in `tools/src/registry.ts`.
+
+- **Moved bytes, re-signed, verdicts unchanged**: 44, 45, 49–54, 96–102,
+  106, 107, 109, 148, 149, 152, 154, 155, 157 and 164 — every vector carrying
+  `attestation_status`, its snapshot re-signed with the test log key over the
+  new message (`npm run generate`). Cores, timestamp tokens and media are
+  unchanged.
+- **Moved verdict**: 72 (vector 06's CRC-broken trailer, intact sidecar),
+  *corrupted proof* → *authentic* with *trailer unreadable*, source sidecar.
+- **New**: 188 (vector 05's photo, another capture's trailer with its CRC
+  broken, vector 01's proof as sidecar → *authentic*, *trailer
+  unreadable*), 189 (vector 173 with that footer's CRC broken → *verified
+  clip* 1–2 of 3, *trailer unreadable*), 190 (a major-2 trailer with another
+  capture's proof → *authentic*, *trailer unreadable*), 191 (vector 07's
+  sixteen bytes, whose declared span holds no box header: only the footer
+  is removed → *authentic*, *trailer unreadable*), 192 (vector 11's edited
+  pixels, CRC broken, vector 01's sidecar: a tie → *corrupted proof*), 193
+  (vector 01 sealed, a CRC-broken trailer appended after its own, vector
+  01's sidecar: one trailer removed, *tampered*, a tie → *corrupted
+  proof*). Without a sidecar nothing moved: 06, 07, 08, 115, 118 and 126
+  keep their verdicts.
+
+**What a verifier that predates 8.0.0 does** (measured with the 7.0.0
+reference verifier): it rebuilds the status message without the separator,
+so no snapshot verifies and every re-signed vector reads *chain revocation
+not checked* in place of its snapshot's answer: 44, 96, 97 and 164 go from
+red (*attestation key revoked*) to amber, 100 from green to amber, 45 loses
+*attestation key revoked after the capture*, and the rest keep their ceiling
+with the extra label. It reads 72, 188 and 189 *corrupted proof*, 190
+*unsupported format version* and 191 *tampered*; 192 and 193 pass.
+
 ### A clip's timing is bound — corpus 6.2.0 → **7.0.0**
 
 **Breaking.** §5 *Timing* (new), §5 *Presentation*, §6.1, §7, §8: a video

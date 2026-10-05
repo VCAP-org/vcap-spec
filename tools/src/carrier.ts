@@ -2,7 +2,7 @@ import { type CborValue, CborError, decodeCbor } from './cbor.js'
 import { type JumbfSuperbox, JumbfError, TYPE, embeddedStores, storeSuperbox, superChildren } from './jumbf.js'
 import { jcs } from './jcs.js'
 import { ProofSyntaxError, parseProofJson } from './json.js'
-import { parseTrailer } from './trailer.js'
+import { parseTrailer, unreadableTrailerStart } from './trailer.js'
 
 /**
  * Content Credentials as a carrier of the proof (`vcap-proof-1.0.md` §3.2,
@@ -229,8 +229,10 @@ export type Extraction =
  *    compared byte for byte, the active manifest's copy as JCS. A sidecar
  *    that differs is handed back as the alternate, as in step 4: a trailer
  *    appended to a stripped file is no more authenticated than a manifest;
- * 2. a valid footer whose CRC fails: *corrupted proof*, whatever else exists;
- * 3. `VCAP` with a major ≠ 1: *unsupported format version*;
+ * 2. a valid footer whose CRC fails: *corrupted proof* — unless a sidecar
+ *    does better without that trailer (`unreadableAlternate`);
+ * 3. `VCAP` with a major ≠ 1: *unsupported format version*, with the same
+ *    exception;
  * 4. no footer: the active manifest's proof, then the sidecar, then the first
  *    proof up the `parentOf` chain. A sidecar that differs from the manifest's
  *    proof is handed back as the alternate: the manifest is unauthenticated,
@@ -269,6 +271,30 @@ export const extractProof = (file: Buffer, sidecar?: Buffer, externalStore?: Buf
   if (sidecar) return { kind: 'proof', payload: sidecar, media: file, flags: null, source: { kind: 'sidecar' }, labels: [] }
   if (carrier.ancestor) return { kind: 'proof', payload: carrier.ancestor.bytes, media: file, flags: null, source: { kind, manifest: carrier.ancestor.manifest, depth: carrier.ancestor.depth }, labels: [] }
   return { kind: 'none', reason: carrier.reason ?? 'no proof in the Content Credentials' }
+}
+
+/**
+ * §3.1 *A sidecar that does better*, unreadable footer: the sidecar, to be
+ * judged over the file without the trailer whose footer this reader cannot
+ * use (`unreadableTrailerStart`). Its verdict replaces the one the footer
+ * earns — *corrupted proof*, *unsupported format version*, or step 4 over the
+ * whole file — only when its outcome ranks strictly above.
+ *
+ * One trailer is removed and nothing further is read: the remaining bytes are
+ * judged whole, as step 4 judges a sidecar, so a footer appended after an
+ * intact trailer is not peeled back to it. The active manifest's copy, if the
+ * remaining bytes carry one, is compared with the sidecar as at step 1.
+ */
+export const unreadableAlternate = (
+  file: Buffer, sidecar?: Buffer, externalStore?: Buffer
+): { payload: Buffer, media: Buffer, source: ProofSource, labels: string[] } | undefined => {
+  if (sidecar === undefined) return undefined
+  const start = unreadableTrailerStart(file)
+  if (start === null) return undefined
+  const media = file.subarray(0, start)
+  const copy = carrierOf(media, externalStore).active
+  const manifest = copy && !sameProof(copy.bytes, sidecar) ? ['manifest copy differs'] : []
+  return { payload: sidecar, media, source: { kind: 'sidecar' }, labels: ['trailer unreadable', ...manifest] }
 }
 
 /**

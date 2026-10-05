@@ -1,26 +1,26 @@
 {
   "implementation": "vcap-spec reference verifier (tools/src/verify.ts)",
-  "corpus_version": "7.0.0",
-  "manifest_sha256": "ac9109e533ec981081c68e7859bb59552f129269cdaf4e38e2a6acb6edabc2ec",
-  "vectors_declared": 187,
-  "vectors_run": 187,
-  "passed": 187,
+  "corpus_version": "8.0.0",
+  "manifest_sha256": "3073891fab1d944b093f64ed1c6e5a6bf8af2f3a1fe49dd84110a4a4aa31cd68",
+  "vectors_declared": 193,
+  "vectors_run": 193,
+  "passed": 193,
   "failed": [],
   "by_kind": {
-    "container": 43,
-    "file": 135,
+    "container": 44,
+    "file": 140,
     "jcs": 2,
     "segments": 7
   },
   "by_expected_outcome": {
-    "authentic": 98,
-    "corrupted_proof": 3,
+    "authentic": 102,
+    "corrupted_proof": 4,
     "frames_not_compared": 12,
     "n/a": 2,
     "nested_proof": 1,
     "no_proof_found": 33,
     "tampered": 26,
     "unsupported_format_version": 2,
-    "verified_clip": 10
+    "verified_clip": 11
   }
 }

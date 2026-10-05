@@ -40,7 +40,7 @@ no position and pin `none`.
 `proof_source` (where the proof was read: `trailer`, `sidecar`, or `c2pa` with
 the carrying manifest's label and its depth on the `parentOf` chain) and
 `frames_name_capture` (whether a GOP of the file names the proof's capture)
-appear on the carrier vectors (123–147, 169–171) and on 172–174, and are compared where present.
+appear on the carrier vectors (123–147, 169–171), on 72, 172–174 and on 188–191, and are compared where present.
 `debug`, where present, is for humans: intermediate bytes to compare before
 touching signatures (the 96-byte segment messages of 25, the timing records of
 175).
@@ -150,7 +150,7 @@ The numbered corpus (`vectors/NN-*`) has its own version, in `vectors/VERSION`
 — separate from `vcap/1.0`, the proof format version. The format version says
 what a proof looks like; the corpus version says which exact vectors an
 implementation checked itself against, so a third party can claim "conformant
-with vcap-spec corpus 7.0.0" and mean something a consumer can check.
+with vcap-spec corpus 8.0.0" and mean something a consumer can check.
 
 `vectors/MANIFEST.json` is that check: for every `vectors/NN-*` directory, its
 `kind`, its `outcome`, and a SHA-256 over its files (name and length included,
@@ -166,7 +166,7 @@ npm run manifest:check   # exits 1 if the committed file is stale — CI runs th
 ```
 
 `vectors/CONFORMANCE.md` says what the sentence "conformant with corpus
-7.0.0" has to contain to be checkable — corpus version, manifest hash, and
+8.0.0" has to contain to be checkable — corpus version, manifest hash, and
 how many vectors actually ran — and why a suite that ran zero vectors must be
 red. `vectors/conformance-report.json` is this repository's own claim in that
 format, regenerated and checked by CI (`npm run conformance:report` /
@@ -225,7 +225,14 @@ with both — 33, 38, 39, 86–94, 156, 158–163, 165–168 and 173 by `npm run
 generate`, 143–147 and 171 minted again by `make-c2pa-vectors.ts` (new
 salts) — and **none changed its verdict**; 34 did not move (no `segments`).
 The device captures 36, 37, 48 and 85 keep their bytes and their *no proof
-found*. 175–187 were added.
+found*. 175–187 were added. **8.0.0 is major**, for two reasons. The
+`attestation_status` message gained its separator (§6.2), so every vector
+that carries one moved bytes under a re-signed snapshot — 44, 45, 49–54,
+96–102, 106, 107, 109, 148, 149, 152, 154, 155, 157 and 164 — with **no
+verdict changed**. And a sidecar now outranks a footer that cannot be read
+when it does better without it (§3.1), so **72 changed its verdict**, from
+*corrupted proof* to *authentic* with *trailer unreadable*. 188–193 were
+added.
 
 `vectors/edge-cases/` (below) is not in the manifest and not part of the
 versioned corpus: it is regenerated on demand by its own tool, not hand-curated
@@ -260,10 +267,12 @@ none, by design — see its file comment), so there is nothing here to hand a
 marred payload to. That boundary belongs to whichever component owns the
 decoder.
 
-**The sidecar vectors** (17, 18, 70, 71, 72, 172–174) carry `input.<ext>.vcap` next to
+**The sidecar vectors** (17, 18, 70, 71, 72, 172–174, 188–193) carry `input.<ext>.vcap` next to
 the input, and a verifier under test is handed both, as `tools/test/vectors.test.ts`
-does. They pin §3.1: the trailer wins when it is found and intact and the sidecar does no better (18, 174), a sidecar that does better over the same bytes outranks an appended trailer (172, 173), a broken
-trailer is *corrupted* whatever the sidecar says (72), and a sidecar alone
+does. They pin §3.1: the trailer wins when it is found and intact and the sidecar does no better (18, 174), a sidecar that does better over the same bytes outranks an appended trailer (172, 173), and
+one that does better without an unreadable trailer outranks the footer —
+CRC failing (72, 188, 189), another major (190), a size that describes no
+trailer (191) — while a tie keeps the footer's verdict (192, 193), and a sidecar alone
 restores the full verdict over unchanged bytes (17) and nothing over changed
 ones (70, 71). **The C2PA co-existence vectors** (02, 03, 04, 68, 69, 73) carry
 no C2PA signature — a JUMBF-shaped APP11 or a `uuid` box with the C2PA extended

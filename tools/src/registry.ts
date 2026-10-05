@@ -254,6 +254,17 @@ export const verifyKeyStatus = (
   return { ok: true, status: statement.status }
 }
 
+const ATTESTATION_STATUS_SEPARATOR = Buffer.from('vcap/1.0/attestation-status', 'ascii')
+
+/**
+ * §6.2 `attestation_status`: the message the registry signs,
+ * `"vcap/1.0/attestation-status" ‖ core_hash ‖ JCS(entries) ‖ uint64 BE
+ * fetched_at`. The separator is the one every other message the registry key
+ * signs begins with; before corpus 8.0.0 this one had none.
+ */
+export const attestationStatusMessage = (coreHash: Buffer, entries: Json, fetchedAt: number): Buffer =>
+  Buffer.concat([ATTESTATION_STATUS_SEPARATOR, coreHash, jcs(entries), u64be(fetchedAt)])
+
 /**
  * §6.2 `integrity`: the registry's relay of a Play Integrity or App Attest
  * verdict about the device, signed over
