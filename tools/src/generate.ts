@@ -14,7 +14,7 @@ import { type SegmentEntry, SEPARATOR, ZERO_LINK, linkOf, segmentMessage } from 
 import { signChain, signEs256 } from './sign.js'
 import { TEST_KEY_PKCS8_BASE64, TEST_OTHER_KEY_PKCS8_BASE64 } from './testkey.js'
 import { TEST_LOG_KEY_PKCS8_BASE64, TEST_SECOND_LOG_KEY_PKCS8_BASE64 } from './testlogkey.js'
-import { type KeyStatusStatement, integrityMessage, keyStatusMessage, leafHash, leafKeyId, nodeHash, treeHeadMessage } from './registry.js'
+import { type KeyStatusStatement, attestationStatusMessage, integrityMessage, keyStatusMessage, leafHash, leafKeyId, nodeHash, treeHeadMessage } from './registry.js'
 import { type ChainRead } from './anchor.js'
 import { corroborationMessage } from './location.js'
 import { loadTrust } from './trust.js'
@@ -277,6 +277,36 @@ file({ name: '17-jpeg-sidecar-only', ext: 'jpg', file: baseJpeg, sidecar: jcs(jp
   file({ name: '174-jpeg-trailer-sidecar-no-better', ext: 'jpg', file: seal(editPixels(baseJpeg), jpegProof), sidecar: jcs(other as Json), proof: jpegProof,
     expected: { outcome: 'tampered', labels: [], not_evaluated: [], core_hash: hashOf(jpegProof), proof_source: { kind: 'trailer' } },
     notes: 'Vector 11 — vector 01\'s proof sealed onto a photo whose pixels changed — next to vector 18\'s sidecar: a proof over the same pixels as vector 01 with `device_clock` one millisecond later, so it differs from the trailer byte for byte. Both proofs read *tampered* over these bytes. §3.1 lets a sidecar decide only when its outcome ranks **strictly above** the trailer\'s; this one ties, so the trailer\'s proof stands, with `proof_source` the trailer: **tampered**, vector 11\'s verdict. A red outcome carries no labels, *sidecar differs* included (§8). Vector 170 is the same tie against a manifest\'s proof.' })
+
+  // §3.1, unreadable footer: a footer this reader cannot use — CRC fails,
+  // major ≠ 1, a size that describes no trailer — appended to a stripped
+  // genuine file is no more the file's than a valid one. Beside a sidecar,
+  // the sidecar is judged over the file without that trailer.
+  const BROKEN_CRC = { crcOverride: 0xdeadbeef }
+  const UNREADABLE = 'Before corpus 8.0.0 the footer decided whatever sat next to it, so a genuine file beside its genuine sidecar could be made to read broken by appending sixteen bytes. §3.1 (*A sidecar that does better*, unreadable footer) now judges the sidecar over the file without that trailer — the `free` box the footer declares when it fits in the file, otherwise the footer alone — and lets it decide only when its outcome ranks strictly above the footer\'s verdict. *Authentic* still needs `media.hash` to match the bytes that remain, so trusting the span the footer declares cannot make forged bytes read genuine: a wrong span costs the sidecar its outcome, never the reader the truth.'
+  file({ name: '188-jpeg-crc-broken-trailer-sidecar', ext: 'jpg', file: seal(baseJpeg, foreign, BROKEN_CRC), sidecar: jcs(jpegProof as Json), proof: jpegProof,
+    expected: { outcome: 'authentic', labels: [...PHOTO_LABELS, 'trailer unreadable'], not_evaluated: [], core_hash: hashOf(jpegProof), proof_source: { kind: 'sidecar' } },
+    notes: 'Vector 172 with the appended trailer\'s CRC broken: vector 05\'s unsealed photo — vector 01 once its trailer is stripped — then another capture\'s proof in a structurally valid `free` box whose footer CRC does not match, next to a sidecar holding vector 01\'s proof. On its own the footer reads *corrupted proof* (vector 06).\n\n' + UNREADABLE + ' Here the declared box is removed, the remaining bytes are vector 05\'s, and the sidecar reads **authentic** — vector 17\'s verdict — with *trailer unreadable* and `proof_source` the sidecar.' })
+
+  file({ name: '190-jpeg-footer-major-2-sidecar', ext: 'jpg', file: Buffer.concat([baseJpeg, buildTrailer(jcs(foreign as Json), { major: 2 })]), sidecar: jcs(jpegProof as Json), proof: jpegProof,
+    expected: { outcome: 'authentic', labels: [...PHOTO_LABELS, 'trailer unreadable'], not_evaluated: [], core_hash: hashOf(jpegProof), proof_source: { kind: 'sidecar' } },
+    notes: 'Vector 115\'s shape — a trailer whose footer says major 2 — carrying another capture\'s proof, appended to vector 05\'s photo next to a sidecar holding vector 01\'s proof. On its own the footer reads *unsupported format version* (vector 115).\n\n' + UNREADABLE + ' The reader takes `payload_len` and the box header at their v1 positions only to find what to remove; it never reads the payload of a major it does not know as a proof. The `free` box is removed and the sidecar reads **authentic**, with *trailer unreadable*.' })
+
+  {
+    const fake = Buffer.alloc(16)
+    Buffer.from('VCAP').copy(fake, 0); fake[4] = 1; fake.writeUInt32BE(40, 8); fake.writeUInt32BE(0x12345678, 12)
+    file({ name: '191-jpeg-fake-magic-sidecar', ext: 'jpg', file: Buffer.concat([baseJpeg, fake]), sidecar: jcs(jpegProof as Json), proof: jpegProof,
+      expected: { outcome: 'authentic', labels: [...PHOTO_LABELS, 'trailer unreadable'], not_evaluated: [], core_hash: hashOf(jpegProof), proof_source: { kind: 'sidecar' } },
+      notes: 'Vector 07\'s file — vector 05\'s photo and sixteen bytes that start with `VCAP`, major 1, a `payload_len` of 40 and no box header where it points — next to a sidecar holding vector 01\'s proof. The footer describes no trailer, so §3 finds none and step 4 judges the sidecar over the whole file: *tampered* before corpus 8.0.0, because those sixteen bytes are inside the canonical bytes.\n\n' + UNREADABLE + ' The 64 bytes the footer declares fit in the file but do not begin with a `free` box header of that size, so only the footer is removed — an implementation that removed the declared span anyway would cut into the photo and read *tampered*. The rest is vector 05\'s bytes: **authentic**, with *trailer unreadable*.' })
+  }
+
+  file({ name: '192-jpeg-crc-broken-trailer-sidecar-no-better', ext: 'jpg', file: seal(editPixels(baseJpeg), jpegProof, BROKEN_CRC), sidecar: jcs(jpegProof as Json), proof: jpegProof,
+    expected: { outcome: 'corrupted_proof', labels: [], not_evaluated: [] },
+    notes: 'Vector 11\'s edited pixels sealed with vector 01\'s proof, the footer CRC broken, and vector 01\'s proof as sidecar. Without the trailer the sidecar reads *tampered* — its `media.hash` is not these pixels — which ranks no higher than *corrupted proof*: a tie, so the footer\'s verdict stands, **corrupted proof**. The sidecar decides only when it does strictly better (§3.1).' })
+
+  file({ name: '193-jpeg-sealed-then-crc-broken-trailer-sidecar', ext: 'jpg', file: Buffer.concat([jpegSealed, buildTrailer(jcs(foreign as Json), BROKEN_CRC)]), sidecar: jcs(jpegProof as Json), proof: jpegProof,
+    expected: { outcome: 'corrupted_proof', labels: [], not_evaluated: [] },
+    notes: 'Vector 01 — sealed, its trailer intact — with a second trailer appended after it whose CRC fails, and vector 01\'s proof as sidecar. The rule removes **one** trailer and reads nothing further: the remaining bytes, vector 01 with its trailer, are judged whole, as step 4 judges a sidecar, and the sidecar\'s `media.hash` does not cover a trailer, so it reads *tampered*. A tie with *corrupted proof*, which stands. A sealed file is never legitimately followed by another footer — a writer refuses to seal over a trailer and replaces one by dropping it (§3) — and peeling trailers back one after another is what *nested proof* exists to refuse.' })
 }
 
 file({ name: '19-jpeg-flags-disagree', ext: 'jpg', file: seal(baseJpeg, jpegProof, { flags: Flag.PSEUDONYMOUS }), proof: jpegProof,
@@ -636,6 +666,12 @@ const SYNTHETIC_TIMING: Json = { video_timescale: 15360, root: timingRoot(synthe
     device({ name: '173-mp4-container-foreign-trailer-sidecar', file: seal(cut, foreign), sidecar: h264.payload, proof: h264.proof,
       expected: { outcome: 'verified_clip', labels: [...DEVICE_LABELS, 'trailer copy differs'], not_evaluated: [], core_hash: hashOf(h264.proof), segments: { verified: [1, 2] }, location: { claimed: 'none', level: 'none' }, proof_source: { kind: 'sidecar' }, frames_name_capture: true },
       notes: 'Vector 89\'s clip of vector 166 — GOP 0 removed — with its trailer stripped and **another capture\'s** video proof appended as a valid trailer in its place: vector 166\'s core and segment hashes under a new capture id, the core and every segment message re-signed for it. Next to it, a sidecar holding vector 166\'s proof. Every signature in the trailer\'s proof holds, and no GOP of the clip names its capture, so on its own it reads *frames not compared* (§5, *Locating segments*) — a genuine clip reduced to "nothing ties these signatures to these frames" by a trailer anyone can append.\n\n§3.1 judges both over the same bytes, the file without the trailer: the sidecar\'s proof locates GOPs 1 and 2 and recomputes them, **verified clip**, 1 and 2 of 3 — vector 89\'s verdict — which ranks above *frames not compared*, so it stands, with *trailer copy differs* and `proof_source` the sidecar. Vector 171 is the same case with the foreign proof in a C2PA manifest.' })
+
+    // §3.1, unreadable footer, on a clip: the same foreign proof, its footer
+    // CRC broken. The sidecar is judged over the clip without that trailer.
+    device({ name: '189-mp4-container-crc-broken-trailer-sidecar', file: seal(cut, foreign, { crcOverride: 0xdeadbeef }), sidecar: h264.payload, proof: h264.proof,
+      expected: { outcome: 'verified_clip', labels: [...DEVICE_LABELS, 'trailer unreadable'], not_evaluated: [], core_hash: hashOf(h264.proof), segments: { verified: [1, 2] }, location: { claimed: 'none', level: 'none' }, proof_source: { kind: 'sidecar' }, frames_name_capture: true },
+      notes: 'Vector 173 with the appended trailer\'s footer CRC broken: vector 89\'s clip of vector 166, its own trailer stripped, another capture\'s video proof appended in a structurally valid `free` box whose CRC fails, and vector 166\'s proof as sidecar. On its own the footer reads *corrupted proof*.\n\n§3.1 (*A sidecar that does better*, unreadable footer): the sidecar is judged over the file without the `free` box the footer declares, which is vector 89\'s clip without its trailer; it locates GOPs 1 and 2 and recomputes them, **verified clip**, 1 and 2 of 3, which ranks above *corrupted proof*, so it stands, with *trailer unreadable* and `proof_source` the sidecar. A verifier that predates corpus 8.0.0 reads it *corrupted proof*.' })
 
     // ---- §5 *Timing*: when the signed frames are shown ---------------------
     //
@@ -1059,12 +1095,11 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
   const ATTESTED_LABELS = [...PHOTO_LABELS.filter((l) => l !== 'origin not hardware-attested'), 'integrity not proven'].sort()
   const logKey = createPrivateKey({ key: Buffer.from(TEST_LOG_KEY_PKCS8_BASE64, 'base64'), format: 'der', type: 'pkcs8' })
 
-  // §6.2: `core_hash ‖ JCS(entries) ‖ uint64 BE fetched_at`, signed by the key
+  // §6.2: `"vcap/1.0/attestation-status" ‖ core_hash ‖ JCS(entries) ‖ uint64
+  // BE fetched_at`, signed by the key
   // that signs the log's tree heads.
   const statusAttachment = (proof: Proof, fetchedAt: number, entries: Json): Proof => {
-    const at = Buffer.alloc(8)
-    at.writeBigUInt64BE(BigInt(fetchedAt))
-    const message = Buffer.concat([coreHash(proof), jcs(entries), at])
+    const message = attestationStatusMessage(coreHash(proof), entries, fetchedAt)
     return { source: 'googleStatusList', fetched_at: fetchedAt, entries, sig: signEs256(message, logKey).toString('base64url') }
   }
 
@@ -1330,9 +1365,7 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
   const LOG_ID = digest(spkiOf(logKey)).toString('base64url')
 
   const statusAttachment = (proof: Proof, fetchedAt: number, entries: Json): Proof => {
-    const at = Buffer.alloc(8)
-    at.writeBigUInt64BE(BigInt(fetchedAt))
-    const message = Buffer.concat([coreHash(proof), jcs(entries), at])
+    const message = attestationStatusMessage(coreHash(proof), entries, fetchedAt)
     return { source: 'googleStatusList', fetched_at: fetchedAt, entries, sig: signEs256(message, logKey).toString('base64url') }
   }
 
@@ -2285,12 +2318,11 @@ const pick = (v: Verdict, expected: object): object => Object.fromEntries(Object
     notes: 'Vector 01 with a JUMBF APP11 segment inserted after sealing whose box is **not** a C2PA Manifest Store: a superbox whose description box names the JSON content type (6A736F6E-0011-0010-8000-00AA00389B71), labelled `org.example.metadata` — the shape JPEG 360 or JPEG Privacy and Security metadata takes. C2PA hashes such a segment (15.12.1.2: only the store\'s APP11 segments are excluded), and since 1.1 so does §4.1: a JUMBF segment is removed from the canonical bytes only when its box is the C2PA store or its type cannot be read. The segment is content, the canonical bytes changed, and the photo is **tampered**. Before 1.1 every "JP" segment was removed and this file read *authentic*; vectors 02 and 68, whose JUMBF-shaped segment has no readable type, keep their verdict.' })
 }
 
-// §3.1: a sidecar never rescues a trailer that was found and is broken. The
-// trailer is structurally valid and its CRC fails: somebody edited the file,
-// and that is the verdict whatever sits next to it.
+// §3.1: a trailer whose CRC fails is no more the file's than one whose CRC
+// matches; beside a sidecar that does better without it, the sidecar decides.
 file({ name: '72-jpeg-footer-crc-mismatch-sidecar', ext: 'jpg', file: seal(baseJpeg, jpegProof, { crcOverride: 0xdeadbeef }), sidecar: jcs(jpegProof as Json), proof: jpegProof,
-  expected: { outcome: 'corrupted_proof', labels: [], not_evaluated: [] },
-  notes: 'Vector 06 — a structurally valid footer whose CRC does not match the payload — with an intact copy of the proof in a sidecar. The verdict stays *corrupted proof* (§3.1): the sidecar is a fallback for a trailer that is **absent**, not a substitute for one that is present and broken. The CRC exists to tell corruption from stripping, and a file whose trailer was found and fails its CRC was edited after sealing; showing the sidecar\'s proof as the file\'s would hide exactly that.' })
+  expected: { outcome: 'authentic', labels: [...PHOTO_LABELS, 'trailer unreadable'], not_evaluated: [], core_hash: hashOf(jpegProof), proof_source: { kind: 'sidecar' } },
+  notes: 'Vector 06 — a structurally valid footer whose CRC does not match the payload — with an intact copy of the proof in a sidecar. Until corpus 8.0.0 the verdict was *corrupted proof*: the sidecar was a fallback for a trailer that is absent, never a substitute for one that is present and broken.\n\nThat made a broken footer an accusation anyone could append to a stripped genuine file (vector 188). §3.1 (*A sidecar that does better*, unreadable footer) now judges the sidecar over the file without the `free` box the footer declares, and the sidecar decides when its outcome ranks strictly above *corrupted proof*: **authentic**, with *trailer unreadable* and `proof_source` the sidecar. The edit is not hidden — the label names it — and nothing is gained that deleting the broken trailer would not give (vector 17). Without a sidecar the verdict is still *corrupted proof* (vector 06), and so it is with a Content Credentials copy instead of a sidecar (vector 126).' })
 
 {
   // Removes the JFIF APP0 segment (the first marker segment of base.jpg):

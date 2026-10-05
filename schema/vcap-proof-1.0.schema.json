@@ -573,7 +573,8 @@
           }
         },
         "sig": {
-          "$ref": "#/$defs/p1363"
+          "$ref": "#/$defs/p1363",
+          "description": "registry key ES256 over \"vcap/1.0/attestation-status\" ‖ core_hash ‖ JCS(entries) ‖ uint64 BE fetched_at"
         }
       }
     },

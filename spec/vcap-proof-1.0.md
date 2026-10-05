@@ -189,13 +189,14 @@ restore are in `c2pa-interop-1.0.md` §4 and §5.
      the copy is not used for anything (vector 125). It is compared with the
      proof that decides, the sidecar's when the sidecar does. A copy that is
      not a well-formed proof (§6.1) differs from any other.
-  2. **Valid footer, CRC fails** → *corrupted proof*, whatever the sidecar or
-     a C2PA store says (vectors 72, 126). The sidecar is a fallback for a
-     trailer that is absent, not a substitute for one that was found and is
-     broken: somebody edited the file, and showing another copy of the proof
-     as the file's would hide it.
+  2. **Valid footer, CRC fails** → *corrupted proof*, whatever a C2PA store
+     says (vectors 06, 126) — **unless a sidecar does better without that
+     trailer** (*A sidecar that does better*, below; vectors 72, 188, 189,
+     192, 193). No copy found in the file substitutes for a trailer that was
+     found and is broken; a sidecar is judged only over the bytes deleting
+     that trailer would leave, which is what a reader would find without it.
   3. **`VCAP` magic, major ≠ 1** → *unsupported format version* (§3, vector
-     115), whatever else the file carries.
+     115), with the same exception for a sidecar (vector 190).
   4. **No valid footer** → the proof is the first of, in this order: the proof
      in the active manifest of the file's Content Credentials (§3.2, depth 0);
      the sidecar; the proof of the nearest `parentOf` ancestor that carries
@@ -233,6 +234,7 @@ restore are in `c2pa-interop-1.0.md` §4 and §5.
     sidecar's verdict is the verdict, `proof_source` is `sidecar`, and it
     carries *trailer copy differs* (step 1, vectors 172, 173) or *manifest
     copy differs* (step 4, vectors 169, 171) instead of *sidecar differs*.
+    The same ranking decides against an unreadable footer (next item).
   - Otherwise → the file's proof stands with *sidecar differs*, as without
     this rule (vectors 18, 127, 170, 174).
 
@@ -245,10 +247,53 @@ restore are in `c2pa-interop-1.0.md` §4 and §5.
   the depth-0 proof, as JCS, is no second verdict and changes nothing.
   Outside the rule, unchanged: a nested trailer (§3) is *nested proof*, a
   structural verdict no proof of the file is judged for, and deleting the
-  outer trailer leaves the inner one to step 1; a footer whose CRC fails
-  (step 2) or whose major is not 1 (step 3) stays *corrupted proof* or
-  *unsupported format version* whatever the sidecar says — no proof of the
-  file is judged there, so there is no outcome to rank.
+  outer trailer leaves the inner one to step 1.
+- **A sidecar that does better than an unreadable footer.** The same holds
+  for a footer a reader cannot use: the last 16 bytes begin with `"VCAP"`
+  and are not a valid footer whose CRC matches — the CRC fails (step 2), the
+  major is not 1 (step 3), or the size describes no trailer (§3's structure
+  fails, which without this rule is step 4 over the whole file). Such a
+  footer is no more authenticated as the file's than a valid one, and
+  sixteen bytes appended to a stripped genuine file would otherwise accuse
+  it beside its genuine sidecar. When a sidecar is present, a verifier also
+  judges the sidecar over `F'` = `F` without the **unreadable trailer**,
+  defined exactly:
+  - let `n` be the footer's `payload_len` (bytes 8–11 of the last 16, read
+    at its v1 position whatever the major) and `T = 8 + n + 16`, summed
+    without overflow;
+  - if `T ≤ len(F)` and the 8 bytes at `len(F) − T` read `box_size == T`
+    followed by `"free"`, the unreadable trailer is the last `T` bytes;
+  - otherwise it is the last 16 bytes only.
+
+  `F'` is judged as step 4 judges a sidecar: its canonical bytes are the
+  whole of `F'` (§4.1 from step 2), whatever `F'` itself ends in — one
+  trailer is removed and nothing further is read, so a footer appended
+  after an intact trailer is not peeled back to it (vector 193). The
+  outcomes rank as above; the sidecar's verdict decides only when it ranks
+  **strictly above** the verdict that footer earns without this rule
+  (*corrupted proof*, *unsupported format version*, or step 4's verdict over
+  the whole file), and then carries *trailer unreadable* (new label) and
+  `proof_source` `sidecar` (vectors 72, 188–191). The active manifest's copy
+  in `F'`, if any, is compared with the sidecar as at step 1. Without a
+  sidecar, or on a tie, the footer's verdict stands unchanged (vectors 06,
+  07, 08, 115, 118, 126, 192, 193).
+
+  Why this span and no other. *Authentic* and *verified clip* still need
+  `media.hash` or a located segment's `content_hash` to match bytes the
+  sealer signed, so trusting the span a broken footer declares cannot make
+  forged bytes read genuine: a wrong span removes too much or too little,
+  what remains is not what the sealer signed, and the sidecar reads no
+  better than those bytes allow — on a photo *tampered*, a tie, and the
+  footer's verdict stands. The box
+  header is required so that what is removed is a `free` box every ISO-BMFF
+  reader skips, or 16 bytes that are no box at all — never a box a player
+  presents, which a declared span without that check could reach (vector
+  191 is the footer of vector 07, whose declared span holds no box header:
+  only the footer is removed). The major is set aside because a reader that
+  does not know it reads nothing as a proof there; it takes the length and
+  the box header at their v1 positions only to know what to remove. And the
+  definition gives one candidate, so two implementations compute the same
+  `F'`.
 - **Video.** Recomputing §5 content hashes stays optional and, when skipped,
   declared (*segment content not recomputed*); a sidecar next to a demuxable
   container is the case §5 has in mind.
@@ -380,6 +425,9 @@ Given the received file `F`:
 1. **Strip the trailer.** If the last 16 bytes are a valid footer (§3), let
    `T = 8 + payload_len + 16` and `F' = F[0 : len(F) - T]`. Otherwise `F' = F`.
    If `F'` itself ends in a valid footer: *nested proof*, stop (§3).
+   A sidecar beside a footer that cannot be read is judged once more over
+   `F` without that footer's trailer, defined in §3.1 (*A sidecar that does
+   better than an unreadable footer*).
 2. **Container normalization.** The container is decided by the **first
    bytes of `F'`**, never by `media.mime`: `FF D8` is JPEG, `ftyp` at offset 4
    is ISO-BMFF, and anything else is hashed as it is, `C = F'`. The MIME type
@@ -1137,7 +1185,7 @@ containing a schema-valid value remain readable under the same rules.
 | `sig` | core, at capture | — it *is* the authentication | covers `JCS(core)` |
 | `segments` | core, at capture | each `sig(n)` under `sig.pub`; each entry's `timing` by `media.timing.root` | `capture_id` in every message; `media.timing.root` |
 | `attestation` | core, at key creation | chain to a pinned Google root / App Attest | leaf SPKI MUST equal `sig.pub` |
-| `attestation_status` | sync, while the chain is current | registry key signature over the entries it saw | signature covers `core_hash` |
+| `attestation_status` | sync, while the chain is current | registry key signature over `"vcap/1.0/attestation-status" ‖ core_hash ‖ JCS(entries) ‖ uint64 BE fetched_at` | signature covers `core_hash` |
 | `registry` | sync | inclusion proof against a Signed Tree Head, carried inline | leaf carries `device.key_id` and `sig.pub` |
 | `timestamp.tsr` | sync | RFC 3161 token, TSA chain, validated offline | `messageImprint = core_hash` |
 | `anchor` | sync | RFC 6962 path from `SHA-256(0x00 ‖ core_hash)` to the root the chain recorded | leaf = `core_hash` |
@@ -1172,14 +1220,17 @@ containing a schema-valid value remain readable under the same rules.
     revocation date **as the source itself gives it**, and is absent when the
     source gives none.
   - `sig`: the registry signing key's ES256 signature, P1363, over
-    `core_hash ‖ JCS(entries) ‖ uint64 BE fetched_at`. **Known
-    inconsistency**: this is the one message the registry key signs without
-    a domain separator — tree heads, key statuses, `integrity` and
-    `location_corroboration` all begin with a `"vcap/1.0/…"` string. It is not
-    exploitable as it stands, because every other message begins with ASCII
-    bytes where this one begins with a SHA-256 output nobody chooses, but it
-    is the exception the rule should not have. The next breaking change to
-    the attachments adds a separator here (`CHANGELOG.md`).
+    `"vcap/1.0/attestation-status" ‖ core_hash ‖ JCS(entries) ‖ uint64 BE
+    fetched_at`: the 27 ASCII bytes of the separator, no terminator, no
+    length prefix, as every separator in this document; the 32 raw bytes of
+    `core_hash`; the JCS bytes of the `entries` array; 8 bytes big-endian.
+    Every message the registry key signs — tree heads, key statuses,
+    `integrity`, `location_corroboration` and this one — begins with its own
+    `"vcap/1.0/…"` string, so no signature over one can be read as another.
+    Until corpus 8.0.0 this message had no separator; that was not
+    exploitable, because it began with a SHA-256 output nobody chooses where
+    every other began with ASCII, but it was the one exception the rule
+    should not have had (`CHANGELOG.md`).
 
   **Which key.** The signing key is the one that signs that log's tree heads,
   so a verifier needs no key it does not already hold for `registry`. The
@@ -2084,10 +2135,13 @@ presented as this file's.
 
 **Where the proof came from.** *Sidecar differs*, *trailer copy differs* and
 *manifest copy differs* (§3.1) are warnings on an otherwise valid verdict: a
-second copy of the proof that is not the one used. Neither a trailer nor a
-depth-0 proof from Content Credentials makes a verdict red over a differing
-sidecar that does better over the same bytes (§3.1, *A sidecar that does
-better*). `proof_source` and `frames_name_capture` (§3.2) are
+second copy of the proof that is not the one used. *Trailer unreadable* is a
+warning too: the file ends in a vcap footer that could not be read — CRC
+failing, an unknown major, or a size that describes no trailer — and the
+verdict is the sidecar's over the file without it. Neither a trailer, nor an
+unreadable footer, nor a depth-0 proof from Content Credentials makes a
+verdict red or broken over a sidecar that does better (§3.1, *A sidecar that
+does better*). `proof_source` and `frames_name_capture` (§3.2) are
 diagnostics and never labels.
 
 **The rule that outranks the table.** A watermark match with no valid signature is
@@ -2246,7 +2300,8 @@ says.
       in corpus 6.1.0 with a sidecar no longer overruled by a worse
       depth-0 manifest proof (169–171), and **174** in corpus 6.2.0 with
       the same rule for a trailer (172–174), and **187** in corpus 7.0.0
-      with clip timing bound (175–187),
+      with clip timing bound (175–187), and **193** in corpus 8.0.0 with
+      the same rule for an unreadable footer (188–193),
       checked by the reference verifier in `tools/`. The §7 vectors
       trust the anchors in `vectors/_trust/`, whose attestation root is a test
       root: they prove the level logic, not that an implementation can walk a

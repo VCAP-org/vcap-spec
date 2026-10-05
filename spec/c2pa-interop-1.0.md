@@ -451,6 +451,7 @@ canonical bytes.
 | Trailer stripped, bytes otherwise intact (a tool that truncates at EOI or drops trailing boxes) | lost | kept | kept, no proof in it | kept | *no proof found* | **full verdict restored**, identical to the embedded one | 05, 17 |
 | The same, with Content Credentials that carry the proof | lost | kept | kept | kept | **full verdict restored** from the active manifest (`vcap-proof-1.0.md` §3.2, depth 0) | the same: the manifest's copy outranks the sidecar, which *differs* if it is not the same proof — unless the sidecar's outcome is better over these bytes, when the sidecar decides and the manifest's copy *differs* | 124, 127, 169–171 |
 | Trailer stripped, another capture's valid trailer appended | replaced | kept | kept | kept | the appended proof's verdict: *tampered* on a photo, *frames not compared* on a video | **restored** from the sidecar when its outcome is better, with *trailer copy differs*; on a tie the appended trailer stands | 172–174 |
+| Trailer stripped, a footer that cannot be read appended (CRC failing, another major, a size that describes no trailer) | replaced | kept | kept | kept | *corrupted proof*, *unsupported format version* or *no proof found* | **restored** from the sidecar, judged over the file without the unreadable trailer, when its outcome is better, with *trailer unreadable*; on a tie the footer's verdict stands | 72, 188–193 |
 | C2PA manifest added, replaced or removed on a JPEG | kept | kept | changed | kept | unchanged | unchanged | 02, 68 |
 | C2PA manifest inserted into a sealed BMFF file | kept | kept | added | kept | *tampered* (§4.1: inside the canonical bytes) | *tampered* | 73 |
 | C2PA update manifest appended to a sealed BMFF file | unreachable | kept | changed | kept | *no proof found* | *tampered* (whole file hashed) | 69, 70 |
@@ -466,9 +467,10 @@ canonical bytes.
 Reading the table:
 
 - **A sidecar restores exactly one thing**: the proof, when the container
-  lost it and nothing else changed. Row 2 is the only one where the two
-  verdict columns differ in the sidecar's favour, and it is the case §3.1
-  exists for. In every other row the canonical bytes changed, and a sidecar
+  lost it and nothing else changed. Row 2 is that case, and §3.1 exists for
+  it; the appended-trailer and unreadable-footer rows are the same case with
+  something added after the canonical bytes, which the sidecar is judged
+  without. In every row where the canonical bytes changed, a sidecar
   turns *no proof found* into *tampered* — a stronger statement, and an
   honest one: the signature is valid and these are not the bytes it vouches
   for. A verifier MUST NOT soften that into "probably the same picture"; the
@@ -492,7 +494,7 @@ Reading the table:
 - **What the verifier must say**, in §8's words, per outcome: *no proof
   found* is not an error and is never *corrupted*; *tampered* carries its
   reason and no absence labels; *verified clip* names the segments verified
-  out of `segment_count`; *sidecar differs*, *trailer copy differs*, *manifest copy differs* and
+  out of `segment_count`; *sidecar differs*, *trailer copy differs*, *trailer unreadable*, *manifest copy differs* and
   *flags disagree* are warnings on an otherwise valid verdict; a detector result is *watermark matched*,
   *watermark not recovered* or *watermark not evaluated*, and a match without
   a valid signature is *origin traced*.

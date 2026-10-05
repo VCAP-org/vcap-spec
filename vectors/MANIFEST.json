@@ -1,6 +1,6 @@
 {
-  "corpus_version": "7.0.0",
-  "vector_count": 187,
+  "corpus_version": "8.0.0",
+  "vector_count": 193,
   "vectors": [
     {
       "name": "01-jpeg-sealed",
@@ -306,14 +306,14 @@
       "name": "44-jpeg-attestation-revoked-before-capture",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "15833ee3e3ffe04b54cf1a083249ba1740f153c10ec726bfc814b8146b382e38",
+      "sha256": "18dd2ee131629d0e17a31b7dca843c91f188c2061aa3e401dabdcae40505a515",
       "files": 4
     },
     {
       "name": "45-jpeg-attestation-revoked-after-capture",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "7bb6cb607593f94bd354babbf521e0576055de62efcf73b2064188be501731f1",
+      "sha256": "c4068e67e9c3c15d1ff4d5ca8e9f336d011953975d7e0b78f80e335d8e47a33a",
       "files": 4
     },
     {
@@ -341,42 +341,42 @@
       "name": "49-jpeg-registry-verified",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "14ce182ea3a490d475963b79b3fbbf16087609350841a06b05b0d3a16148a789",
+      "sha256": "3fe0bb8faa73a874671cd4cef440ca163bbb23bae205ab6705a0ac683255c3e5",
       "files": 4
     },
     {
       "name": "50-jpeg-registry-path-forged",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "709a408c59dc421e191d5f6985d5082f3cc66f27d8f6f8ee2d9a32f652ff5e03",
+      "sha256": "c6cd1412d2ab09c93c16014e216281027666aa500a764c797a5ae4ca1ce27e67",
       "files": 4
     },
     {
       "name": "51-jpeg-registry-other-key",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "41601d97b5787e9aff7e22e7cd852c3eeeb8814c5e72129d32efb63535f672f0",
+      "sha256": "1fae4d8a980f59bb39845b3b3306b3d5fcae897b0bbb84007c50e62bcaec9248",
       "files": 4
     },
     {
       "name": "52-jpeg-registry-log-not-trusted",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "fd720d35aadf447aff991b70655234496fcc974972ed0fda1a6fc274658216fb",
+      "sha256": "c918a59c019265bc8c06771418668c4d5caa62a3ccc3f71e6ec1ae84a12ec5db",
       "files": 4
     },
     {
       "name": "53-jpeg-registry-after-capture",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "ab26a3307a9c0c66069d6c325a2bc3e7dd6901d8a06787a901b6ec049d668de2",
+      "sha256": "efe919e6cd29585e9ff117b33cbc13a5fabde6ca52f7b1caf0e2f5c6597b1b64",
       "files": 4
     },
     {
       "name": "54-jpeg-registry-green",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "cf1ac384017c4fbf9cd5d10d33ba75105d635f3fa11721bdc3ef2bd593d837fd",
+      "sha256": "d196fddc1a0f323380a482dea3369e327f62eff80f90be4b2c5666ab084f0b41",
       "files": 4
     },
     {
@@ -501,8 +501,8 @@
     {
       "name": "72-jpeg-footer-crc-mismatch-sidecar",
       "kind": "file",
-      "outcome": "corrupted_proof",
-      "sha256": "91abe1c3b6c48f4bde52fe175112775bf7ca1650c0ada08c8cfafe4a667ec466",
+      "outcome": "authentic",
+      "sha256": "8a6dc12bdcb95efa07206129340b345100f23e1258e9a6cf191b7947c84be560",
       "files": 5
     },
     {
@@ -670,49 +670,49 @@
       "name": "96-jpeg-attestation-revoked-after-device-clock",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "40170b2fb6a24fcb9f48023ed59a7184adc20bf5445be8812036902e8ae7216c",
+      "sha256": "96aeafcd801a1ea49cf697d9125ab62a6472ebe24977a7b22ca8710eb48f93f6",
       "files": 4
     },
     {
       "name": "97-jpeg-attestation-revoked-without-date",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "46e7fcb255468d8b0157d74f3df52666f457ebe1429c8bc5737a4d9078acd84f",
+      "sha256": "6b91e7e47797a73acd75da94bad21df715c08560682ebcaba05fe681b59a2da5",
       "files": 4
     },
     {
       "name": "98-jpeg-attestation-status-unknown",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "3ab67db4aca7c1f693382a3207bd7153d081cb4f330c9dd262da077f0bbae2cd",
+      "sha256": "44b0328553b70ff6bbda306f28786b0b5bdea74dab48cc1a2fd758f09f831660",
       "files": 4
     },
     {
       "name": "99-jpeg-attestation-status-uncovered",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "009d51e48e5acab9a0a8f0903b52afe437bc2f096822f9a9f95e39d4ae532c10",
+      "sha256": "570d301988b9c884a81876f2da5a4170aa4559c353ff34b170e0b5d1042deb73",
       "files": 4
     },
     {
       "name": "100-jpeg-registry-green-timestamped",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "6e3180435a3009be9aec5eaa0cc98698fca925e74d578819b325be1efa7f95b9",
+      "sha256": "b04a01251f96270339e151bd565d00dce5912b6568324445b6dfc143880acada",
       "files": 4
     },
     {
       "name": "101-jpeg-registry-no-device-clock",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "2738fcc9c8bfe6fcf11cf02882669e24332e79c14b44ea697cc5a98eada2a4c7",
+      "sha256": "980053d8ca9b07712c3e807362e1b787262f1506a9064f344b1f36dad3fff12b",
       "files": 4
     },
     {
       "name": "102-jpeg-registry-after-trusted-time",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "af3cf6214515e3cd0b93ebb96d09cc4af14243f4c86eab1f9824fec7e47a28de",
+      "sha256": "33f84d9a6ce5629d6b8339c3f0e9e94ed394b0d5b0bde15f4c1222679f5ef5b2",
       "files": 4
     },
     {
@@ -740,14 +740,14 @@
       "name": "106-jpeg-attestation-app-not-admitted",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "5ecb96f02528c827bb8cb6cad1c2446a4c423553b64af3bbd34fc454c22a4536",
+      "sha256": "75a9ba45ccab1aba2e36a7d7517805e202b98640caeccd63a29d1b9440c8b317",
       "files": 4
     },
     {
       "name": "107-jpeg-attestation-app-not-checked",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "0150f79b097913f9aa134bd8c9ecc36e85ae60fe1e47358d27c206ba9ecdc012",
+      "sha256": "4999a6c8100c0c59f9a9481bb367393b3c0898ef83b9f90f1e59a3203f6c7562",
       "files": 4
     },
     {
@@ -761,7 +761,7 @@
       "name": "109-jpeg-integrity-failed-caps-green",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "365ca3267a1bbbbf8583704325a6fa61e7098d28e5ba48c5b448a194cf6907e1",
+      "sha256": "a4660db4462a7835fcf7fa8dcdb3bb718118f4fd88328f21bdd5e585c0b84262",
       "files": 4
     },
     {
@@ -1033,14 +1033,14 @@
       "name": "148-jpeg-registry-timestamped-integrity-absent",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "576031948a06fed1ecf83960555442114c261f6cfdb6ed223be53213b5b73685",
+      "sha256": "95ac4bf357726efbc460dabd6c4eb38d622379de357e1020d78b02ad2f3e095b",
       "files": 4
     },
     {
       "name": "149-jpeg-integrity-basic-not-green",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "c5ab328529614e8151f7fa777165db74213ddc2c0f387b1548ec8c8d275fb138",
+      "sha256": "6d50e60b0937d2fdc61a51bfa17997e91806be715f5a4f7ca4f1a8f3ef432d15",
       "files": 4
     },
     {
@@ -1061,7 +1061,7 @@
       "name": "152-jpeg-attestation-key-imported",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "33cca9f56063092c6016e0183e8041f723f65e61f494a1bc9c86caf01d8e613c",
+      "sha256": "f728c4f84b1e7f4925a7b1048f6aaaa65142ca0c3aedfab3748348541aea8f60",
       "files": 4
     },
     {
@@ -1075,14 +1075,14 @@
       "name": "154-jpeg-integrity-other-trusted-log",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "b3b4dea186df55b69ac978839d5a3cce265eff8acd0c97f520ce9e8e8128563b",
+      "sha256": "cf2f19a69ef6afdd23b4aec101693afb103bbaedd0b4045914f8ea48dabbe90d",
       "files": 4
     },
     {
       "name": "155-jpeg-key-revoked-device-clock",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "d605ab35f68783d3663798cd37aedc1c0ec7e59ec270f00f5f867c088fc75931",
+      "sha256": "e20dac731d12e8e68ed09684ea15ad37f266d92ce63e9e2bbd3f627131c70d2d",
       "files": 4
     },
     {
@@ -1096,7 +1096,7 @@
       "name": "157-jpeg-attestation-holds-proves-none",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "6e0a17672b0dd8a30e20a7a99f8e75a8650914478e68574d0409bb8bf0482234",
+      "sha256": "e425fe2149825004babb6850cf2da2d435625fb626a195d269e531516c63d862",
       "files": 4
     },
     {
@@ -1145,7 +1145,7 @@
       "name": "164-jpeg-attestation-revoked-proves-none",
       "kind": "file",
       "outcome": "authentic",
-      "sha256": "09b7ea6ed61a9202015e041a8b3d633cdfde8fc8bcf6b69dd7f9d98a6bf50153",
+      "sha256": "a181e3d15d02c893fd00864832907d31f0695dbc6e678b32a023905aaa058270",
       "files": 4
     },
     {
@@ -1308,6 +1308,48 @@
       "outcome": "no_proof_found",
       "sha256": "5a3338472007f3165cd632f7fe41677c528f1142189ec48ec2593a83be8361e1",
       "files": 4
+    },
+    {
+      "name": "188-jpeg-crc-broken-trailer-sidecar",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "0a79284e07ec69ecc53346e6e2b96bfc5f48ad08d09052a0f560d1b328c0dedf",
+      "files": 5
+    },
+    {
+      "name": "189-mp4-container-crc-broken-trailer-sidecar",
+      "kind": "container",
+      "outcome": "verified_clip",
+      "sha256": "e940af63135810122927756925c137a5ee6965cda262746ee534a432c59b11a0",
+      "files": 5
+    },
+    {
+      "name": "190-jpeg-footer-major-2-sidecar",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "963e6f69bce5b4bfdbfb12cdec3371a03df8cbcddbd54273707ba76e91fcbb9d",
+      "files": 5
+    },
+    {
+      "name": "191-jpeg-fake-magic-sidecar",
+      "kind": "file",
+      "outcome": "authentic",
+      "sha256": "a61e04176fa49ba2ab9789ec9dccf56c4e106a2ccf2adc118c33fea7cdee559b",
+      "files": 5
+    },
+    {
+      "name": "192-jpeg-crc-broken-trailer-sidecar-no-better",
+      "kind": "file",
+      "outcome": "corrupted_proof",
+      "sha256": "8d0e83a6a91c5c5a8e13f53692399d504c32e8c07b51b2a3c707eada98491998",
+      "files": 5
+    },
+    {
+      "name": "193-jpeg-sealed-then-crc-broken-trailer-sidecar",
+      "kind": "file",
+      "outcome": "corrupted_proof",
+      "sha256": "7fb7a2b6eef3a4640d19895038e214c070e0de18f21d576ae31b3d6dc388182d",
+      "files": 5
     }
   ],
   "fixtures": {

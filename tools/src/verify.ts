@@ -3,17 +3,16 @@ import { type Json } from './jcs.js'
 import { type Proof, coreBytes, coreHash, keyId, publicKeyFromSpki, verifyEs256 } from './core.js'
 import { canonicalBytes, mediaHash } from './canonical.js'
 import { Flag } from './trailer.js'
-import { type ProofSource, extractProof } from './carrier.js'
+import { type ProofSource, extractProof, unreadableAlternate } from './carrier.js'
 import { type SegmentEntry, verifyChain } from './segments.js'
 import { type ContainerReading, ContainerMalformed, readContainer } from './container.js'
 import { type Timescales, editTrims, receivedTimingHash, timingRoot } from './timing.js'
 import { RANK, leafSpki, normalSerial, validateChain } from './attestation.js'
 import { type TrustBundle, type TrustedLog } from './trust.js'
-import { type IntegrityAttachment, type KeyStatusStatement, type RegistryAttachment, verifyIntegrity, verifyKeyStatus, verifyRegistry } from './registry.js'
+import { type IntegrityAttachment, type KeyStatusStatement, type RegistryAttachment, attestationStatusMessage, verifyIntegrity, verifyKeyStatus, verifyRegistry } from './registry.js'
 import { type AnchorAttachment, type ChainRead, verifyAnchor } from './anchor.js'
 import { verifyTimestampToken } from './rfc3161.js'
 import { LOCATION_LEVELS, LOCATION_RANK, verifyLocationCorroboration } from './location.js'
-import { jcs } from './jcs.js'
 import { ProofSyntaxError, parseProofJson } from './json.js'
 
 /**
@@ -214,6 +213,21 @@ export interface FileInput {
 }
 
 export const verifyFile = (input: FileInput): Verdict => {
+  const verdict = verdictOfFile(input)
+  // §3.1: a footer this reader cannot use — CRC fails, major ≠ 1, a size that
+  // describes no trailer — is no more authenticated as the file's than a valid
+  // one, and anyone can append it to a stripped file. Beside a sidecar, the
+  // sidecar is judged over the file without that trailer, and decides only
+  // when its outcome ranks strictly above: deleting the trailer gives as much.
+  const alt = unreadableAlternate(input.file, input.sidecar, input.externalStore)
+  if (!alt) return verdict
+  const located: { frames?: boolean } = {}
+  const other = { ...judge(alt.payload, alt.media, null, [...alt.labels], input, located), proof_source: alt.source }
+  if (located.frames !== undefined) other.frames_name_capture = located.frames
+  return OUTCOME_RANK[other.outcome] > OUTCOME_RANK[verdict.outcome] ? other : verdict
+}
+
+const verdictOfFile = (input: FileInput): Verdict => {
   // 1. Trailer, carrier, sidecar, nesting (§3, §3.1, §3.2).
   const extracted = extractProof(input.file, input.sidecar, input.externalStore)
   if (extracted.kind === 'corrupted') return fail('corrupted_proof', 'footer valid, CRC mismatch')
@@ -893,9 +907,7 @@ const frozenRevocation = (
   const entries = attachment.entries
   const fetchedAt = attachment.fetched_at
   if (attachment.source !== 'googleStatusList' || !Array.isArray(entries) || typeof fetchedAt !== 'number' || !Number.isSafeInteger(fetchedAt) || fetchedAt < 0) return { checked: false }
-  const at = Buffer.alloc(8)
-  at.writeBigUInt64BE(BigInt(fetchedAt))
-  const message = Buffer.concat([coreHash, jcs(entries), at])
+  const message = attestationStatusMessage(coreHash, entries, fetchedAt)
   let signature: Buffer
   try { signature = Buffer.from(attachment.sig as string, 'base64url') } catch { return { checked: false } }
   // §6.2: the key is the one that signs that log's tree heads — the log the

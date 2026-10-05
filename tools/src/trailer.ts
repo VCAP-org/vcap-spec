@@ -71,3 +71,30 @@ export const parseTrailer = (file: Buffer): ParsedTrailer => {
 
   return { kind: 'ok', payload, flags: footer.readUInt16BE(6), minor: footer.readUInt8(5), mediaEnd: boxStart }
 }
+
+/**
+ * §3.1 *A sidecar that does better*, unreadable footer: where the trailer
+ * starts when the last 16 bytes carry the `VCAP` magic but are not a footer
+ * this reader can use — CRC fails, major ≠ 1, or a size that describes no
+ * trailer. `null` when the file does not end in the magic or ends in a usable
+ * trailer.
+ *
+ * The span is the box §3's structure checks would accept, with the major and
+ * the CRC set aside: `8 + payload_len + 16` bytes, summed without overflow,
+ * when they fit in the file and begin with a `free` box header of that size.
+ * Otherwise only the 16-byte footer. What is removed is therefore a `free` box
+ * every BMFF reader skips, or 16 bytes that are no box at all — never bytes a
+ * player presents — and an implementation computes exactly one candidate.
+ */
+export const unreadableTrailerStart = (file: Buffer): number | null => {
+  if (file.length < FOOTER_LEN) return null
+  const footerStart = file.length - FOOTER_LEN
+  if (!file.subarray(footerStart, footerStart + 4).equals(MAGIC)) return null
+  if (parseTrailer(file).kind === 'ok') return null
+  const total = BOX_HEADER_LEN + file.readUInt32BE(footerStart + 8) + FOOTER_LEN
+  const boxStart = file.length - total
+  const declared = total <= file.length &&
+    file.readUInt32BE(boxStart) === total &&
+    file.toString('ascii', boxStart + 4, boxStart + 8) === 'free'
+  return declared ? boxStart : footerStart
+}
