@@ -3,6 +3,9 @@
 Normative specification of the **vcap proof format**, plus the conformance test
 vectors and the JSON Schema validator every implementation runs in CI.
 
+Project site: <https://vcap.gregoriogalante.com>. Check a sealed file in the
+browser with the public verifier: <https://verify.vcap.gregoriogalante.com>.
+
 This repository blocks every other one: two native sealing cores, a React Native
 bridge, a web capture SDK and four verifiers must agree byte for byte.
 
